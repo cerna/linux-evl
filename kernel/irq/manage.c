@@ -11,6 +11,7 @@
 
 #include <linux/irq.h>
 #include <linux/kthread.h>
+#include <linux/kconfig.h>
 #include <linux/module.h>
 #include <linux/random.h>
 #include <linux/interrupt.h>
@@ -568,6 +569,24 @@ out:
 }
 EXPORT_SYMBOL(enable_irq);
 
+/**
+ *	release_irq - release handling of a pipelined irq
+ *	@irq: Interrupt to release
+ */
+void release_irq(unsigned int irq)
+{
+	struct irq_desc *desc = irq_to_desc(irq);
+	unsigned long flags;
+
+	if (!desc)
+		return;
+
+	raw_spin_lock_irqsave(&desc->lock, flags);
+	irq_release(desc);
+	raw_spin_unlock_irqrestore(&desc->lock, flags);
+}
+EXPORT_SYMBOL(release_irq);
+
 static int set_irq_wake_real(unsigned int irq, unsigned int on)
 {
 	struct irq_desc *desc = irq_to_desc(irq);
@@ -630,6 +649,52 @@ int irq_set_irq_wake(unsigned int irq, unsigned int on)
 }
 EXPORT_SYMBOL(irq_set_irq_wake);
 
+#ifdef CONFIG_IRQ_PIPELINE
+
+void __irq_set_pipelining(struct irq_desc *desc, bool on)
+{
+	if (on) {
+		if (!irq_settings_is_pipelined(desc)) {
+			irq_settings_set_pipelined(desc);
+			irqd_set_highpri(&desc->irq_data);
+		}
+	} else if (irq_settings_is_pipelined(desc)) {
+		irq_settings_clr_pipelined(desc);
+		irqd_clr_highpri(&desc->irq_data);
+	}
+}
+
+/**
+ *	irq_set_pipelining - Control pipelining for a registered IRQ handler
+ *	@irq:	interrupt to control
+ *	@on:	enable/disable pipelining
+ *
+ *	Enable/disable pipelining mode for an IRQ. An action must have
+ *	been previously registered for such interrupt.
+ */
+int irq_set_pipelining(unsigned int irq, bool on)
+{
+	struct irq_desc *desc;
+	unsigned long flags;
+	int ret = 0;
+
+	desc = irq_get_desc_lock(irq, &flags, 0);
+	if (!desc)
+		return -EINVAL;
+	
+	if (desc->action == NULL ||
+	    (desc->action->flags & IRQF_SHARED))
+		ret = -EINVAL;
+	else
+		__irq_set_pipelining(desc, on);
+
+	irq_put_desc_unlock(desc, flags);
+
+	return ret;
+}
+
+#endif /* CONFIG_IRQ_PIPELINE */
+
 /*
  * Internal function that tells the architecture code whether a
  * particular irq has been exclusively allocated or is available
@@ -646,6 +711,7 @@ int can_request_irq(unsigned int irq, unsigned long irqflags)
 
 	if (irq_settings_can_request(desc)) {
 		if (!desc->action ||
+		    ((irqflags ^ desc->action->flags) & IRQF_PIPELINED) ||
 		    irqflags & desc->action->flags & IRQF_SHARED)
 			canrequest = 1;
 	}
@@ -814,9 +880,14 @@ again:
 
 	desc->threads_oneshot &= ~action->thread_mask;
 
+#ifndef CONFIG_IRQ_PIPELINE
 	if (!desc->threads_oneshot && !irqd_irq_disabled(&desc->irq_data) &&
 	    irqd_irq_masked(&desc->irq_data))
 		unmask_threaded_irq(desc);
+#else /* CONFIG_IRQ_PIPELINE */
+	if (!desc->threads_oneshot && !irqd_irq_disabled(&desc->irq_data))
+		irq_release(desc);
+#endif /* CONFIG_IRQ_PIPELINE */
 
 out_unlock:
 	raw_spin_unlock_irq(&desc->lock);
@@ -1110,6 +1181,13 @@ setup_irq_thread(struct irqaction *new, unsigned int irq, bool secondary)
 	return 0;
 }
 
+static void irq_disable_pipelining(struct irq_desc *desc)
+{
+	irq_settings_clr_pipelined(desc);
+	irq_settings_clr_sticky(desc);
+	irqd_clr_highpri(&desc->irq_data);
+}
+
 /*
  * Internal function to register an irqaction - typically used to
  * allocate special interrupts that are part of the architecture.
@@ -1132,6 +1210,19 @@ __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 
 	new->irq = irq;
 
+	ret = -EINVAL;
+	/*
+	 *  Pipelined interrupts cannot be threaded or shared. Sticky
+	 *  interrupts must be pipelined.
+	 */
+	if (new->flags & IRQF_PIPELINED) {
+		if (!irqs_pipelined() ||
+		    new->thread_fn || (new->flags & IRQF_SHARED))
+			goto out_mput;
+		new->flags |= IRQF_NO_THREAD;
+	} else if (new->flags & IRQF_STICKY)
+			goto out_mput;
+
 	/*
 	 * If the trigger type is not specified by the caller,
 	 * then use the default for this interrupt.
@@ -1145,10 +1236,8 @@ __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 	 */
 	nested = irq_settings_is_nested_thread(desc);
 	if (nested) {
-		if (!new->thread_fn) {
-			ret = -EINVAL;
+		if (!new->thread_fn)
 			goto out_mput;
-		}
 		/*
 		 * Replace the primary handler which was provided from
 		 * the driver for non nested interrupt handling by the
@@ -1204,13 +1293,20 @@ __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 	old = *old_ptr;
 	if (old) {
 		/*
+		 * Can't have more than one head stage handler
+		 * registered for a pipelined interrupt.
+		 */
+		if (old->flags & IRQF_PIPELINED)
+			goto mismatch;
+		/*
 		 * Can't share interrupts unless both agree to and are
 		 * the same type (level, edge, polarity). So both flag
 		 * fields must have IRQF_SHARED set and the bits which
 		 * set the trigger type must match. Also all must
 		 * agree on ONESHOT.
 		 */
-		if (!((old->flags & new->flags) & IRQF_SHARED) ||
+		if ((!(new->flags & IRQF_PIPELINED) &&
+		     !((old->flags & new->flags) & IRQF_SHARED)) ||
 		    ((old->flags ^ new->flags) & IRQF_TRIGGER_MASK) ||
 		    ((old->flags ^ new->flags) & IRQF_ONESHOT))
 			goto mismatch;
@@ -1220,18 +1316,23 @@ __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 		    (new->flags & IRQF_PERCPU))
 			goto mismatch;
 
-		/* add new interrupt at end of irq queue */
-		do {
-			/*
-			 * Or all existing action->thread_mask bits,
-			 * so we can find the next zero bit for this
-			 * new action.
-			 */
-			thread_mask |= old->thread_mask;
-			old_ptr = &old->next;
-			old = *old_ptr;
-		} while (old);
-		shared = 1;
+		/* add new interrupt at end of irq queue for regular
+		 * interrupts, or at front if pipelined. */
+		if (new->flags & IRQF_PIPELINED)
+			new->next = old;
+		else {
+			do {
+				/*
+				 * Or all existing action->thread_mask bits,
+				 * so we can find the next zero bit for this
+				 * new action.
+				 */
+				thread_mask |= old->thread_mask;
+				old_ptr = &old->next;
+				old = *old_ptr;
+			} while (old);
+			shared = 1;
+		}
 	}
 
 	/*
@@ -1323,6 +1424,13 @@ __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 
 		if (new->flags & IRQF_ONESHOT)
 			desc->istate |= IRQS_ONESHOT;
+
+		if (new->flags & IRQF_PIPELINED) {
+			irq_settings_set_pipelined(desc);
+			irqd_set_highpri(&desc->irq_data);
+			if (new->flags & IRQF_STICKY)
+				irq_settings_set_sticky(desc);
+		}
 
 		if (irq_settings_can_autoenable(desc))
 			irq_startup(desc, true);
@@ -1495,8 +1603,11 @@ static struct irqaction *__free_irq(unsigned int irq, void *dev_id)
 	if (!desc->action) {
 		irq_settings_clr_disable_unlazy(desc);
 		irq_shutdown(desc);
+		/* Turn off pipelining (after shutdown). */
+		irq_disable_pipelining(desc);
 		irq_release_resources(desc);
-	}
+	} else if (action->flags & IRQF_PIPELINED)
+		irq_disable_pipelining(desc);
 
 #ifdef CONFIG_SMP
 	/* make sure affinity_hint is cleaned up */
@@ -1946,24 +2057,9 @@ int setup_percpu_irq(unsigned int irq, struct irqaction *act)
 	return retval;
 }
 
-/**
- *	request_percpu_irq - allocate a percpu interrupt line
- *	@irq: Interrupt line to allocate
- *	@handler: Function to be called when the IRQ occurs.
- *	@devname: An ascii name for the claiming device
- *	@dev_id: A percpu cookie passed back to the handler function
- *
- *	This call allocates interrupt resources and enables the
- *	interrupt on the local CPU. If the interrupt is supposed to be
- *	enabled on other CPUs, it has to be done on each CPU using
- *	enable_percpu_irq().
- *
- *	Dev_id must be globally unique. It is a per-cpu variable, and
- *	the handler gets called with the interrupted CPU's instance of
- *	that variable.
- */
-int request_percpu_irq(unsigned int irq, irq_handler_t handler,
-		       const char *devname, void __percpu *dev_id)
+int __request_percpu_irq(unsigned int irq, irq_handler_t handler,
+			 const char *devname, int flags,
+			 void __percpu *dev_id)
 {
 	struct irqaction *action;
 	struct irq_desc *desc;
@@ -1982,7 +2078,7 @@ int request_percpu_irq(unsigned int irq, irq_handler_t handler,
 		return -ENOMEM;
 
 	action->handler = handler;
-	action->flags = IRQF_PERCPU | IRQF_NO_SUSPEND;
+	action->flags = IRQF_PERCPU | IRQF_NO_SUSPEND | flags;
 	action->name = devname;
 	action->percpu_dev_id = dev_id;
 
@@ -2004,6 +2100,28 @@ int request_percpu_irq(unsigned int irq, irq_handler_t handler,
 	return retval;
 }
 EXPORT_SYMBOL_GPL(request_percpu_irq);
+
+/**
+ *	request_percpu_irq - allocate a percpu interrupt line
+ *	@irq: Interrupt line to allocate
+ *	@handler: Function to be called when the IRQ occurs.
+ *	@devname: An ascii name for the claiming device
+ *	@dev_id: A percpu cookie passed back to the handler function
+ *
+ *	This call allocates interrupt resources and enables the
+ *	interrupt on the local CPU. If the interrupt is supposed to be
+ *	enabled on other CPUs, it has to be done on each CPU using
+ *	enable_percpu_irq().
+ *
+ *	Dev_id must be globally unique. It is a per-cpu variable, and
+ *	the handler gets called with the interrupted CPU's instance of
+ *	that variable.
+ */
+int request_percpu_irq(unsigned int irq, irq_handler_t handler,
+		       const char *devname, void __percpu *dev_id)
+{
+	return __request_percpu_irq(irq, handler, devname, 0, dev_id);
+}
 
 /**
  *	irq_get_irqchip_state - returns the irqchip state of a interrupt.
