@@ -432,9 +432,9 @@ void vmalloc_sync_all(void)
  *
  *   Handle a fault on the vmalloc area
  */
-static noinline int vmalloc_fault(unsigned long address)
+static inline int vmalloc_sync_one(pgd_t *pgd, unsigned long address)
 {
-	pgd_t *pgd, *pgd_ref;
+	pgd_t *pgd_ref;
 	p4d_t *p4d, *p4d_ref;
 	pud_t *pud, *pud_ref;
 	pmd_t *pmd, *pmd_ref;
@@ -451,7 +451,6 @@ static noinline int vmalloc_fault(unsigned long address)
 	 * happen within a race in page table update. In the later
 	 * case just flush:
 	 */
-	pgd = (pgd_t *)__va(read_cr3()) + pgd_index(address);
 	pgd_ref = pgd_offset_k(address);
 	if (pgd_none(*pgd_ref))
 		return -1;
@@ -525,6 +524,12 @@ static noinline int vmalloc_fault(unsigned long address)
 		BUG();
 
 	return 0;
+}
+
+static noinline int vmalloc_fault(unsigned long address)
+{
+	pgd_t *pgd = (pgd_t *)__va(read_cr3()) + pgd_index(address);
+	return vmalloc_sync_one(pgd, address);
 }
 NOKPROBE_SYMBOL(vmalloc_fault);
 
@@ -1272,6 +1277,8 @@ __do_page_fault(struct pt_regs *regs, unsigned long error_code,
 	tsk = current;
 	mm = tsk->mm;
 
+	if (head_stage_present())
+		hard_cond_local_irq_enable();
 	/*
 	 * Detect and handle instructions that would cause a page fault for
 	 * both a tracked kernel page and a userspace page.
@@ -1509,6 +1516,56 @@ do_page_fault(struct pt_regs *regs, unsigned long error_code)
 	exception_exit(prev_state);
 }
 NOKPROBE_SYMBOL(do_page_fault);
+
+#ifdef CONFIG_FORCE_COMMIT_MEMORY
+
+void arch_pin_mapping_globally(unsigned long start, unsigned long end)
+{
+	unsigned long next, addr = start;
+
+	/*
+	 * APEI may invoke this for temporarily remapping pages in
+	 * interrupt context - nothing we can and need to propagate
+	 * globally.
+	 */
+	if (in_interrupt())
+		return;
+
+#ifdef CONFIG_X86_32
+	do {
+		unsigned long flags;
+		struct page *page;
+
+		next = pgd_addr_end(addr, end);
+		spin_lock_irqsave(&pgd_lock, flags);
+		list_for_each_entry(page, &pgd_list, lru)
+			vmalloc_sync_one(page_address(page), addr);
+		spin_unlock_irqrestore(&pgd_lock, flags);
+
+	} while (addr = next, addr != end);
+#else
+	do {
+		struct page *page;
+		pgd_t *pgd;
+		int ret;
+
+		next = pgd_addr_end(addr, end);
+		spin_lock(&pgd_lock);
+		list_for_each_entry(page, &pgd_list, lru) {
+			pgd = (pgd_t *)page_address(page) + pgd_index(addr);
+			ret = vmalloc_sync_one(pgd, addr);
+			if (ret) {
+				spin_unlock(&pgd_lock);
+				return;
+			}
+		}
+		spin_unlock(&pgd_lock);
+		addr = next;
+	} while (addr != end);
+#endif
+}
+
+#endif /* CONFIG_FORCE_COMMIT_MEMORY */
 
 #ifdef CONFIG_TRACING
 static nokprobe_inline void
