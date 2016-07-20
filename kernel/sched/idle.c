@@ -86,11 +86,12 @@ void __weak arch_cpu_idle(void)
  */
 void __cpuidle default_idle_call(void)
 {
-	if (current_clr_polling_and_test()) {
-		local_irq_enable();
+	if (current_clr_polling_and_test() || !__irq_cpuidle_enter()) {
+		local_irq_enable_full();
 	} else {
 		stop_critical_timings();
 		arch_cpu_idle();
+		irq_cpuidle_exit();
 		start_critical_timings();
 	}
 }
@@ -104,7 +105,7 @@ static int call_cpuidle(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 	 */
 	if (current_clr_polling_and_test()) {
 		dev->last_residency = 0;
-		local_irq_enable();
+		local_irq_enable_full();
 		return -EBUSY;
 	}
 
@@ -163,14 +164,13 @@ static void cpuidle_idle_call(void)
 	 * timekeeping to prevent timer interrupts from kicking us out of idle
 	 * until a proper wakeup interrupt happens.
 	 */
-
 	if (idle_should_enter_s2idle() || dev->use_deepest_state) {
 		if (idle_should_enter_s2idle()) {
 			rcu_idle_enter();
 
 			entered_state = cpuidle_enter_s2idle(drv, dev);
 			if (entered_state > 0) {
-				local_irq_enable();
+				local_irq_enable_full();
 				goto exit_idle;
 			}
 
