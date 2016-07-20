@@ -11,6 +11,7 @@
 
 #include <linux/irq.h>
 #include <linux/kthread.h>
+#include <linux/kconfig.h>
 #include <linux/module.h>
 #include <linux/random.h>
 #include <linux/interrupt.h>
@@ -634,6 +635,52 @@ int irq_set_irq_wake(unsigned int irq, unsigned int on)
 }
 EXPORT_SYMBOL(irq_set_irq_wake);
 
+#ifdef CONFIG_IRQ_PIPELINE
+
+/**
+ *	irq_set_pipelining - Control pipelining for a registered IRQ handler
+ *	@irq:	interrupt to control
+ *	@on:	enable/disable pipelining
+ *
+ *	Enable/disable pipelining mode for an IRQ. At least one
+ *	action must have been previously registered for such
+ *	interrupt.
+ *
+ *      NOTE: This routine affects all action handlers sharing the
+ *      IRQ.
+ */
+int irq_set_pipelining(unsigned int irq, bool on)
+{
+	struct irq_desc *desc;
+	unsigned long flags;
+	int ret = 0;
+
+	desc = irq_get_desc_lock(irq, &flags, 0);
+	if (!desc)
+		return -EINVAL;
+	
+	if (!desc->action)
+		ret = -EINVAL;
+	else {
+		if (on) {
+			if (!irq_settings_is_pipelined(desc)) {
+				irq_settings_set_pipelined(desc);
+				irqd_set_highpri(&desc->irq_data);
+			}
+		} else if (irq_settings_is_pipelined(desc)) {
+			irq_settings_clr_pipelined(desc);
+			irqd_clr_highpri(&desc->irq_data);
+		}
+	}
+
+	irq_put_desc_unlock(desc, flags);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(irq_set_pipelining);
+
+#endif /* CONFIG_IRQ_PIPELINE */
+
 /*
  * Internal function that tells the architecture code whether a
  * particular irq has been exclusively allocated or is available
@@ -650,7 +697,8 @@ int can_request_irq(unsigned int irq, unsigned long irqflags)
 
 	if (irq_settings_can_request(desc)) {
 		if (!desc->action ||
-		    irqflags & desc->action->flags & IRQF_SHARED)
+		    ((irqflags & desc->action->flags & IRQF_SHARED) &&
+		     !((irqflags ^ desc->action->flags) & IRQF_PIPELINED)))
 			canrequest = 1;
 	}
 	irq_put_desc_unlock(desc, flags);
@@ -818,9 +866,14 @@ again:
 
 	desc->threads_oneshot &= ~action->thread_mask;
 
+#ifndef CONFIG_IRQ_PIPELINE
 	if (!desc->threads_oneshot && !irqd_irq_disabled(&desc->irq_data) &&
 	    irqd_irq_masked(&desc->irq_data))
 		unmask_threaded_irq(desc);
+#else /* CONFIG_IRQ_PIPELINE */
+	if (!desc->threads_oneshot && !irqd_irq_disabled(&desc->irq_data))
+		irq_release(desc);
+#endif /* CONFIG_IRQ_PIPELINE */
 
 out_unlock:
 	raw_spin_unlock_irq(&desc->lock);
@@ -1145,6 +1198,19 @@ __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 
 	new->irq = irq;
 
+	ret = -EINVAL;
+	/*
+	 *  Pipelined interrupts cannot be threaded but can be
+	 *  shared. Sticky interrupts must be pipelined.
+	 */
+	if (new->flags & IRQF_PIPELINED) {
+		if (!irqs_pipelined() || new->thread_fn)
+			goto out_mput;
+		new->flags |= IRQF_NO_THREAD;
+		new->flags &= ~IRQF_ONESHOT;
+	} else if (new->flags & IRQF_STICKY)
+			goto out_mput;
+
 	/*
 	 * If the trigger type is not specified by the caller,
 	 * then use the default for this interrupt.
@@ -1158,10 +1224,8 @@ __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 	 */
 	nested = irq_settings_is_nested_thread(desc);
 	if (nested) {
-		if (!new->thread_fn) {
-			ret = -EINVAL;
+		if (!new->thread_fn)
 			goto out_mput;
-		}
 		/*
 		 * Replace the primary handler which was provided from
 		 * the driver for non nested interrupt handling by the
@@ -1243,11 +1307,12 @@ __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 		 * the same type (level, edge, polarity). So both flag
 		 * fields must have IRQF_SHARED set and the bits which
 		 * set the trigger type must match. Also all must
-		 * agree on ONESHOT.
+		 * agree on ONESHOT and PIPELINED.
 		 */
 		unsigned int oldtype = irqd_get_trigger_type(&desc->irq_data);
 
 		if (!((old->flags & new->flags) & IRQF_SHARED) ||
+		    ((old->flags ^ new->flags) & IRQF_PIPELINED) ||
 		    (oldtype != (new->flags & IRQF_TRIGGER_MASK)) ||
 		    ((old->flags ^ new->flags) & IRQF_ONESHOT))
 			goto mismatch;
@@ -1353,6 +1418,13 @@ __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 
 		if (new->flags & IRQF_ONESHOT)
 			desc->istate |= IRQS_ONESHOT;
+
+		if (new->flags & IRQF_PIPELINED) {
+			irq_settings_set_pipelined(desc);
+			irqd_set_highpri(&desc->irq_data);
+			if (new->flags & IRQF_STICKY)
+				irq_settings_set_sticky(desc);
+		}
 
 		/* Exclude IRQ from balancing if requested */
 		if (new->flags & IRQF_NOBALANCING) {
@@ -1538,6 +1610,11 @@ static struct irqaction *__free_irq(unsigned int irq, void *dev_id)
 	if (!desc->action) {
 		irq_settings_clr_disable_unlazy(desc);
 		irq_shutdown(desc);
+
+		/* Turn off pipelining (after shutdown). */
+		irq_settings_clr_pipelined(desc);
+		irq_settings_clr_sticky(desc);
+		irqd_clr_highpri(&desc->irq_data);
 	}
 
 #ifdef CONFIG_SMP
@@ -1570,14 +1647,15 @@ static struct irqaction *__free_irq(unsigned int irq, void *dev_id)
 
 #ifdef CONFIG_DEBUG_SHIRQ
 	/*
-	 * It's a shared IRQ -- the driver ought to be prepared for an IRQ
-	 * event to happen even now it's being freed, so let's make sure that
-	 * is so by doing an extra call to the handler ....
+	 * It's a (non-pipelined) shared IRQ -- the driver ought to be
+	 * prepared for an IRQ event to happen even now it's being
+	 * freed, so let's make sure that is so by doing an extra call
+	 * to the handler ....
 	 *
 	 * ( We do this after actually deregistering it, to make sure that a
 	 *   'real' IRQ doesn't run in * parallel with our fake. )
 	 */
-	if (action->flags & IRQF_SHARED) {
+	if ((action->flags & (IRQF_SHARED|IRQF_PIPELINED)) == IRQF_SHARED) {
 		local_irq_save(flags);
 		action->handler(irq, dev_id);
 		local_irq_restore(flags);
@@ -2056,7 +2134,7 @@ int __request_percpu_irq(unsigned int irq, irq_handler_t handler,
 	    !irq_settings_is_per_cpu_devid(desc))
 		return -EINVAL;
 
-	if (flags && flags != IRQF_TIMER)
+	if (flags & ~(IRQF_TIMER|IRQF_PIPELINED))
 		return -EINVAL;
 
 	action = kzalloc(sizeof(struct irqaction), GFP_KERNEL);

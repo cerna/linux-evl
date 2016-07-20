@@ -84,6 +84,35 @@ void __weak arch_cpu_idle(void)
 	local_irq_enable();
 }
 
+#ifdef CONFIG_IRQ_PIPELINE
+
+static bool pipeline_idle_enter(void)
+{
+	struct irq_stage_data *p;
+
+	hard_local_irq_disable();
+	p = irq_root_this_context();
+
+	return !irq_staged_waiting(p);
+}
+
+static inline void pipeline_idle_exit(void)
+{
+	/* unstall and re-enable hw IRQs too. */
+	local_irq_enable_full();
+}
+
+#else
+
+static inline bool pipeline_idle_enter(void)
+{
+	return true;
+}
+
+static inline void pipeline_idle_exit(void) { }
+
+#endif	/* !CONFIG_IRQ_PIPELINE */
+
 /**
  * default_idle_call - Default CPU idle routine.
  *
@@ -91,11 +120,12 @@ void __weak arch_cpu_idle(void)
  */
 void __cpuidle default_idle_call(void)
 {
-	if (current_clr_polling_and_test()) {
-		local_irq_enable();
+	if (current_clr_polling_and_test() || !pipeline_idle_enter()) {
+		local_irq_enable_full();
 	} else {
 		stop_critical_timings();
 		arch_cpu_idle();
+		pipeline_idle_exit();
 		start_critical_timings();
 	}
 }
@@ -103,11 +133,13 @@ void __cpuidle default_idle_call(void)
 static int call_cpuidle(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 		      int next_state)
 {
+	int ret;
+
 	/*
 	 * The idle task must be scheduled, it is pointless to go to idle, just
 	 * update no idle residency and return.
 	 */
-	if (current_clr_polling_and_test()) {
+	if (current_clr_polling_and_test() || !pipeline_idle_enter()) {
 		dev->last_residency = 0;
 		local_irq_enable();
 		return -EBUSY;
@@ -118,7 +150,10 @@ static int call_cpuidle(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 	 * This function will block until an interrupt occurs and will take
 	 * care of re-enabling the local interrupts
 	 */
-	return cpuidle_enter(drv, dev, next_state);
+	ret = cpuidle_enter(drv, dev, next_state);
+	pipeline_idle_exit();
+
+	return ret;
 }
 
 /**
@@ -167,6 +202,11 @@ static void cpuidle_idle_call(void)
 	 * until a proper wakeup interrupt happens.
 	 */
 
+	if (!pipeline_idle_enter()) {
+		local_irq_enable();
+		goto exit_idle;
+	}
+
 	if (idle_should_enter_s2idle() || dev->use_deepest_state) {
 		if (idle_should_enter_s2idle()) {
 			entered_state = cpuidle_enter_s2idle(drv, dev);
@@ -178,12 +218,14 @@ static void cpuidle_idle_call(void)
 
 		next_state = cpuidle_find_deepest_state(drv, dev);
 		call_cpuidle(drv, dev, next_state);
+		pipeline_idle_exit();
 	} else {
 		/*
 		 * Ask the cpuidle framework to choose a convenient idle state.
 		 */
 		next_state = cpuidle_select(drv, dev);
 		entered_state = call_cpuidle(drv, dev, next_state);
+		pipeline_idle_exit();
 		/*
 		 * Give the governor an opportunity to reflect on the outcome
 		 */
