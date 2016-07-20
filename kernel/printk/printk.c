@@ -1954,11 +1954,15 @@ static inline bool unregister_raw_console(struct console *oldcon)
 
 #else
 
-static inline void register_raw_console(struct console *newcon)
-{ }
+static inline bool register_raw_console(struct console *newcon)
+{
+	return false;
+}
 
-static inline void unregister_raw_console(struct console *oldcon)
-{ }
+static inline bool unregister_raw_console(struct console *oldcon)
+{
+	return false;
+}
 
 #endif
 
@@ -3168,6 +3172,11 @@ void dump_stack_print_info(const char *log_lvl)
 	if (dump_stack_arch_desc_str[0] != '\0')
 		printk("%sHardware name: %s\n",
 		       log_lvl, dump_stack_arch_desc_str);
+
+#ifdef CONFIG_IRQ_PIPELINE
+	printk("%sIRQ stage: %s\n",
+	       log_lvl, current_irq_stage->name);
+#endif
 
 	print_worker_info(log_lvl, current);
 }

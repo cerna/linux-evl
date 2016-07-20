@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <linux/random.h>
 #include <linux/interrupt.h>
+#include <linux/irq_pipeline.h>
 
 #include "internals.h"
 
@@ -92,10 +93,14 @@ void check_irq_resend(struct irq_desc *desc)
 					return;
 				irq = desc->parent_irq;
 			}
+#ifdef CONFIG_IRQ_PIPELINE
+			irq_pipeline_inject(irq);
+#else
 			/* Set it pending and activate the softirq: */
 			set_bit(irq, irqs_resend);
 			tasklet_schedule(&resend_tasklet);
-#endif
+#endif /* !CONFIG_IRQ_PIPELINE */
+#endif /* CONFIG_HARDIRQS_SW_RESEND */
 		}
 	}
 }
