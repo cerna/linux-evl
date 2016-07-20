@@ -205,6 +205,18 @@ static inline bool test_thread_local_flags(unsigned int mask)
 	return test_ti_local_flags(current_thread_info(), mask);
 }
 
+static inline bool tlf_head_stage(void)
+{
+	return test_thread_local_flags(_TLF_HEAD);
+}
+
+#else
+
+static inline bool tlf_head_stage(void)
+{
+	return false;
+}
+
 #endif	/* ti_local_flags */
 
 #endif	/* __KERNEL__ */
