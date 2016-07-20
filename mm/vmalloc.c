@@ -234,6 +234,8 @@ static int vmap_page_range_noflush(unsigned long start, unsigned long end,
 			return err;
 	} while (pgd++, addr = next, addr != end);
 
+ 	pin_mapping_globally(start, end);
+ 
 	return nr;
 }
 
