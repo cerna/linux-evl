@@ -684,6 +684,25 @@ config IDLE_PAGE_TRACKING
 
 	  See Documentation/vm/idle_page_tracking.txt for more details.
 
+config FORCE_COMMIT_MEMORY
+       bool "Force commit virtual memory"
+       default n
+       help
+         This option introduces an API to disable kernel
+         mechanisms/strategies which tend to desync the virtual memory
+         view from the page table state for a particular memory
+         context. Typically, copy-on-write and on-demand PTE updates
+         are among these mechanisms.
+
+	 This feature is useful when the delay incurred in handling a
+	 processor fault for fixing up the current memory context is
+	 not acceptable for some use cases (e.g. real-time
+	 configurations).
+
+	 CAUTION: enabling this option for a process induces a
+	 significant overhead for the fork(2) system call when used
+	 by any thread which belongs to such context.
+ 
 config ZONE_DEVICE
 	bool "Device memory (pmem, etc...) hotplug support"
 	depends on MEMORY_HOTPLUG
