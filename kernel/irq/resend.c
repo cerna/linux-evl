@@ -94,6 +94,26 @@ void check_irq_resend(struct irq_desc *desc)
 			}
 			/* Set it pending and activate the softirq: */
 			set_bit(irq, irqs_resend);
+			/*
+			 * FIXME: issue with mutable desc->lock, may
+			 * call wakeup_softirqd() w/ hard disabled
+			 * IRQs.
+			 *
+			 * SOLUTION: use the pipeline to replay an
+			 * IRQ, instead of softirqd. So, we have a
+			 * logical match between IRQ_PENDING and the
+			 * presence bit of any pending IRQ in the
+			 * pipeline log:
+			 *
+			 * - when irq_pipeline_clear() is called for a
+			 * disabled IRQ, we should mark the descriptor
+			 * with IRQ_PENDING if the presence bit was
+			 * found before clearing the log for that IRQ.
+			 *
+			 * - conversely, check_irq_resend() is called,
+			 * we should set the presence bit back to the
+			 * log if IRQ_PENDING was found.
+			 */
 			tasklet_schedule(&resend_tasklet);
 #endif
 		}
