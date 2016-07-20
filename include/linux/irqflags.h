@@ -12,6 +12,7 @@
 #define _LINUX_TRACE_IRQFLAGS_H
 
 #include <linux/typecheck.h>
+#include <asm-generic/irq_pipeline.h>
 #include <asm/irqflags.h>
 
 #ifdef CONFIG_TRACE_IRQFLAGS

@@ -61,6 +61,14 @@
  *                interrupt handler after suspending interrupts. For system
  *                wakeup devices users need to implement wakeup detection in
  *                their interrupt handlers.
+ * IRQF_PIPELINED - Interrupt flows down a pipeline where a co-kernel running
+ *                  on the heading IRQ stage can always handle it, regardless
+ *                  of the (virtualized) interrupt state maintained by
+ *                  local_irq_save/disable() which only affects the lower stage
+ *                  the Linux kernel runs on (enabled by IRQ_PIPELINE).
+ * IRQF_STICKY - When pipelined, a stricky interrupt is delivered to the
+ *               current stage which traps it, regardless of stage
+ *               priorities.
  */
 #define IRQF_SHARED		0x00000080
 #define IRQF_PROBE_SHARED	0x00000100
@@ -74,6 +82,8 @@
 #define IRQF_NO_THREAD		0x00010000
 #define IRQF_EARLY_RESUME	0x00020000
 #define IRQF_COND_SUSPEND	0x00040000
+#define IRQF_PIPELINED		0x00080000
+#define IRQF_STICKY		0x00100000
 
 #define IRQF_TIMER		(__IRQF_TIMER | IRQF_NO_SUSPEND | IRQF_NO_THREAD)
 
@@ -152,6 +162,10 @@ request_any_context_irq(unsigned int irq, irq_handler_t handler,
 			unsigned long flags, const char *name, void *dev_id);
 
 extern int __must_check
+request_percpu_irq_flags(unsigned int irq, irq_handler_t handler,
+			 const char *devname, int flags,
+			 void __percpu *dev_id);
+extern int __must_check
 request_percpu_irq(unsigned int irq, irq_handler_t handler,
 		   const char *devname, void __percpu *percpu_dev_id);
 
@@ -207,6 +221,7 @@ extern void enable_irq(unsigned int irq);
 extern void enable_percpu_irq(unsigned int irq, unsigned int type);
 extern bool irq_percpu_is_enabled(unsigned int irq);
 extern void irq_wake_thread(unsigned int irq, void *dev_id);
+extern void release_irq(unsigned int irq);
 
 /* The following three functions are for the core kernel use only. */
 extern void suspend_device_irqs(void);
