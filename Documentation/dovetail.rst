@@ -99,7 +99,7 @@ dedicated services.
 The migration process of a task from the GPOS/in-band context to the
 high-priority, out-of-band context is as follows:
 
-1. :c:func:`dovetail_enter_head` is invoked from the migrating task
+1. :c:func:`dovetail_leave_inband` is invoked from the migrating task
    context, with the same prerequisites than for calling
    :c:func:`schedule` (preemption enabled, interrupts on).
 
@@ -120,7 +120,9 @@ high-priority, out-of-band context is as follows:
    behalf of the real-time core, re-scheduling its code appropriately
    over the head stage. This typically involves resuming it from the
    `out-of-band suspended state`_ applied during the converse migration
-   path.
+   path. The real-time core is expected to call :c:func:`dovetail_resume_oob`
+   before transitioning from the inband task context its preempts to any
+   out-of-band thread.
 
 5. at some point later, when the migrated task is picked by the
    real-time scheduler, it resumes execution on the head stage with
@@ -157,7 +159,7 @@ context to the GPOS/in-band context is as follows::
 
 .. _`out-of-band suspended state`:
 2. the real-time core suspends execution of the current task from its
-   own standpoint, calling :c:func:`dovetail_leave_head` right before
+   own standpoint, calling :c:func:`dovetail_leave_oob` right before
    scheduling out the task. The real-time scheduler is assumed to be
    using the common :c:func:`switch_to` routine for switching task
    contexts.
@@ -171,8 +173,8 @@ context to the GPOS/in-band context is as follows::
 4. the migrating task resumes from the tail scheduling code of the
    real-time scheduler, where it suspended in step 2. Noticing the
    migration, the real-time core eventually calls
-   :c:func:`dovetail_enter_root` for finalizing the transition of the
-   incoming task to the root stage.
+   :c:func:`dovetail_resume_inband` for finalizing the transition of
+   the incoming task to the root stage.
 
 Binding to the real-time core
 -----------------------------

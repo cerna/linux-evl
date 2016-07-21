@@ -118,9 +118,27 @@ static inline void dovetail_prepare_switch(struct task_struct *next)
 	hard_local_irq_disable();
 }
 
+static inline void dovetail_leave_oob(void)
+{
+	clear_thread_local_flags(_TLF_HEAD|_TLF_OFFSTAGE);
+}
+
+static inline void dovetail_resume_oob(void)
+{
+	dovetail_hypervisor_stall();
+}
+
+int dovetail_context_switch_tail(void);
+
 void dovetail_enable(int flags);
 
 void dovetail_disable(void);
+
+void dovetail_stage_migration_tail(void);
+
+__must_check int dovetail_leave_inband(void);
+
+void dovetail_resume_inband(void);
 
 void dovetail_root_sync(void);
 
@@ -185,7 +203,14 @@ static inline void dovetail_mm_cleanup(struct mm_struct *mm) { }
 
 #define dovetail_exit_vm_guest(__nfy) do { } while (0)
 
+static inline void dovetail_stage_migration_tail(void) { }
+
 static inline void dovetail_prepare_switch(struct task_struct *next) { }
+
+static inline int dovetail_context_switch_tail(void)
+{
+	return 0;
+}
 
 #define dovetail_switch_mm_enter(flags)		\
   do { (void)(flags); } while (0)
