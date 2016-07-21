@@ -934,9 +934,9 @@ void tracing_snapshot(void)
 		return;
 	}
 
-	local_irq_save(flags);
+	flags = hard_local_irq_save();
 	update_max_tr(tr, current, smp_processor_id());
-	local_irq_restore(flags);
+	hard_local_irq_restore(flags);
 }
 EXPORT_SYMBOL_GPL(tracing_snapshot);
 
@@ -1350,7 +1350,7 @@ update_max_tr(struct trace_array *tr, struct task_struct *tsk, int cpu)
 	if (tr->stop_count)
 		return;
 
-	WARN_ON_ONCE(!irqs_disabled());
+	WARN_ON_ONCE(!hard_irqs_disabled());
 
 	if (!tr->allocated_snapshot) {
 		/* Only the nop tracer should hit this when disabling */
@@ -1384,7 +1384,7 @@ update_max_tr_single(struct trace_array *tr, struct task_struct *tsk, int cpu)
 	if (tr->stop_count)
 		return;
 
-	WARN_ON_ONCE(!irqs_disabled());
+	WARN_ON_ONCE(!hard_irqs_disabled());
 	if (!tr->allocated_snapshot) {
 		/* Only the nop tracer should hit this when disabling */
 		WARN_ON_ONCE(tr->current_trace != &nop_trace);
@@ -6055,13 +6055,13 @@ tracing_snapshot_write(struct file *filp, const char __user *ubuf, size_t cnt,
 			if (ret < 0)
 				break;
 		}
-		local_irq_disable();
+		hard_local_irq_disable();
 		/* Now, we're going to swap */
 		if (iter->cpu_file == RING_BUFFER_ALL_CPUS)
 			update_max_tr(tr, current, smp_processor_id());
 		else
 			update_max_tr_single(tr, current, iter->cpu_file);
-		local_irq_enable();
+		hard_local_irq_enable();
 		break;
 	default:
 		if (tr->allocated_snapshot) {
