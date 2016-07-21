@@ -11,6 +11,7 @@
 #include <linux/log2.h>
 #include <linux/typecheck.h>
 #include <linux/printk.h>
+#include <asm-generic/irq_pipeline.h>
 #include <asm/byteorder.h>
 #include <uapi/linux/kernel.h>
 
@@ -181,9 +182,12 @@ struct user;
 
 #ifdef CONFIG_PREEMPT_VOLUNTARY
 extern int _cond_resched(void);
-# define might_resched() _cond_resched()
+# define might_resched() do { \
+		check_root_stage(); \
+		_cond_resched(); \
+	} while (0)
 #else
-# define might_resched() do { } while (0)
+# define might_resched() check_root_stage()
 #endif
 
 #ifdef CONFIG_DEBUG_ATOMIC_SLEEP
