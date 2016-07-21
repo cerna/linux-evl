@@ -1114,6 +1114,21 @@ config PROVE_LOCKING
 
 	 For more details, see Documentation/locking/lockdep-design.txt.
 
+config DEBUG_HARD_SPINLOCK
+	bool "IRQ pipeline lock debugging: prove locking correctness"
+	depends on DEBUG_IRQ_PIPELINE && LOCKDEP
+	---help---
+	  Turn on this option for including hard spinlocks
+	  in lockdep checks for locking correctness.
+	  
+	  If unsure, say N.
+
+if DEBUG_HARD_SPINLOCK
+comment "WARNING! DEBUG_HARD_SPINLOCK causes **massive**"
+comment "latency overhead to any co-kernel running on the head"
+comment "interrupt stage."
+endif
+
 config LOCKDEP
 	bool
 	depends on DEBUG_KERNEL && TRACE_IRQFLAGS_SUPPORT && STACKTRACE_SUPPORT && LOCKDEP_SUPPORT

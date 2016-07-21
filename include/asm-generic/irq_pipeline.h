@@ -106,4 +106,9 @@ static inline bool irq_pipeline_debug(void)
 	return IS_ENABLED(CONFIG_DEBUG_IRQ_PIPELINE);
 }
 
+static inline bool irq_pipeline_debug_locking(void)
+{
+	return IS_ENABLED(CONFIG_DEBUG_HARD_SPINLOCK);
+}
+
 #endif /* __ASM_GENERIC_IRQ_PIPELINE_H */
