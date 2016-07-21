@@ -24,6 +24,7 @@
 #include <linux/uaccess.h>
 #include <linux/irqdomain.h>
 #include <linux/irq_work.h>
+#include <linux/dovetail.h>
 #include <trace/events/irq.h>
 #include "internals.h"
 
@@ -245,6 +246,7 @@ void irq_stage_sync(struct irq_stage *top)
 			if (stage == &root_irq_stage)
 				irq_stage_sync_current();
 			else {
+				clear_stage_bit(STAGE_CALLOUT_BIT, p);
 				/* Switch to head before synchronizing. */
 				irq_set_head_context(p);
 				irq_stage_sync_current();
@@ -809,6 +811,22 @@ void __weak irq_enter_head(void) { }
 
 void __weak irq_exit_head(void) { }
 
+void dovetail_mayday_hook(struct pt_regs *regs);
+
+static inline void check_pending_mayday(struct pt_regs *regs)
+{
+#ifdef CONFIG_DOVETAIL
+	/*
+	 * Sending MAYDAY is in essence a rare case, so prefer test
+	 * then maybe clear over test_and_clear.
+	 */
+	if (user_mode(regs) && test_thread_flag(TIF_MAYDAY)) {
+		clear_thread_flag(TIF_MAYDAY);
+		dovetail_mayday_hook(regs);
+	}
+#endif
+}
+
 static inline
 irqreturn_t __call_action_handler(struct irqaction *action,
 				  struct irq_desc *desc)
@@ -1077,6 +1095,7 @@ int generic_pipeline_irq(unsigned int irq, struct pt_regs *regs)
 	 */
 	irq_exit_head();
 	synchronize_pipeline_on_irq();
+	check_pending_mayday(regs);
 out:
 	set_irq_regs(old_regs);
 

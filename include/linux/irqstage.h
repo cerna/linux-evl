@@ -26,6 +26,8 @@ extern struct irq_stage *head_irq_stage;
 
 /* Interrupts (virtually) disabled. */
 #define STAGE_STALL_BIT		0
+/* Dovetail callout running */
+#define STAGE_CALLOUT_BIT	1
 
 struct irq_event_map;
 
@@ -49,6 +51,9 @@ struct irq_pipeline_data {
 	struct irq_stage_data stages[2];
 	struct irq_stage_data *__curr;
 	struct pt_regs tick_regs;
+#ifdef CONFIG_DOVETAIL
+	struct hypervisor_stall *vm_notifier;
+#endif
 };
 
 DECLARE_PER_CPU(struct irq_pipeline_data, irq_pipeline);
