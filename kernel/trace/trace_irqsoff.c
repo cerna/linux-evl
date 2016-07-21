@@ -25,7 +25,7 @@ static int				tracer_enabled __read_mostly;
 
 static DEFINE_PER_CPU(int, tracing_cpu);
 
-static DEFINE_RAW_SPINLOCK(max_trace_lock);
+static DEFINE_HARD_SPINLOCK(max_trace_lock);
 
 enum {
 	TRACER_IRQS_OFF		= (1 << 1),
@@ -54,7 +54,7 @@ static inline int
 irq_trace(void)
 {
 	return ((trace_type & TRACER_IRQS_OFF) &&
-		on_root_stage() && irqs_disabled());
+		(hard_irqs_disabled() || (on_root_stage() && irqs_disabled())));
 }
 #else
 # define irq_trace() (0)
@@ -395,7 +395,7 @@ start_critical_timing(unsigned long ip, unsigned long parent_ip, int pc)
 	data->preempt_timestamp = ftrace_now(cpu);
 	data->critical_start = parent_ip ? : ip;
 
-	local_save_flags(flags);
+	irq_stage_save_flags(flags);
 
 	__trace_function(tr, ip, parent_ip, flags, pc);
 
