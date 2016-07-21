@@ -21,6 +21,7 @@
 #include <linux/nodemask.h>
 #include <linux/rcupdate.h>
 #include <linux/resource.h>
+#include <linux/irqstage.h>
 #include <linux/latencytop.h>
 #include <linux/sched/prio.h>
 #include <linux/signal_types.h>
@@ -81,9 +82,10 @@ struct task_group;
 #define TASK_PARKED			512
 #define TASK_NOLOAD			1024
 #define TASK_NEW			2048
-#define TASK_STATE_MAX			4096
+#define __TASK_OFFSTAGE			4096
+#define TASK_STATE_MAX			8192
 
-#define TASK_STATE_TO_CHAR_STR		"RSDTtXZxKWPNn"
+#define TASK_STATE_TO_CHAR_STR		"RSDTtXZxKWPNnO"
 
 /* Convenience macros for the sake of set_current_state: */
 #define TASK_KILLABLE			(TASK_WAKEKILL | TASK_UNINTERRUPTIBLE)
@@ -110,6 +112,12 @@ struct task_group;
 #define task_contributes_to_load(task)	((task->state & TASK_UNINTERRUPTIBLE) != 0 && \
 					 (task->flags & PF_FROZEN) == 0 && \
 					 (task->state & TASK_NOLOAD) == 0)
+
+#ifdef CONFIG_DOVETAIL
+#define task_is_off_stage(task)		((task->state & __TASK_OFFSTAGE) != 0)
+#else
+#define task_is_off_stage(task)		0
+#endif
 
 #ifdef CONFIG_DEBUG_ATOMIC_SLEEP
 

@@ -260,6 +260,64 @@ bool __weak dovetail_enter_idle(void)
 
 void __weak dovetail_exit_idle(void) { }
 
+void __weak dovetail_migration_hook(struct task_struct *p)
+{
+}
+
+static void complete_domain_migration(void) /* hw IRQs off */
+{
+	struct irq_pipeline_data *pd;
+	struct irq_stage_data *p;
+	struct task_struct *t;
+
+	check_root_stage();
+	pd = raw_cpu_ptr(&irq_pipeline);
+	t = pd->task_hijacked;
+	if (t == NULL)
+		return;
+
+	pd->task_hijacked = NULL;
+	if (signal_pending(t))	/* Migration aborted by signal. */
+		return;
+
+	/*
+	 * IRQs are hard disabled, but the completion hook may assume
+	 * the head stage is stalled: fix this up.
+	 */
+	p = irq_head_this_context();
+	__set_bit(IPIPE_STALL_FLAG, &p->status);
+	dovetail_migration_hook(t);
+	__clear_bit(IPIPE_STALL_FLAG, &p->status);
+	if (irq_staged_waiting(p))
+		irq_pipeline_sync(p->stage);
+}
+
+void dovetail_complete_domain_migration(void)
+{
+	unsigned long flags;
+
+	flags = hard_local_irq_save();
+	complete_domain_migration();
+	hard_local_irq_restore(flags);
+}
+EXPORT_SYMBOL_GPL(dovetail_complete_domain_migration);
+
+int dovetail_context_switch_tail(void)
+{
+	int x;
+
+	x = __on_root_stage();
+	if (x)
+		complete_domain_migration();
+	else
+		set_thread_local_flags(_TLF_HEAD);
+
+	if (x)
+		hard_local_irq_enable();
+
+	return !x;
+}
+
 #ifdef CONFIG_DOVETAIL_TRACK_VM_GUEST
 void dovetail_hypervisor_stall(void)
 {
