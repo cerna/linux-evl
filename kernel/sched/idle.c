@@ -89,14 +89,19 @@ static bool pipeline_idle_enter(void)
 {
 	struct irq_stage_data *p;
 
+	/*
+	 * We may go idle if no interrupt is waiting delivery from the
+	 * root stage, or a co-kernel denies such transition.
+	 */
 	hard_local_irq_disable();
 	p = irq_root_this_context();
 
-	return !irq_staged_waiting(p);
+	return !irq_staged_waiting(p) && dovetail_enter_idle();
 }
 
 static inline void pipeline_idle_exit(void)
 {
+	dovetail_exit_idle();
 	/* unstall and re-enable hw IRQs too. */
 	local_irq_enable();
 }

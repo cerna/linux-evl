@@ -784,6 +784,16 @@ config DEBUG_IRQ_PIPELINE
 	  
 	  If unsure, say N.
   
+config DEBUG_DOVETAIL
+	bool "Debug Dovetail interface"
+	depends on DOVETAIL
+	select IRQ_PIPELINE_DEBUG
+	---help---
+	  Turn on this option for enabling debug checks related to
+	  running a dual kernel configuration, aka dovetailing. This
+	  option implicitly enables the interrupt pipeline debugging
+	  features.
+
 menu "Debug Lockups and Hangs"
 
 config LOCKUP_DETECTOR

@@ -151,6 +151,8 @@ static inline bool test_thread_local_flags(unsigned int mask)
 	return test_ti_local_flags(current_thread_info(), mask);
 }
 
+#define tlf_head_stage() test_thread_local_flags(_TLF_HEAD)
+
 #endif	/* ti_local_flags */
 
 #endif	/* __KERNEL__ */
