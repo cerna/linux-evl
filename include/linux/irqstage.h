@@ -58,6 +58,9 @@ struct irq_stage_data {
 #endif
 	unsigned long irqpend_lomap[IRQ_LOW_MAPSZ];
 	struct irq_stage *stage;
+#ifdef CONFIG_DOVETAIL
+	int coflags;
+#endif
 };
 
 struct irq_pipeline_data {
@@ -65,6 +68,12 @@ struct irq_pipeline_data {
 	struct irq_stage_data head;
 	struct irq_stage_data *curr;
 	struct pt_regs tick_regs;
+#ifdef CONFIG_DOVETAIL
+	struct task_struct *task_hijacked;
+	struct task_struct *rqlock_owner;
+	struct hypervisor_stall *vm_notifier;
+	struct mm_struct *active_mm;
+#endif
 };
 
 DECLARE_PER_CPU(struct irq_pipeline_data, irq_pipeline);
