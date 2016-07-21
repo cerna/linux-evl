@@ -1984,7 +1984,7 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 	 */
 	raw_spin_lock_irqsave(&p->pi_lock, flags);
 	smp_mb__after_spinlock();
-	if (!(p->state & state))
+	if (!(p->state & state) || task_is_off_stage(p))
 		goto out;
 
 	trace_sched_waking(p);
@@ -2640,8 +2640,8 @@ prepare_task_switch(struct rq *rq, struct task_struct *prev,
 	rseq_preempt(prev);
 	fire_sched_out_preempt_notifiers(prev, next);
 	prepare_task(next);
-	prepare_arch_switch(next);
 	dovetail_prepare_switch(next);
+	prepare_arch_switch(next);
 }
 
 /**
@@ -2797,8 +2797,15 @@ asmlinkage __visible void schedule_tail(struct task_struct *prev)
 	 * finish_task_switch() will drop rq->lock() and lower preempt_count
 	 * and the preempt_enable() will end up enabling preemption (on
 	 * PREEMPT_COUNT kernels).
+	 *
+	 * When dovetailing is enabled, schedule_tail() is the place
+	 * where transitions of tasks from the root to the head stage
+	 * completes. The co-kernel is notified that 'prev' is now
+	 * suspended in the root stage, and can be safely resumed in
+	 * the head stage.
 	 */
 
+	dovetail_stage_migration_tail();
 	rq = finish_task_switch(prev);
 	balance_callback(rq);
 	preempt_enable();
@@ -2853,6 +2860,14 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	/* Here we just switch the register state and the stack. */
 	switch_to(prev, next, prev);
 	barrier();
+
+	/*
+	 * If 'next' is on its way to the head stage, don't run the
+	 * context switch epilogue just yet. We will do that at some
+	 * point later, when the task switches back to the root stage.
+	 */
+	if (unlikely(dovetail_context_switch_tail()))
+		return NULL;
 
 	return finish_task_switch(prev);
 }
@@ -3411,7 +3426,7 @@ again:
  *
  * WARNING: must be called with preemption disabled!
  */
-static void __sched notrace __schedule(bool preempt)
+static int __sched notrace __schedule(bool preempt)
 {
 	struct task_struct *prev, *next;
 	unsigned long *switch_count;
@@ -3502,12 +3517,17 @@ static void __sched notrace __schedule(bool preempt)
 
 		/* Also unlocks the rq: */
 		rq = context_switch(rq, prev, next, &rf);
+  		if (dovetailing() && rq == NULL)
+			/* Task moved to the head stage. */
+			return 1;
 	} else {
 		rq->clock_update_flags &= ~(RQCF_ACT_SKIP|RQCF_REQ_SKIP);
 		rq_unlock_irq(rq, &rf);
 	}
 
 	balance_callback(rq);
+	
+	return 0;
 }
 
 void __noreturn do_task_dead(void)
@@ -3545,7 +3565,8 @@ asmlinkage __visible void __sched schedule(void)
 	sched_submit_work(tsk);
 	do {
 		preempt_disable();
-		__schedule(false);
+		if (__schedule(false))
+			return;
 		sched_preempt_enable_no_resched();
 	} while (need_resched());
 }
@@ -3625,7 +3646,8 @@ static void __sched notrace preempt_schedule_common(void)
 		 */
 		preempt_disable_notrace();
 		preempt_latency_start(1);
-		__schedule(true);
+		if (__schedule(true))
+			return;
 		preempt_latency_stop(1);
 		preempt_enable_no_resched_notrace();
 
@@ -7078,6 +7100,72 @@ struct cgroup_subsys cpu_cgrp_subsys = {
 };
 
 #endif	/* CONFIG_CGROUP_SCHED */
+
+#ifdef CONFIG_DOVETAIL
+
+int dovetail_leave_inband(void)
+{
+	struct task_struct *p = current;
+	struct irq_pipeline_data *pd;
+	unsigned long flags;
+
+	preempt_disable();
+
+	pd = raw_cpu_ptr(&irq_pipeline);
+
+	if (WARN_ON_ONCE(dovetail_debug() && pd->task_inflight))
+		goto out;	/* Paranoid. */
+
+	raw_spin_lock_irqsave(&p->pi_lock, flags);
+	pd->task_inflight = p;
+	/*
+	 * The scope of the off-stage state is broader than _TLF_HEAD,
+	 * in that it includes the transition path from the in-band
+	 * context to the head stage.
+	 */
+	set_thread_local_flags(_TLF_OFFSTAGE);
+	set_current_state(TASK_INTERRUPTIBLE);
+	raw_spin_unlock_irqrestore(&p->pi_lock, flags);
+	sched_submit_work(p);
+	if (likely(__schedule(false)))
+		return 0;
+
+	/*
+	 * We should not get there unless a signal was pending for
+	 * current on entry to __schedule(), in which case the
+	 * migration process to the head stage is aborted.
+	 */
+	BUG_ON(!signal_pending(p));
+
+	clear_thread_local_flags(_TLF_OFFSTAGE);
+	pd->task_inflight = NULL;
+out:
+	preempt_enable();
+
+	return -ERESTARTSYS;
+}
+EXPORT_SYMBOL_GPL(dovetail_leave_inband);
+
+void dovetail_resume_inband(void)
+{
+	struct task_struct *p;
+	struct rq *rq;
+
+	p = __this_cpu_read(irq_pipeline.rqlock_owner);
+	if (WARN_ON_ONCE(dovetail_debug() && p == NULL))
+		return;
+
+	if (WARN_ON_ONCE(dovetail_debug() && (preempt_count() & STAGE_MASK)))
+		return;
+
+	rq = finish_task_switch(p);
+	balance_callback(rq);
+	preempt_enable();
+	dovetail_stage_migration_tail();
+}
+EXPORT_SYMBOL_GPL(dovetail_resume_inband);
+
+#endif /* CONFIG_DOVETAIL */
 
 void dump_cpu_task(int cpu)
 {
