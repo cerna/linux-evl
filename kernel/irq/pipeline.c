@@ -86,6 +86,8 @@ static unsigned int root_work_sirq;
 
 static irqreturn_t do_root_work(int sirq, void *dev_id);
 
+void dovetail_mayday_hook(struct pt_regs *regs);
+
 static inline int root_context_offset(void)
 {
 	void root_context_not_at_start_of_irq_pipeline(void);
@@ -752,6 +754,20 @@ static void enter_pipeline(unsigned int irq, bool sync, struct pt_regs *regs)
 	__enter_pipeline(irq, desc, sync);
 }
 
+static inline void check_pending_mayday(struct pt_regs *regs)
+{
+#ifdef CONFIG_DOVETAIL
+	/*
+	 * Sending MAYDAY is in essence a rare case, so prefer test
+	 * then maybe clear over test_and_clear.
+	 */
+	if (user_mode(regs) && test_thread_flag(TIF_MAYDAY)) {
+		clear_thread_flag(TIF_MAYDAY);
+		dovetail_mayday_hook(regs);
+	}
+#endif
+}
+
 void __irq_pipeline_enter(unsigned int irq, struct pt_regs *regs)
 {				/* hw interrupts off */
 	struct irq_desc *desc = irq_to_desc(irq);
@@ -760,11 +776,15 @@ void __irq_pipeline_enter(unsigned int irq, struct pt_regs *regs)
 		copy_timer_regs(desc, regs);
 
 	__enter_pipeline(irq, desc, true);
+
+	if (regs)
+		check_pending_mayday(regs);
 }
 
 void irq_pipeline_enter(unsigned int irq, struct pt_regs *regs)
 {				/* hw interrupts off */
 	enter_pipeline(irq, true, regs);
+	check_pending_mayday(regs);
 }
 
 void irq_pipeline_enter_nosync(unsigned int irq)
