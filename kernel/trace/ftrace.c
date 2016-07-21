@@ -2617,7 +2617,12 @@ static void ftrace_run_update_code(int command)
 	 * is safe. The stop_machine() is the safest, but also
 	 * produces the most overhead.
 	 */
-	arch_ftrace_update_code(command);
+	if (irqs_pipelined()) {
+		unsigned long flags = irq_pipeline_lock(NULL, NULL);
+		__ftrace_modify_code(&command);
+		irq_pipeline_unlock(flags);
+	} else
+		arch_ftrace_update_code(command);
 
 	ret = ftrace_arch_code_modify_post_process();
 	FTRACE_WARN_ON(ret);
@@ -4948,10 +4953,10 @@ static int ftrace_process_locs(struct module *mod,
 	 * reason to cause large interrupt latencies while we do it.
 	 */
 	if (!mod)
-		local_irq_save(flags);
+		flags = hard_local_irq_save();
 	ftrace_update_code(mod, start_pg);
 	if (!mod)
-		local_irq_restore(flags);
+		hard_local_irq_restore(flags);
 	ret = 0;
  out:
 	mutex_unlock(&ftrace_lock);
@@ -5104,9 +5109,11 @@ void __init ftrace_init(void)
 	unsigned long count, flags;
 	int ret;
 
-	local_irq_save(flags);
+	flags = hard_local_irq_save();
 	ret = ftrace_dyn_arch_init();
-	local_irq_restore(flags);
+	hard_local_irq_restore(flags);
+
+	/* ftrace_dyn_arch_init places the return code in addr */
 	if (ret)
 		goto failed;
 
@@ -5271,7 +5278,15 @@ __ftrace_ops_list_func(unsigned long ip, unsigned long parent_ip,
 		}
 	} while_for_each_ftrace_op(op);
 out:
-	preempt_enable_notrace();
+	if (irqs_pipelined() && (hard_irqs_disabled() || !__on_root_stage()))
+		/*
+		 * Nothing urgent to schedule here. At latest the
+		 * timer tick will pick up whatever the tracing
+		 * functions kicked off.
+		 */
+		preempt_enable_no_resched_notrace();
+	else
+		preempt_enable_notrace();
 	trace_clear_recursion(bit);
 }
 
