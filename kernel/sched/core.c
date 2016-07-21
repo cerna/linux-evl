@@ -1179,10 +1179,13 @@ static int __set_cpus_allowed_ptr(struct task_struct *p,
 	}
 
 	/* Can the task run on the task's current CPU? If so, we're done */
-	if (cpumask_test_cpu(task_cpu(p), new_mask))
+	if (cpumask_test_cpu(task_cpu(p), new_mask)) {
+		dovetail_change_task_affinity(p, task_cpu(p));
 		goto out;
+	}
 
 	dest_cpu = cpumask_any_and(cpu_valid_mask, new_mask);
+	dovetail_change_task_affinity(p, dest_cpu);
 	if (task_running(rq, p) || p->state == TASK_WAKING) {
 		struct migration_arg arg = { p, dest_cpu };
 		/* Need help from migration thread: drop lock and wait. */
@@ -2018,7 +2021,8 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 	 */
 	smp_mb__before_spinlock();
 	raw_spin_lock_irqsave(&p->pi_lock, flags);
-	if (!(p->state & state))
+	if (!(p->state & state) ||
+	    (dovetailing() && (p->state & TASK_OFFSTAGE)))
 		goto out;
 
 	trace_sched_waking(p);
@@ -2845,8 +2849,15 @@ asmlinkage __visible void schedule_tail(struct task_struct *prev)
 	 * finish_task_switch() will drop rq->lock() and lower preempt_count
 	 * and the preempt_enable() will end up enabling preemption (on
 	 * PREEMPT_COUNT kernels).
+	 *
+	 * When dovetailing is enabled, schedule_tail() is the place
+	 * where transitions of tasks from the root to the head stage
+	 * completes. The co-kernel is nptified that 'prev' is now
+	 * suspended in the root stage, and can be safely resumed in
+	 * the head stage.
 	 */
 
+	dovetail_complete_domain_migration();
 	rq = finish_task_switch(prev);
 	balance_callback(rq);
 	preempt_enable();
@@ -2898,6 +2909,14 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	/* Here we just switch the register state and the stack. */
 	switch_to(prev, next, prev);
 	barrier();
+
+	/*
+	 * If 'next' is transitioning to the head stage, don't run the
+	 * context switch epilogue just yet. We will do that at some
+	 * point later, when the task switches back to the root stage.
+	 */
+	if (unlikely(dovetail_context_switch_tail()))
+		return NULL;
 
 	return finish_task_switch(prev);
 }
@@ -3143,6 +3162,8 @@ static inline void preempt_latency_start(int val)
 
 void preempt_count_add(int val)
 {
+	ipipe_root_only();
+
 #ifdef CONFIG_DEBUG_PREEMPT
 	/*
 	 * Underflow?
@@ -3175,6 +3196,8 @@ static inline void preempt_latency_stop(int val)
 
 void preempt_count_sub(int val)
 {
+	ipipe_root_only();
+
 #ifdef CONFIG_DEBUG_PREEMPT
 	/*
 	 * Underflow?
@@ -3240,6 +3263,8 @@ static inline void schedule_debug(struct task_struct *prev)
 	if (task_stack_end_corrupted(prev))
 		panic("corrupted stack end detected inside scheduler\n");
 #endif
+
+	ipipe_root_only();
 
 	if (unlikely(in_atomic_preempt_off())) {
 		__schedule_bug(prev);
@@ -3330,7 +3355,7 @@ again:
  *
  * WARNING: must be called with preemption disabled!
  */
-static void __sched notrace __schedule(bool preempt)
+static int __sched notrace __schedule(bool preempt)
 {
 	struct task_struct *prev, *next;
 	unsigned long *switch_count;
@@ -3400,12 +3425,17 @@ static void __sched notrace __schedule(bool preempt)
 
 		trace_sched_switch(preempt, prev, next);
 		rq = context_switch(rq, prev, next, cookie); /* unlocks the rq */
+  		if (dovetailing() && rq == NULL)
+			/* Task moved to the head stage. */
+			return 1;
 	} else {
 		lockdep_unpin_lock(&rq->lock, cookie);
 		raw_spin_unlock_irq(&rq->lock);
 	}
 
 	balance_callback(rq);
+	
+	return 0;
 }
 
 void __noreturn do_task_dead(void)
@@ -3454,7 +3484,8 @@ asmlinkage __visible void __sched schedule(void)
 	sched_submit_work(tsk);
 	do {
 		preempt_disable();
-		__schedule(false);
+		if (__schedule(false))
+			return;
 		sched_preempt_enable_no_resched();
 	} while (need_resched());
 }
@@ -3509,7 +3540,8 @@ static void __sched notrace preempt_schedule_common(void)
 		 */
 		preempt_disable_notrace();
 		preempt_latency_start(1);
-		__schedule(true);
+		if (__schedule(true))
+			return;
 		preempt_latency_stop(1);
 		preempt_enable_no_resched_notrace();
 
@@ -4315,6 +4347,7 @@ change:
 
 	prev_class = p->sched_class;
 	__setscheduler(rq, p, attr, pi);
+  	dovetail_change_task_scheduler(p);
 
 	if (queued) {
 		/*
@@ -8833,6 +8866,53 @@ struct cgroup_subsys cpu_cgrp_subsys = {
 };
 
 #endif	/* CONFIG_CGROUP_SCHED */
+
+#ifdef CONFIG_DOVETAIL
+
+int dovetail_enter_head(void)
+{
+	struct task_struct *p = current;
+
+	preempt_disable();
+
+	WARN_ON_ONCE(dovetail_debug() &&
+	     __this_cpu_read(irq_pipeline.task_hijacked) != NULL);
+
+	__this_cpu_write(irq_pipeline.task_hijacked, p);
+	set_current_state(TASK_INTERRUPTIBLE | TASK_OFFSTAGE);
+	sched_submit_work(p);
+	if (likely(__schedule(false)))
+		return 0;
+
+	/*
+	 * We should not get there unless a signal was pending for
+	 * current on entry to __schedule(), in which case the
+	 * migration process to the head stage is aborted.
+	 */
+	p->state &= ~TASK_OFFSTAGE;
+	
+	if (signal_pending(p))
+		return -ERESTARTSYS;
+
+	BUG();
+}
+EXPORT_SYMBOL_GPL(dovetail_enter_head);
+
+void dovetail_leave_head(void)
+{
+	struct task_struct *p;
+	struct rq *rq;
+
+	p = __this_cpu_read(irq_pipeline.rqlock_owner);
+	BUG_ON(p == NULL);
+	clear_thread_local_flags(_TLF_HEAD);
+	rq = finish_task_switch(p);
+	balance_callback(rq);
+	preempt_enable();
+}
+EXPORT_SYMBOL_GPL(dovetail_leave_head);
+
+#endif /* CONFIG_DOVETAIL */
 
 void dump_cpu_task(int cpu)
 {
