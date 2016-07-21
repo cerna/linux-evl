@@ -52,6 +52,8 @@ struct irq_pipeline_data {
 	struct irq_stage_data *__curr;
 	struct pt_regs tick_regs;
 #ifdef CONFIG_DOVETAIL
+	struct task_struct *task_inflight;
+	struct task_struct *rqlock_owner;
 	struct hypervisor_stall *vm_notifier;
 #endif
 };
