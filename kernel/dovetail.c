@@ -20,28 +20,33 @@ void dovetail_init_task(struct task_struct *p)
 {
 	struct thread_info *ti = task_thread_info(p);
 
-	clear_ti_local_flags(ti, _TLF_DOVETAIL|_TLF_HEAD);
+	clear_ti_local_flags(ti, _TLF_DOVETAIL|_TLF_HEAD|_TLF_OFFSTAGE);
 	arch_dovetail_init_task(p);
 }
 
-void __weak arch_dovetail_enable(int flags)
+void dovetail_init_altsched(struct dovetail_altsched_context *p)
 {
-}
+	struct task_struct *tsk = current;
 
-void dovetail_enable(int flags)	/* flags unused yet. */
+	check_root_stage();
+	p->task = tsk;
+	p->active_mm = tsk->mm;
+}
+EXPORT_SYMBOL_GPL(dovetail_init_altsched);
+
+void dovetail_start_altsched(void)
 {
 	check_root_stage();
-	arch_dovetail_enable(flags);
 	set_thread_local_flags(_TLF_DOVETAIL);
 }
-EXPORT_SYMBOL_GPL(dovetail_enable);
+EXPORT_SYMBOL_GPL(dovetail_start_altsched);
 
-void dovetail_disable(void)
+void dovetail_stop_altsched(void)
 {
 	clear_thread_local_flags(_TLF_DOVETAIL);
 	clear_thread_flag(TIF_MAYDAY);
 }
-EXPORT_SYMBOL_GPL(dovetail_disable);
+EXPORT_SYMBOL_GPL(dovetail_stop_altsched);
 
 void __weak dovetail_fastcall_hook(struct pt_regs *regs)
 {
@@ -90,7 +95,7 @@ int dovetail_pipeline_syscall(struct thread_info *ti, struct pt_regs *regs)
 		return 0;
 
 	flags = hard_local_irq_save();
-	caller_stage = __current_irq_stage;
+	caller_stage = current_irq_stage;
 	this_context = irq_get_current_context();
 	target_stage = head_irq_stage;
 next:
@@ -110,7 +115,7 @@ next:
 	 * - if no stage migration happened, switch back to the
 	 * initial caller's stage, on a possibly different CPU though.
 	 */
-	if (__current_irq_stage != target_stage)
+	if (current_irq_stage != target_stage)
 		this_context = irq_get_current_context();
 	else {
 		p = irq_stage_this_context(this_context->stage);
@@ -227,6 +232,90 @@ void dovetail_handle_kevent(int kevent, void *data)
 
 	if (dovetail_enabled)
 		dovetail_kevent_hook(kevent, data);
+}
+
+void __weak dovetail_migration_hook(struct task_struct *p)
+{
+}
+
+static void finalize_oob_transition(void) /* hard IRQs off */
+{
+	struct irq_pipeline_data *pd;
+	struct irq_stage_data *p;
+	struct task_struct *t;
+
+	check_root_stage();
+	pd = raw_cpu_ptr(&irq_pipeline);
+	t = pd->task_inflight;
+	if (t == NULL)
+		return;
+
+	/*
+	 * @t which is in flight to the head stage might have received
+	 * a signal while waiting in off-stage state to be actually
+	 * scheduled out. We can't act upon that signal safely from
+	 * here, we simply let the task complete the migration process
+	 * to the head stage. The pending signal will be handled when
+	 * the task eventually exits the out-of-band context by the
+	 * converse migration.
+	 */
+	pd->task_inflight = NULL;
+
+	/*
+	 * IRQs are hard disabled, but the stage transition handler
+	 * may assume the head stage is stalled: fix this up.
+	 */
+	p = irq_head_this_context();
+	set_stage_bit(STAGE_STALL_BIT, p);
+	dovetail_migration_hook(t);
+	clear_stage_bit(STAGE_STALL_BIT, p);
+	if (irq_staged_waiting(p))
+		/* Current stage (root) != p->stage (head). */
+		irq_stage_sync(p->stage);
+}
+
+void dovetail_oob_trampoline(void)
+{
+	unsigned long flags;
+
+	flags = hard_local_irq_save();
+	finalize_oob_transition();
+	hard_local_irq_restore(flags);
+}
+
+int dovetail_inband_switch_tail(void)
+{
+	bool on_root;
+
+	check_hard_irqs_disabled();
+
+	/*
+	 * We may run this code either over the inband or oob
+	 * contexts. If inband, we may have a thread blocked in
+	 * dovetail_leave_inband(), waiting for the co-kernel to
+	 * schedule it back in over the oob context:
+	 * finalize_oob_transition() should take care of it. If oob,
+	 * the co-kernel just switched us back, and we may update the
+	 * context markers.
+	 *
+	 * CAUTION: The preemption count may not reflect the active
+	 * stage yet, so use the current stage pointer to determine
+	 * which one we are on.
+	 */
+	on_root = current_irq_stage == &root_irq_stage;
+	if (on_root)
+		finalize_oob_transition();
+	else {
+		set_thread_local_flags(_TLF_HEAD);
+		WARN_ON_ONCE(dovetail_debug() &&
+			     (preempt_count() & STAGE_MASK));
+		preempt_count_add(STAGE_OFFSET);
+	}
+
+	if (on_root)
+		hard_local_irq_enable();
+
+	return !on_root;
 }
 
 int dovetail_start(void)

@@ -26,6 +26,11 @@ struct dovetail_migration_data {
 	int dest_cpu;
 };
 
+struct dovetail_altsched_context {
+	struct task_struct *task;
+	struct mm_struct *active_mm;
+};
+
 int dovetail_start(void);
 
 void dovetail_stop(void);
@@ -66,7 +71,7 @@ static inline void dovetail_task_exit(void)
 }
 
 static inline
-void dovetail_context_switch(struct task_struct *next)
+void dovetail_inband_switch(struct task_struct *next)
 {
 	struct task_struct *prev = current;
 
@@ -89,13 +94,45 @@ static inline void dovetail_mm_cleanup(struct mm_struct *mm)
 
 static inline void dovetail_prepare_switch(struct task_struct *next)
 {
-	dovetail_context_switch(next);
+	dovetail_inband_switch(next);
 	hard_local_irq_disable();
 }
 
-void dovetail_enable(int flags);
+static inline void dovetail_leave_oob(void)
+{
+	clear_thread_local_flags(_TLF_HEAD|_TLF_OFFSTAGE);
+}
 
-void dovetail_disable(void);
+static inline
+void dovetail_resume_oob(struct dovetail_altsched_context *outgoing)
+{
+	struct task_struct *tsk = current;
+	/* 
+	 * We are about to leave the current inband context for
+	 * switching to an out-of-band task, save the preempted
+	 * context information.
+	 */
+	outgoing->task = tsk;
+	outgoing->active_mm = tsk->active_mm;
+	dovetail_hypervisor_stall();
+}
+
+int dovetail_inband_switch_tail(void);
+
+void dovetail_oob_trampoline(void);
+
+void dovetail_init_altsched(struct dovetail_altsched_context *p);
+
+void dovetail_start_altsched(void);
+
+void dovetail_stop_altsched(void);
+
+void dovetail_context_switch(struct dovetail_altsched_context *out,
+			     struct dovetail_altsched_context *in);
+
+__must_check int dovetail_leave_inband(void);
+
+void dovetail_resume_inband(void);
 
 void dovetail_root_sync(void);
 
@@ -159,7 +196,14 @@ static inline void dovetail_task_exit(void) { }
 
 static inline void dovetail_mm_cleanup(struct mm_struct *mm) { }
 
+static inline void dovetail_oob_trampoline(void) { }
+
 static inline void dovetail_prepare_switch(struct task_struct *next) { }
+
+static inline int dovetail_inband_switch_tail(void)
+{
+	return 0;
+}
 
 #define dovetail_switch_mm_enter(flags)	\
   do { (void)(flags); } while (0)
