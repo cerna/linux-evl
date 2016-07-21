@@ -68,6 +68,8 @@ static void __wake_up_common(struct wait_queue_head *wq_head, unsigned int mode,
 {
 	wait_queue_entry_t *curr, *next;
 
+	check_root_stage();
+
 	list_for_each_entry_safe(curr, next, &wq_head->head, entry) {
 		unsigned flags = curr->flags;
 		int ret = curr->func(curr, mode, wake_flags, key);
