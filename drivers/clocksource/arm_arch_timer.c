@@ -675,6 +675,10 @@ static void __init arch_counter_register(unsigned type)
 
 		clocksource_counter.archdata.vdso_direct = true;
 
+#ifdef arch_clocksource_arch_timer_init
+		arch_clocksource_arch_timer_init(&clocksource_counter);
+#endif
+
 #ifdef CONFIG_ARM_ARCH_TIMER_OOL_WORKAROUND
 		/*
 		 * Don't use the vdso fastpath if errata require using
