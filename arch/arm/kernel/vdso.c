@@ -41,6 +41,7 @@ static struct page **vdso_text_pagelist;
 
 /* Total number of pages needed for the data and text portions of the VDSO. */
 unsigned int vdso_total_pages __ro_after_init;
+unsigned int vdso_bss_pages __ro_after_init;
 
 /*
  * The VDSO data page.
@@ -179,7 +180,9 @@ static void __init patch_vdso(void *ehdr)
 
 static int __init vdso_init(void)
 {
+	unsigned long size;
 	unsigned int text_pages;
+	void *bss_start, *text_end;
 	int i;
 
 	if (memcmp(&vdso_start, "\177ELF", 4)) {
@@ -187,7 +190,11 @@ static int __init vdso_init(void)
 		return -ENOEXEC;
 	}
 
-	text_pages = (&vdso_end - &vdso_start) >> PAGE_SHIFT;
+	if (!find_section((void *)&vdso_start, ".text", &size))
+		return -EINVAL;
+
+	text_pages = DIV_ROUND_UP(size, PAGE_SIZE);
+	text_end = (void *)&vdso_start + (text_pages << PAGE_SHIFT);
 	pr_debug("vdso: %i text pages at base %p\n", text_pages, &vdso_start);
 
 	/* Allocate the VDSO text pagelist */
@@ -214,8 +221,15 @@ static int __init vdso_init(void)
 
 	vdso_text_mapping.pages = vdso_text_pagelist;
 
-	vdso_total_pages = VDSO_NR_DATA_PAGES; /* for the data/vvar page */
+	bss_start = find_section((void *)&vdso_start, ".bss", &size);
+	if (bss_start) {
+		BUG_ON(bss_start != text_end);
+		vdso_bss_pages = DIV_ROUND_UP(size, PAGE_SIZE);
+	}
+
+	vdso_total_pages = VDSO_NR_DATA_PAGES; /* for the data/vvar page(s) */
 	vdso_total_pages += text_pages;
+	vdso_total_pages += vdso_bss_pages;
 
 	cntvct_ok = cntvct_functional();
 
@@ -241,6 +255,7 @@ void arm_install_vdso(struct mm_struct *mm, unsigned long addr)
 {
 	struct vm_area_struct *vma;
 	unsigned long len;
+	long err;
 
 	mm->context.vdso = 0;
 
@@ -252,14 +267,24 @@ void arm_install_vdso(struct mm_struct *mm, unsigned long addr)
 
 	/* Account for vvar page(s). */
 	addr += VDSO_DATA_SIZE;
-	len = (vdso_total_pages - VDSO_NR_DATA_PAGES) << PAGE_SHIFT;
-
+	len = (vdso_total_pages - VDSO_NR_DATA_PAGES - vdso_bss_pages) << PAGE_SHIFT;
 	vma = _install_special_mapping(mm, addr, len,
 		VM_READ | VM_EXEC | VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC,
 		&vdso_text_mapping);
+	if (IS_ERR(vma))
+		return;
 
-	if (!IS_ERR(vma))
-		mm->context.vdso = addr;
+	if (!vdso_bss_pages)
+		goto done;
+
+	err = mmap_region(NULL, addr + len, vdso_bss_pages << PAGE_SHIFT,
+			  VM_READ | VM_WRITE | VM_MAYREAD | VM_MAYWRITE,
+			  0, NULL);
+	if (IS_ERR_VALUE(err))
+		return;
+
+  done:
+	mm->context.vdso = addr;
 }
 
 static void vdso_write_begin(struct vdso_data *vdata)
