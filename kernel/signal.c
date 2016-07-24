@@ -695,6 +695,10 @@ int dequeue_signal(struct task_struct *tsk, sigset_t *mask, siginfo_t *info)
 void signal_wake_up_state(struct task_struct *t, unsigned int state)
 {
 	set_tsk_thread_flag(t, TIF_SIGPENDING);
+
+	/* TIF_SIGPENDING must be set prior to notifying. */
+	dovetail_signal_task(t);
+
 	/*
 	 * TASK_WAKEKILL also means wake it up in the stopped/traced/killable
 	 * case. We don't check t->state here because there is a race with it
@@ -915,8 +919,11 @@ static inline bool wants_signal(int sig, struct task_struct *p)
 	if (sig == SIGKILL)
 		return true;
 
-	if (task_is_stopped_or_traced(p))
+	if (task_is_stopped_or_traced(p)) {
+		if (!signal_pending(p))
+			dovetail_signal_task(p);
 		return false;
+	}
 
 	return task_curr(p) || !signal_pending(p);
 }
