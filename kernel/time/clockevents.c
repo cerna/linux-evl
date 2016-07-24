@@ -609,6 +609,36 @@ void clockevents_resume(void)
 			dev->resume(dev);
 }
 
+#ifdef CONFIG_IRQ_PIPELINE
+
+void clockevents_handle_event(struct clock_event_device *ced)
+{
+	if (__on_root_stage()) {
+		ced->event_handler(ced);
+		return;
+	}
+
+	/*
+	 * We have been called from a high-precision timer event
+	 * handler running over the head stage context. if ced is
+	 * still the regular tick device for the current CPU, then
+	 * such CPU can't be processing high-precision events, so just
+	 * relay them to the root stage.
+	 *
+	 * This situation can happen when all CPUs receive the same
+	 * (pipelined) IRQ from a given clock event device, but only a
+	 * subset of the online CPUs is actually interested in
+	 * high-precision events from that device.
+	 */
+	if (ced == raw_cpu_ptr(&tick_cpu_device)->evtdev)
+		irq_stage_post_root(ced->irq);
+	else	/* High-precision tick handled by the co-kernel. */
+		ced->event_handler(ced);
+}
+EXPORT_SYMBOL_GPL(clockevents_handle_event);
+
+#endif	/* IRQ_PIPELINE */
+
 #ifdef CONFIG_HOTPLUG_CPU
 /**
  * tick_cleanup_dead_cpu - Cleanup the tick and clockevents of a dead cpu
