@@ -226,6 +226,10 @@ static inline int arch_within_stack_frames(const void * const stack,
 #ifdef CONFIG_COMPAT
 #define TS_I386_REGS_POKED	0x0004	/* regs poked by 32-bit ptracer */
 #endif
+
+#define TLF_HEAD		0x0001	/* runs on head stage */
+#define _TLF_HEAD		TLF_HEAD
+
 #ifndef __ASSEMBLY__
 
 #ifdef CONFIG_X86_32
