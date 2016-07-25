@@ -203,6 +203,18 @@ u64 arch_irq_stat(void)
 	return sum;
 }
 
+static inline void move_root_irq(struct irq_desc *desc)
+{
+#if defined(CONFIG_SMP) && defined(CONFIG_IRQ_PIPELINE)
+	struct irq_chip *chip;
+	
+	if (!IS_ERR_OR_NULL(desc)) {
+		chip = irq_desc_get_chip(desc);
+		if (chip->irq_move)
+			chip->irq_move(irq_desc_get_irq_data(desc));
+	}
+#endif
+}
 
 /*
  * do_IRQ handles all normal device IRQ's (the special
@@ -228,12 +240,12 @@ __visible unsigned int __irq_entry do_IRQ(struct pt_regs *regs)
 	 * IRQs.
 	 */
 
+	desc = __this_cpu_read(vector_irq[vector]);
+        move_root_irq(desc);
 	entering_irq();
 
 	/* entering_irq() tells RCU that we're not quiescent.  Check it. */
 	RCU_LOCKDEP_WARN(!rcu_is_watching(), "IRQ failed to wake up RCU");
-
-	desc = __this_cpu_read(vector_irq[vector]);
 
 	if (!handle_irq(desc, regs)) {
 		ack_APIC_irq();
