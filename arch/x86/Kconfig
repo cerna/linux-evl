@@ -167,6 +167,8 @@ config X86
 	select IRQ_FORCED_THREADING
 	select HAVE_IRQ_PIPELINE if X86_TSC && (X86_LOCAL_APIC || HPET_TIMER)
 	select FORCE_COMMIT_MEMORY if IRQ_PIPELINE
+	select HAVE_DOVETAIL if HAVE_IRQ_PIPELINE
+	select DOVETAIL_HAVE_HOSTRT if DOVETAIL
 	select PERF_EVENTS
 	select RTC_LIB
 	select RTC_MC146818_LIB
@@ -972,6 +974,8 @@ config SCHED_MC_PRIO
 	  If unsure say Y here.
 
 source "kernel/Kconfig.preempt"
+
+source "kernel/Kconfig.dovetail"
 
 config UP_LATE_INIT
        def_bool y

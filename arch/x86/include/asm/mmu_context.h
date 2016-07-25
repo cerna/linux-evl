@@ -132,6 +132,20 @@ extern void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 			       struct task_struct *tsk);
 #define switch_mm_irqs_off switch_mm_irqs_off
 
+#ifdef CONFIG_DOVETAIL
+/*
+ * The mm switching service a co-kernel may invoke from the head stage
+ * exclusively, as part of its private context switch procedure
+ * (hard_irqs_disabled).
+ */
+static inline void dovetail_switch_mm(struct mm_struct *prev,
+				      struct mm_struct *next,
+				      struct task_struct *tsk)
+{
+	switch_mm_irqs_off(prev, next, tsk);
+}
+#endif
+
 #define activate_mm(prev, next)			\
 do {						\
 	paravirt_activate_mm((prev), (next));	\
