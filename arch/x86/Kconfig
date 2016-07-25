@@ -147,8 +147,10 @@ config X86
 	select HAVE_UNSTABLE_SCHED_CLOCK
 	select HAVE_USER_RETURN_NOTIFIER
 	select IRQ_FORCED_THREADING
+	select DOVETAIL_HAVE_HOSTRT if DOVETAIL
 	select FORCE_COMMIT_MEMORY if IRQ_PIPELINE
 	select HAVE_IRQ_PIPELINE if X86_TSC && (X86_LOCAL_APIC || HPET_TIMER)
+	select HAVE_DOVETAIL if HAVE_IRQ_PIPELINE
 	select MODULES_USE_ELF_RELA		if X86_64
 	select MODULES_USE_ELF_REL		if X86_32
 	select OLD_SIGACTION			if X86_32
@@ -943,6 +945,8 @@ config SCHED_MC
 	  increased overhead in some places. If unsure say N here.
 
 source "kernel/Kconfig.preempt"
+
+source "kernel/Kconfig.dovetail"
 
 config UP_LATE_INIT
        def_bool y
