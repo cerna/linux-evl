@@ -95,6 +95,7 @@ struct thread_info {
 #define TIF_SECCOMP		8	/* secure computing */
 #define TIF_USER_RETURN_NOTIFY	11	/* notify kernel of userspace return */
 #define TIF_UPROBE		12	/* breakpointed or singlestepping */
+#define TIF_MAYDAY		13	/* emergency trap pending */
 #define TIF_NOTSC		16	/* TSC is not accessible in userland */
 #define TIF_IA32		17	/* IA32 compatibility process */
 #define TIF_NOHZ		19	/* in adaptive nohz mode */
@@ -118,6 +119,7 @@ struct thread_info {
 #define _TIF_SECCOMP		(1 << TIF_SECCOMP)
 #define _TIF_USER_RETURN_NOTIFY	(1 << TIF_USER_RETURN_NOTIFY)
 #define _TIF_UPROBE		(1 << TIF_UPROBE)
+#define _TIF_MAYDAY		(1 << TIF_MAYDAY)
 #define _TIF_NOTSC		(1 << TIF_NOTSC)
 #define _TIF_IA32		(1 << TIF_IA32)
 #define _TIF_NOHZ		(1 << TIF_NOHZ)
@@ -228,7 +230,10 @@ static inline int arch_within_stack_frames(const void * const stack,
 #endif
 
 #define TLF_HEAD		0x0001	/* runs on head stage */
+#define TLF_DOVETAIL		0x0002	/* notify head stage about kernel events */
+
 #define _TLF_HEAD		TLF_HEAD
+#define _TLF_DOVETAIL		TLF_DOVETAIL
 
 #ifndef __ASSEMBLY__
 

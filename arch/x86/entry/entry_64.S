@@ -868,7 +868,7 @@ ENTRY(\sym)
 	.endif
 
 	call	\do_sym
-#ifdef CONFIG_IRQ_PIPELINE
+#ifdef CONFIG_DOVETAIL
 	.if \paranoid
 	xorl	%eax,%eax 	/* force paranoid_exit to propagate the exception */
 	.else
