@@ -68,6 +68,13 @@ void irq_pipeline_oops(void);
 
 bool irq_pipeline_steal_tick(void);
 
+extern bool irq_pipeline_active;
+	
+static inline bool irq_critical_context(void)
+{
+	return on_head_stage() || (hard_irqs_disabled() && irq_pipeline_active);
+}
+
 extern struct irq_domain *synthetic_irq_domain;
 
 #else /* !CONFIG_IRQ_PIPELINE */
@@ -92,6 +99,11 @@ void irq_pipeline_clear(unsigned int irq) { }
 
 static inline
 void irq_pipeline_oops(void) { }
+
+static inline bool irq_critical_context(void)
+{
+	return false;
+}
 
 #endif /* !CONFIG_IRQ_PIPELINE */
 
