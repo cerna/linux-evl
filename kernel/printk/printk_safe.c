@@ -351,6 +351,10 @@ void __printk_safe_exit(void)
 
 __printf(1, 0) int vprintk_func(const char *fmt, va_list args)
 {
+	if (irqs_pipelined() && (on_head_stage() ||
+		 (hard_irqs_disabled() && system_state == SYSTEM_RUNNING)))
+		return vprintk_nmi(fmt, args);
+
 	if (this_cpu_read(printk_context) & PRINTK_NMI_CONTEXT_MASK)
 		return vprintk_nmi(fmt, args);
 
