@@ -44,6 +44,9 @@ EXPORT_SYMBOL_GPL(head_irq_stage);
 struct irq_domain *synthetic_irq_domain;
 EXPORT_SYMBOL_GPL(synthetic_irq_domain);
 
+bool irq_pipeline_active;
+EXPORT_SYMBOL_GPL(irq_pipeline_active);
+
 static bool irq_pipeline_oopsing;
 
 #define IRQ_LOW_MAPSZ	DIV_ROUND_UP(IRQ_BITMAP_BITS, BITS_PER_LONG)
@@ -1686,6 +1689,8 @@ void __init irq_pipeline_init(void)
 #ifdef CONFIG_SMP
 	setup_percpu_irq(STOP_OOB_IPI, &stop_ipi);
 #endif
+
+	irq_pipeline_active = true;
 
 	pr_info("IRQ pipeline enabled\n");
 }
