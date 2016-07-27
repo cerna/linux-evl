@@ -20,8 +20,7 @@
  *
  * IRQ pipeline.
  */
-#include <linux/version.h>
-#include <linux/module.h>
+#include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/kconfig.h>
 #include <linux/sched.h>
@@ -31,8 +30,6 @@
 #include <linux/bitops.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
-#include <linux/clockchips.h>
-#include <linux/uaccess.h>
 #include <linux/irqdomain.h>
 #include <linux/dovetail.h>
 #include "internals.h"
@@ -254,7 +251,7 @@ void __init irq_pipeline_init(void)
 #ifdef CONFIG_SMP
 	setup_irq(IPIPE_CRITICAL_IPI, &lock_ipi);
 #endif
-	init_safe_printk();
+	printk_pipeline_init();
 
 	pr_info("IRQ pipeline (release #%d)\n", IPIPE_CORE_RELEASE);
 }
