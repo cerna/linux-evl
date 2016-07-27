@@ -83,6 +83,63 @@ typedef struct spinlock {
 
 #define DEFINE_SPINLOCK(x)	spinlock_t x = __SPIN_LOCK_UNLOCKED(x)
 
+#ifdef CONFIG_IRQ_PIPELINE
+
+void __bad_spinlock_type(void);
+
+#define __RAWLOCK(x) ((struct raw_spinlock *)(x))
+
+#define LOCK_ALTERNATIVES(__lock, __base_op, __raw_form, __args...)	\
+	do {								\
+		if (__builtin_types_compatible_p(typeof(__lock),	\
+						 raw_spinlock_t *))	\
+			__raw_form;					\
+		else if (__builtin_types_compatible_p(typeof(__lock),	\
+						 hard_spinlock_t *))	\
+			hard_ ## __base_op(__RAWLOCK(__lock), ##__args); \
+		else							\
+			__bad_spinlock_type();				\
+	} while (0)
+
+#define LOCK_ALTERNATIVES_RET(__lock, __base_op, __raw_form, __args...) \
+	({								\
+		long __ret = 0;						\
+		if (__builtin_types_compatible_p(typeof(__lock),	\
+						 raw_spinlock_t *))	\
+			__ret = __raw_form;				\
+		else if (__builtin_types_compatible_p(typeof(__lock),	\
+						 hard_spinlock_t *))	\
+			__ret = hard_ ## __base_op(__RAWLOCK(__lock), ##__args); \
+		else							\
+			__bad_spinlock_type();				\
+		__ret;							\
+	})
+
+#define DEFINE_HARD_SPINLOCK(x)	hard_spinlock_t x = {	\
+		.rlock = __RAW_SPIN_LOCK_UNLOCKED(x),	\
+	}
+
+typedef struct hard_spinlock {
+	/* XXX: offset_of(struct hard_spinlock, rlock) == 0 */
+	struct raw_spinlock rlock;
+} hard_spinlock_t;
+
+#else
+
+typedef raw_spinlock_t hard_spinlock_t;
+
+#define LOCK_ALTERNATIVES(__lock, __base_op, __raw_form, __args...)	\
+	__raw_form
+
+#define LOCK_ALTERNATIVES_RET(__lock, __base_op, __raw_form, __args...) \
+	__raw_form
+
+#define DEFINE_HARD_SPINLOCK(x)		DEFINE_RAW_SPINLOCK(x)
+
+#define __RAWLOCK(x) (x)
+
+#endif	/* CONFIG_IRQ_PIPELINE */
+
 #include <linux/rwlock_types.h>
 
 #endif /* __LINUX_SPINLOCK_TYPES_H */
