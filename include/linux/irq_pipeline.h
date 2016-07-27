@@ -73,6 +73,14 @@ void irq_cpuidle_exit(void);
 
 int irq_stage_escalate(int (*fn)(void *arg), void *arg);
 
+extern bool irq_pipeline_active;
+	
+static inline bool irq_critical_context(void)
+{
+	return on_head_stage() ||
+		(hard_irqs_disabled() && irq_pipeline_active);
+}
+
 extern struct irq_domain *synthetic_irq_domain;
 
 #else /* !CONFIG_IRQ_PIPELINE */
@@ -116,6 +124,11 @@ static inline bool irq_cpuidle_enter(struct cpuidle_device *dev,
 
 static inline void irq_cpuidle_exit(void)
 { }
+
+static inline bool irq_critical_context(void)
+{
+	return false;
+}
 
 #endif /* !CONFIG_IRQ_PIPELINE */
 
