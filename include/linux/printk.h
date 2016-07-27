@@ -145,6 +145,12 @@ static inline void printk_nmi_flush(void) { }
 static inline void printk_nmi_flush_on_panic(void) { }
 #endif /* PRINTK_NMI */
 
+#ifdef CONFIG_IRQ_PIPELINE
+void printk_pipeline_init(void);
+#else
+static inline void printk_pipeline_init(void) { }
+#endif
+
 #ifdef CONFIG_RAW_PRINTK
 void raw_vprintk(const char *fmt, va_list ap);
 asmlinkage __printf(1, 2)
