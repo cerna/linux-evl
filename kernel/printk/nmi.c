@@ -40,6 +40,7 @@
  */
 DEFINE_PER_CPU(printk_func_t, printk_func) = vprintk_default;
 static int printk_nmi_irq_ready;
+static DEFINE_PER_CPU(printk_func_t, orig_printk_func);
 atomic_t nmi_message_lost;
 
 #define NMI_LOG_BUF_LEN ((1 << CONFIG_NMI_LOG_BUF_SHIFT) -		\
@@ -259,10 +260,15 @@ void __init printk_nmi_init(void)
 
 void printk_nmi_enter(void)
 {
+	printk_func_t old_printk_func = this_cpu_read(printk_func);
+
+	this_cpu_write(orig_printk_func, old_printk_func);
 	this_cpu_write(printk_func, vprintk_nmi);
 }
 
 void printk_nmi_exit(void)
 {
-	this_cpu_write(printk_func, vprintk_default);
+	printk_func_t old_printk_func = this_cpu_read(orig_printk_func);
+
+	this_cpu_write(printk_func, old_printk_func);
 }
