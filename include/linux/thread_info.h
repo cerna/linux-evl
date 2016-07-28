@@ -134,6 +134,53 @@ static inline void check_object_size(const void *ptr, unsigned long n,
 { }
 #endif /* CONFIG_HARDENED_USERCOPY */
 
+#ifdef ti_local_flags
+/*
+ * If the arch defines a set of per-thread synchronous flags, provide
+ * generic accessors to them.
+ */
+#define set_ti_local_flags(__tsk, __mask)		\
+	do {						\
+		ti_local_flags(tsk) |= (__mask);	\
+	} while (0)
+
+static inline void set_thread_local_flags(unsigned int mask)
+{
+	set_ti_local_flags(current_thread_info(), mask);
+}
+
+#define test_and_set_ti_local_flags(__tsk, __mask)		\
+	({							\
+		int __old = ti_local_flags(__tsk) & (__mask);	\
+		ti_local_flags(__tsk) |= (__mask);		\
+		__old != 0;					\
+	})
+
+static inline int test_and_set_thread_local_flags(unsigned int mask)
+{
+	return test_and_set_ti_local_flags(current_thread_info(), mask);
+}
+
+#define clear_ti_local_flags(__tsk, __mask)		\
+	do {						\
+		ti_local_flags(__tsk) &= ~(__mask);	\
+	} while (0)
+
+static inline void clear_thread_local_flags(unsigned int mask)
+{
+	clear_ti_local_flags(current_thread_info(), mask);
+}
+
+#define test_ti_local_flags(__tsk, __mask)		\
+	((ti_local_flags(__tsk) & (__mask)) != 0)
+
+static inline bool test_thread_local_flags(unsigned int mask)
+{
+	return test_ti_local_flags(current_thread_info(), mask);
+}
+
+#endif	/* ti_local_flags */
+
 #endif	/* __KERNEL__ */
 
 #endif /* _LINUX_THREAD_INFO_H */
