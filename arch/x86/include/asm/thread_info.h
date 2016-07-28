@@ -54,12 +54,16 @@ struct task_struct;
 
 struct thread_info {
 	unsigned long		flags;		/* low level flags */
+	unsigned long		local_flags;	/* synchronous flags */
 };
 
 #define INIT_THREAD_INFO(tsk)			\
 {						\
 	.flags		= 0,			\
+	.local_flags	= 0,			\
 }
+
+#define ti_local_flags(__ti)	((__ti)->local_flags)
 
 #define init_stack		(init_thread_union.stack)
 
