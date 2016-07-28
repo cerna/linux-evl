@@ -54,11 +54,19 @@ struct task_struct;
 
 struct thread_info {
 	unsigned long		flags;		/* low level flags */
+#ifdef CONFIG_IRQ_PIPELINE
+	unsigned long		local_flags;	/* synchronous flags */
+#define __init_ti_local_flags	.local_flags	= 0,
+#define ti_local_flags(__tsk)	((__tsk)->thread_info.local_flags)
+#else
+#define __init_ti_local_flags
+#endif
 };
 
 #define INIT_THREAD_INFO(tsk)			\
 {						\
 	.flags		= 0,			\
+	__init_ti_local_flags			\
 }
 
 #define init_stack		(init_thread_union.stack)
