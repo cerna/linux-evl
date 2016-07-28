@@ -1229,6 +1229,8 @@ __do_page_fault(struct pt_regs *regs, unsigned long error_code,
 	tsk = current;
 	mm = tsk->mm;
 
+	if (irqs_pipelined() && &root_irq_stage != head_irq_stage)
+		hard_cond_local_irq_enable();
 	/*
 	 * Detect and handle instructions that would cause a page fault for
 	 * both a tracked kernel page and a userspace page.
