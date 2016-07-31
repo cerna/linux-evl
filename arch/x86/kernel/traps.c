@@ -168,6 +168,104 @@ void ist_end_non_atomic(void)
 	preempt_disable();
 }
 
+#ifdef CONFIG_DOVETAIL
+
+#include <linux/extable.h>
+
+static inline void fixup_if(int s, struct pt_regs *regs)
+{
+	if (s)
+		regs->flags &= ~X86_EFLAGS_IF;
+	else
+		regs->flags |= X86_EFLAGS_IF;
+}
+
+bool dovetail_trap_enter(struct pt_regs *regs, int trapnr,
+			 unsigned long *flags)
+{
+	bool root_entry = false;
+	struct irq_stage *stage;
+	unsigned long cr2;
+
+	if (trapnr == X86_TRAP_PF)
+		cr2 = native_read_cr2();
+
+	/*
+	 * If we fault over the root stage, we need to replicate the
+	 * real interrupt state into the virtual mask before calling
+	 * the dovetail trap handler. This is also required later
+	 * before branching to the regular exception handler.
+	 */
+	if (on_root_stage()) {
+		root_entry = true;
+		local_save_flags(*flags);
+		if (hard_irqs_disabled())
+			local_irq_disable();
+	}
+
+	dovetail_handle_trap(trapnr, regs);
+
+	/*
+	 * If no head stage is installed, or in case we faulted in the
+	 * iret path of x86-32, regs.flags does not match the root
+	 * stage state. The fault handler or the low-level return code
+	 * may evaluate it. So fix this up, either by the root state
+	 * sampled on entry or, if we migrated to root, with the
+	 * current state.
+	 */
+	if (likely(on_root_stage()))
+		fixup_if(root_entry ? raw_irqs_disabled_flags(*flags) :
+			 raw_irqs_disabled(), regs);
+	else {
+		/*
+		 * Detect unhandled faults over the head stage,
+		 * switching to root so that it can handle the fault
+		 * cleanly.
+		 */
+		hard_local_irq_disable();
+		stage = __current_irq_stage;
+		__set_current_irq_stage(&root_irq_stage);
+
+		/* Always warn about user land and unfixable faults. */
+		if (user_mode(regs) ||
+		    !search_exception_tables(instruction_pointer(regs)))
+			WARN(1, "Unhandled exception over %s stage"
+			     " at %#lx - switching to root stage\n",
+			     stage->name, instruction_pointer(regs));
+		else if (irq_pipeline_debug())
+			/* Also report fixable ones when debugging is enabled. */
+			WARN(1, "Fixable exception over stage %s "
+			     "at %#lx - switching to root stage\n",
+			     stage->name, instruction_pointer(regs));
+	}
+
+	if (trapnr == X86_TRAP_PF)
+		write_cr2(cr2);
+
+	return root_entry;
+}
+
+void dovetail_trap_exit(bool root_entry, unsigned long flags)
+{
+	if (root_entry)
+		root_irq_restore_nosync(flags);
+}
+
+#else
+
+static inline
+bool dovetail_trap_enter(struct pt_regs *regs, int trapnr,
+			 unsigned long *flags)
+{
+	return true;
+}
+
+static inline
+void dovetail_trap_exit(bool root_entry, unsigned long flags)
+{ }
+
+#endif
+
 static nokprobe_inline int
 do_trap_no_signal(struct task_struct *tsk, int trapnr, char *str,
 		  struct pt_regs *regs,	long error_code)
@@ -280,7 +378,11 @@ static void do_error_trap(struct pt_regs *regs, long error_code, char *str,
 #define DO_ERROR(trapnr, signr, str, name)				\
 dotraplinkage void do_##name(struct pt_regs *regs, long error_code)	\
 {									\
+	unsigned long flags;						\
+	bool root_entry;						\
+	root_entry = dovetail_trap_enter(regs, trapnr, &flags);		\
 	do_error_trap(regs, error_code, str, trapnr, signr);		\
+	dovetail_trap_exit(root_entry, flags);				\
 }
 
 DO_ERROR(X86_TRAP_DE,     SIGFPE,  "divide error",		divide_error)
@@ -408,12 +510,16 @@ dotraplinkage void do_double_fault(struct pt_regs *regs, long error_code)
 dotraplinkage void do_bounds(struct pt_regs *regs, long error_code)
 {
 	const struct mpx_bndcsr *bndcsr;
+	unsigned long flags;
+	bool root_entry;
 	siginfo_t *info;
+
+	root_entry = dovetail_trap_enter(regs, X86_TRAP_BR, &flags);
 
 	RCU_LOCKDEP_WARN(!rcu_is_watching(), "entry code didn't wake RCU");
 	if (notify_die(DIE_TRAP, "bounds", regs, error_code,
 			X86_TRAP_BR, SIGSEGV) == NOTIFY_STOP)
-		return;
+		goto out;
 	cond_local_irq_enable(regs);
 
 	if (!user_mode(regs))
@@ -470,7 +576,7 @@ dotraplinkage void do_bounds(struct pt_regs *regs, long error_code)
 		die("bounds", regs, error_code);
 	}
 
-	return;
+	goto out;
 
 exit_trap:
 	/*
@@ -481,12 +587,18 @@ exit_trap:
 	 * time..
 	 */
 	do_trap(X86_TRAP_BR, SIGSEGV, "bounds", regs, error_code, NULL);
+out:
+	dovetail_trap_exit(root_entry, flags);
 }
 
 dotraplinkage void
 do_general_protection(struct pt_regs *regs, long error_code)
 {
 	struct task_struct *tsk;
+	unsigned long flags;
+	bool root_entry;
+
+	root_entry = dovetail_trap_enter(regs, X86_TRAP_GP, &flags);
 
 	RCU_LOCKDEP_WARN(!rcu_is_watching(), "entry code didn't wake RCU");
 	cond_local_irq_enable(regs);
@@ -494,20 +606,20 @@ do_general_protection(struct pt_regs *regs, long error_code)
 	if (v8086_mode(regs)) {
 		local_irq_enable();
 		handle_vm86_fault((struct kernel_vm86_regs *) regs, error_code);
-		return;
+		goto out;
 	}
 
 	tsk = current;
 	if (!user_mode(regs)) {
 		if (fixup_exception(regs, X86_TRAP_GP))
-			return;
+			goto out;
 
 		tsk->thread.error_code = error_code;
 		tsk->thread.trap_nr = X86_TRAP_GP;
 		if (notify_die(DIE_GPF, "general protection fault", regs, error_code,
 			       X86_TRAP_GP, SIGSEGV) != NOTIFY_STOP)
 			die("general protection fault", regs, error_code);
-		return;
+		goto out;
 	}
 
 	tsk->thread.error_code = error_code;
@@ -523,12 +635,17 @@ do_general_protection(struct pt_regs *regs, long error_code)
 	}
 
 	force_sig_info(SIGSEGV, SEND_SIG_PRIV, tsk);
+out:
+	dovetail_trap_exit(root_entry, flags);
 }
 NOKPROBE_SYMBOL(do_general_protection);
 
 /* May run on IST stack. */
 dotraplinkage void notrace do_int3(struct pt_regs *regs, long error_code)
 {
+	unsigned long flags;
+	bool root_entry;
+
 #ifdef CONFIG_DYNAMIC_FTRACE
 	/*
 	 * ftrace must be first, everything else may cause a recursive crash.
@@ -541,6 +658,7 @@ dotraplinkage void notrace do_int3(struct pt_regs *regs, long error_code)
 	if (poke_int3_handler(regs))
 		return;
 
+	root_entry = dovetail_trap_enter(regs, X86_TRAP_BP, &flags);
 	ist_enter(regs);
 	RCU_LOCKDEP_WARN(!rcu_is_watching(), "entry code didn't wake RCU");
 #ifdef CONFIG_KGDB_LOW_LEVEL_TRAP
@@ -571,6 +689,7 @@ dotraplinkage void notrace do_int3(struct pt_regs *regs, long error_code)
 	debug_stack_usage_dec();
 exit:
 	ist_exit(regs);
+	dovetail_trap_exit(root_entry, flags);
 }
 NOKPROBE_SYMBOL(do_int3);
 
@@ -672,7 +791,10 @@ dotraplinkage void do_debug(struct pt_regs *regs, long error_code)
 	int user_icebp = 0;
 	unsigned long dr6;
 	int si_code;
+	unsigned long flags;
+	bool root_entry;
 
+	root_entry = dovetail_trap_enter(regs, X86_TRAP_DB, &flags);
 	ist_enter(regs);
 
 	get_debugreg(dr6, 6);
@@ -782,6 +904,7 @@ exit:
 	     "Overran or corrupted SYSENTER stack\n");
 #endif
 	ist_exit(regs);
+	dovetail_trap_exit(root_entry, flags);
 }
 NOKPROBE_SYMBOL(do_debug);
 
@@ -797,9 +920,13 @@ static void math_error(struct pt_regs *regs, int error_code, int trapnr)
 	siginfo_t info;
 	char *str = (trapnr == X86_TRAP_MF) ? "fpu exception" :
 						"simd exception";
+	unsigned long flags;
+	bool root_entry;
+
+	root_entry = dovetail_trap_enter(regs, trapnr, &flags);
 
 	if (notify_die(DIE_TRAP, str, regs, error_code, trapnr, SIGFPE) == NOTIFY_STOP)
-		return;
+		goto out;
 	cond_local_irq_enable(regs);
 
 	if (!user_mode(regs)) {
@@ -808,7 +935,7 @@ static void math_error(struct pt_regs *regs, int error_code, int trapnr)
 			task->thread.trap_nr = trapnr;
 			die(str, regs, error_code);
 		}
-		return;
+		goto out;
 	}
 
 	/*
@@ -826,9 +953,11 @@ static void math_error(struct pt_regs *regs, int error_code, int trapnr)
 
 	/* Retry when we get spurious exceptions: */
 	if (!info.si_code)
-		return;
+		goto out;
 
 	force_sig_info(SIGFPE, &info, task);
+out:
+	dovetail_trap_exit(root_entry, flags);
 }
 
 dotraplinkage void do_coprocessor_error(struct pt_regs *regs, long error_code)
@@ -853,6 +982,11 @@ do_spurious_interrupt_bug(struct pt_regs *regs, long error_code)
 dotraplinkage void
 do_device_not_available(struct pt_regs *regs, long error_code)
 {
+	unsigned long flags;
+	bool root_entry;
+
+	root_entry = dovetail_trap_enter(regs, X86_TRAP_NM, &flags);
+
 	RCU_LOCKDEP_WARN(!rcu_is_watching(), "entry code didn't wake RCU");
 
 #ifdef CONFIG_MATH_EMULATION
@@ -863,6 +997,7 @@ do_device_not_available(struct pt_regs *regs, long error_code)
 
 		info.regs = regs;
 		math_emulate(&info);
+		dovetail_trap_exit(root_entry, flags);
 		return;
 	}
 #endif
@@ -870,6 +1005,7 @@ do_device_not_available(struct pt_regs *regs, long error_code)
 #ifdef CONFIG_X86_32
 	cond_local_irq_enable(regs);
 #endif
+	dovetail_trap_exit(root_entry, flags);
 }
 NOKPROBE_SYMBOL(do_device_not_available);
 
@@ -877,6 +1013,10 @@ NOKPROBE_SYMBOL(do_device_not_available);
 dotraplinkage void do_iret_error(struct pt_regs *regs, long error_code)
 {
 	siginfo_t info;
+	unsigned long flags;
+	bool root_entry;
+
+	root_entry = dovetail_trap_enter(regs, X86_TRAP_IRET, &flags);
 
 	RCU_LOCKDEP_WARN(!rcu_is_watching(), "entry code didn't wake RCU");
 	local_irq_enable();
@@ -890,6 +1030,8 @@ dotraplinkage void do_iret_error(struct pt_regs *regs, long error_code)
 		do_trap(X86_TRAP_IRET, SIGILL, "iret exception", regs, error_code,
 			&info);
 	}
+
+	dovetail_trap_exit(root_entry, flags);
 }
 #endif
 
