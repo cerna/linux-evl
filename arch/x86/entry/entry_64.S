@@ -39,6 +39,12 @@
 #include <asm/frame.h>
 #include <linux/err.h>
 
+#ifdef CONFIG_DOVETAIL
+#define unknown_sys_call	entry_SYSCALL64_slow_path
+#else
+#define unknown_sys_call	ret_from_sys_call
+#endif
+
 .code64
 .section .entry.text, "ax"
 
@@ -172,6 +178,14 @@ GLOBAL(entry_SYSCALL_64_after_swapgs)
 	pushq	%r11				/* pt_regs->r11 */
 	sub	$(6*8), %rsp			/* pt_regs->bp, bx, r12-15 not saved */
 
+#ifdef CONFIG_DOVETAIL
+	/*
+	 * If the caller is shared with a co-kernel, go to the dovetail
+	 * syscall handler through the slow path.
+	 */
+	testl	$_TLF_DOVETAIL, TASK_TI_localflags(%r11)
+	jnz	entry_SYSCALL64_slow_path
+#endif
 	/*
 	 * If we need to do entry work or if we guess we'll need to do
 	 * exit work, go straight to the slow path.
@@ -194,7 +208,7 @@ entry_SYSCALL_64_fastpath:
 	andl	$__SYSCALL_MASK, %eax
 	cmpl	$__NR_syscall_max, %eax
 #endif
-	ja	1f				/* return -ENOSYS (already in pt_regs->ax) */
+	ja	unknown_sys_call /* return -ENOSYS (already in pt_regs->ax) */
 	movq	%r10, %rcx
 
 	/*
@@ -206,7 +220,7 @@ entry_SYSCALL_64_fastpath:
 .Lentry_SYSCALL_64_after_fastpath_call:
 
 	movq	%rax, RAX(%rsp)
-1:
+ret_from_sys_call:
 
 	/*
 	 * If we get here, then we know that pt_regs is clean for SYSRET64.

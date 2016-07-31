@@ -17,6 +17,7 @@
 #include <linux/tracehook.h>
 #include <linux/audit.h>
 #include <linux/seccomp.h>
+#include <linux/unistd.h>
 #include <linux/signal.h>
 #include <linux/export.h>
 #include <linux/context_tracking.h>
@@ -265,7 +266,9 @@ __visible inline void syscall_return_slowpath(struct pt_regs *regs)
 	 * First do one-time work.  If these work items are enabled, we
 	 * want to run them exactly once per syscall exit with IRQs on.
 	 */
-	if (unlikely(cached_flags & SYSCALL_EXIT_WORK_FLAGS))
+	if (unlikely(cached_flags & SYSCALL_EXIT_WORK_FLAGS) &&
+	    (!IS_ENABLED(CONFIG_IPIPE) ||
+	     syscall_get_nr(current, regs) < NR_syscalls))
 		syscall_slow_exit_work(regs, cached_flags);
 
 	disable_local_irqs();
@@ -277,9 +280,18 @@ __visible void do_syscall_64(struct pt_regs *regs)
 {
 	struct thread_info *ti = current_thread_info();
 	unsigned long nr = regs->orig_ax;
+	int ret;
 
 	enter_from_user_mode();
-	local_irq_enable();
+	enable_local_irqs();
+
+	ret = dovetail_handle_syscall(ti, nr & __SYSCALL_MASK, regs);
+	if (ret > 0) {
+		disable_local_irqs();
+		return;
+	}
+	if (ret < 0)
+		goto done;
 
 	if (READ_ONCE(ti->flags) & _TIF_WORK_SYSCALL_ENTRY)
 		nr = syscall_trace_enter(regs);
@@ -294,12 +306,38 @@ __visible void do_syscall_64(struct pt_regs *regs)
 			regs->di, regs->si, regs->dx,
 			regs->r10, regs->r8, regs->r9);
 	}
-
+done:
 	syscall_return_slowpath(regs);
 }
 #endif
 
 #if defined(CONFIG_X86_32) || defined(CONFIG_IA32_EMULATION)
+
+#ifdef CONFIG_X86_32
+static inline int dovetail_syscall(struct thread_info *ti,
+				   unsigned long nr, struct pt_regs *regs)
+{
+	return dovetail_handle_syscall(ti, nr, regs);
+}
+#else
+static inline int dovetail_syscall(struct thread_info *ti,
+				   unsigned long nr, struct pt_regs *regs)
+{
+	struct pt_regs regs64 = *regs;
+	int ret;
+
+	regs64.di = (unsigned int)regs->bx;
+	regs64.si = (unsigned int)regs->cx;
+	regs64.r10 = (unsigned int)regs->si;
+	regs64.r8 = (unsigned int)regs->di;
+	regs64.r9 = (unsigned int)regs->bp;
+	ret = dovetail_handle_syscall(ti, nr, &regs64);
+	regs->ax = (unsigned int)regs64.ax;
+
+	return ret;
+}
+#endif /* CONFIG_X86_32 */
+
 /*
  * Does a 32-bit syscall.  Called with IRQs on in CONTEXT_KERNEL.  Does
  * all entry and exit work and returns with IRQs off.  This function is
@@ -310,11 +348,18 @@ static __always_inline void do_syscall_32_irqs_on(struct pt_regs *regs)
 {
 	struct thread_info *ti = current_thread_info();
 	unsigned int nr = (unsigned int)regs->orig_ax;
+	int ret;
 
 #ifdef CONFIG_IA32_EMULATION
 	current->thread.status |= TS_COMPAT;
 #endif
 
+	ret = dovetail_syscall(ti, nr, regs);
+	if (ret > 0)
+		return;
+	if (ret < 0)
+		goto done;
+	  
 	if (READ_ONCE(ti->flags) & _TIF_WORK_SYSCALL_ENTRY) {
 		/*
 		 * Subtlety here: if ptrace pokes something larger than
@@ -337,7 +382,7 @@ static __always_inline void do_syscall_32_irqs_on(struct pt_regs *regs)
 			(unsigned int)regs->dx, (unsigned int)regs->si,
 			(unsigned int)regs->di, (unsigned int)regs->bp);
 	}
-
+done:
 	syscall_return_slowpath(regs);
 }
 
@@ -345,7 +390,7 @@ static __always_inline void do_syscall_32_irqs_on(struct pt_regs *regs)
 __visible void do_int80_syscall_32(struct pt_regs *regs)
 {
 	enter_from_user_mode();
-	local_irq_enable();
+	enable_local_irqs();
 	do_syscall_32_irqs_on(regs);
 }
 
@@ -369,7 +414,7 @@ __visible long do_fast_syscall_32(struct pt_regs *regs)
 
 	enter_from_user_mode();
 
-	local_irq_enable();
+	enable_local_irqs();
 
 	/* Fetch EBP from where the vDSO stashed it. */
 	if (
@@ -387,7 +432,7 @@ __visible long do_fast_syscall_32(struct pt_regs *regs)
 		) {
 
 		/* User code screwed up. */
-		local_irq_disable();
+		disable_local_irqs();
 		regs->ax = -EFAULT;
 		prepare_exit_to_usermode(regs);
 		return 0;	/* Keep it simple: use IRET. */

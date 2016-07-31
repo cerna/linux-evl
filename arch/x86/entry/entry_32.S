@@ -268,6 +268,7 @@ ENTRY(ret_from_fork)
 	 * schedule_tail() is asmlinkage so we have to put its 'prev' argument
 	 * on the stack.
 	 */
+	ENABLE_INTERRUPTS_IF_PIPELINED(CLBR_NONE)
 	pushl	%eax
 	call	schedule_tail
 	popl	%eax
@@ -640,6 +641,71 @@ ENTRY(irq_entries_start)
     .endr
 END(irq_entries_start)
 
+#ifdef CONFIG_IRQ_PIPELINE
+
+	.p2align CONFIG_X86_L1_CACHE_SHIFT
+
+.Lunwind_root_irq:
+	DISABLE_INTERRUPTS(CLBR_ANY)
+	ret	/* back to do_IRQ_pipelined() */
+
+ENTRY(do_root_irq)
+	pushfl
+	orl	$X86_EFLAGS_IF, (%esp)
+	pushl	%cs
+	pushl	$.Lunwind_root_irq
+	pushl	PT_ORIG_EAX(%eax)
+	mov	%edx, %ecx
+	SAVE_ALL
+	pushl	%eax
+	call	*%ecx
+	addl	$4, %esp
+	jmp	ret_from_intr
+END(do_root_irq)
+	
+common_interrupt:
+	ASM_CLAC;			\
+	addl	$-0x80,(%esp)	/* Adjust vector into the [-256,-1] range */
+	SAVE	ALL
+	movl	%esp, %eax
+	call	enter_irq_pipeline
+	testl	%eax,%eax
+	jnz	ret_from_intr
+	jmp	restore_nocheck
+ENDPROC(common_interrupt)
+
+	.p2align CONFIG_X86_L1_CACHE_SHIFT
+
+	.pushsection .kprobes.text, "ax"
+#define BUILD_INTERRUPT2(name, nr)	\
+ENTRY(name)				\
+	ASM_CLAC;			\
+	pushl	$~(nr);			\
+	SAVE_ALL;			\
+	movl	%esp, %eax;		\
+	call	call enter_irq_pipeline;\
+	testl	%eax,%eax;		\
+	jnz	ret_from_intr;		\
+	jmp	restore_nocheck;	\
+ENDPROC(name)
+
+/*
+ * We never call the handler directly, we have to go through the
+ * pipeline instead, which sets the proper routing in
+ * arch_irq_pipeline_init(), so we may ignore the function arg.
+ */
+#define BUILD_INTERRUPT3(name, nr, fn)	\
+	BUILD_INTERRUPT2(name, nr)
+
+#ifdef CONFIG_X86_LOCAL_APIC
+	BUILD_INTERRUPT2(ipipe_hrtimer_interrupt, IPIPE_HRTIMER_VECTOR)
+#ifdef CONFIG_SMP	
+	BUILD_INTERRUPT2(ipipe_reschedule_interrupt, IPIPE_RESCHEDULE_VECTOR)
+	BUILD_INTERRUPT2(ipipe_critical_interrupt, IPIPE_CRITICAL_VECTOR)
+#endif
+#endif
+
+#else /* !CONFIG_IRQ_PIPELINE */
 /*
  * the CPU automatically disables interrupts when executing an IRQ vector,
  * so IRQ-flags tracing has to follow that:
@@ -668,6 +734,7 @@ ENTRY(name)				\
 	jmp	ret_from_intr;		\
 ENDPROC(name)
 
+#endif /* !CONFIG_IRQ_PIPELINE */
 
 #ifdef CONFIG_TRACING
 # define TRACE_BUILD_INTERRUPT(name, nr)	BUILD_INTERRUPT3(trace_##name, nr, smp_trace_##name)
@@ -1096,6 +1163,10 @@ common_exception:
 	TRACE_IRQS_OFF
 	movl	%esp, %eax			# pt_regs pointer
 	call	*%edi
+#ifdef CONFIG_IRQ_PIPELINE
+	testl	%eax,%eax
+	jnz	restore_nocheck
+#endif	
 	jmp	ret_from_exception
 END(common_exception)
 
