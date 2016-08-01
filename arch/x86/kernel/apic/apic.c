@@ -267,18 +267,21 @@ void native_apic_icr_write(u32 low, u32 id)
 {
 	unsigned long flags;
 
-	local_irq_save(flags);
+	flags = hard_local_irq_save();
 	apic_write(APIC_ICR2, SET_APIC_DEST_FIELD(id));
 	apic_write(APIC_ICR, low);
-	local_irq_restore(flags);
+	hard_local_irq_restore(flags);
 }
 
 u64 native_apic_icr_read(void)
 {
+	unsigned long flags;
 	u32 icr1, icr2;
 
+	flags = hard_local_irq_save();
 	icr2 = apic_read(APIC_ICR2);
 	icr1 = apic_read(APIC_ICR);
+	hard_local_irq_restore(flags);
 
 	return icr1 | ((u64)icr2 << 32);
 }
@@ -329,6 +332,7 @@ int lapic_get_maxlvt(void)
 static void __setup_APIC_LVTT(unsigned int clocks, int oneshot, int irqen)
 {
 	unsigned int lvtt_value, tmp_value;
+	unsigned long flags;
 
 	lvtt_value = LOCAL_TIMER_VECTOR;
 	if (!oneshot)
@@ -342,6 +346,8 @@ static void __setup_APIC_LVTT(unsigned int clocks, int oneshot, int irqen)
 	if (!irqen)
 		lvtt_value |= APIC_LVT_MASKED;
 
+	flags = hard_cond_local_irq_save();
+
 	apic_write(APIC_LVTT, lvtt_value);
 
 	if (lvtt_value & APIC_LVT_TIMER_TSCDEADLINE) {
@@ -353,7 +359,7 @@ static void __setup_APIC_LVTT(unsigned int clocks, int oneshot, int irqen)
 		asm volatile("mfence" : : : "memory");
 
 		printk_once(KERN_DEBUG "TSC deadline timer enabled\n");
-		return;
+		goto out;
 	}
 
 	/*
@@ -366,6 +372,8 @@ static void __setup_APIC_LVTT(unsigned int clocks, int oneshot, int irqen)
 
 	if (!oneshot)
 		apic_write(APIC_TMICT, clocks / APIC_DIVISOR);
+out:
+	hard_cond_local_irq_restore(flags);
 }
 
 /*
@@ -480,16 +488,20 @@ static int lapic_next_deadline(unsigned long delta,
 
 static int lapic_timer_shutdown(struct clock_event_device *evt)
 {
+	unsigned long flags;
 	unsigned int v;
 
 	/* Lapic used as dummy for broadcast ? */
 	if (evt->features & CLOCK_EVT_FEAT_DUMMY)
 		return 0;
 
+	flags = hard_cond_local_irq_save();
 	v = apic_read(APIC_LVTT);
 	v |= (APIC_LVT_MASKED | LOCAL_TIMER_VECTOR);
 	apic_write(APIC_LVTT, v);
 	apic_write(APIC_TMICT, 0);
+	hard_cond_local_irq_restore(flags);
+
 	return 0;
 }
 
@@ -1074,11 +1086,14 @@ void clear_local_APIC(void)
  */
 void disable_local_APIC(void)
 {
+	unsigned long flags;
 	unsigned int value;
 
 	/* APIC hasn't been mapped yet */
 	if (!x2apic_mode && !apic_phys)
 		return;
+
+	flags = hard_local_irq_save();
 
 	clear_local_APIC();
 
@@ -1103,6 +1118,7 @@ void disable_local_APIC(void)
 		wrmsr(MSR_IA32_APICBASE, l, h);
 	}
 #endif
+	hard_local_irq_restore(flags);
 }
 
 /*
@@ -1118,7 +1134,7 @@ void lapic_shutdown(void)
 	if (!boot_cpu_has(X86_FEATURE_APIC) && !apic_from_smp_config())
 		return;
 
-	local_irq_save(flags);
+	flags = hard_local_irq_save();
 
 #ifdef CONFIG_X86_32
 	if (!enabled_via_apicbase)
@@ -1128,7 +1144,7 @@ void lapic_shutdown(void)
 		disable_local_APIC();
 
 
-	local_irq_restore(flags);
+	hard_local_irq_restore(flags);
 }
 
 /**
@@ -1330,7 +1346,7 @@ void setup_local_APIC(void)
 			value = apic_read(APIC_ISR + i*0x10);
 			for (j = 31; j >= 0; j--) {
 				if (value & (1<<j)) {
-					ack_APIC_irq();
+					__ack_APIC_irq();
 					acked++;
 				}
 			}
@@ -1847,7 +1863,7 @@ static void __smp_spurious_interrupt(u8 vector)
 	 */
 	v = apic_read(APIC_ISR + ((vector & ~0x1f) >> 1));
 	if (v & (1 << (vector & 0x1f)))
-		ack_APIC_irq();
+		__ack_APIC_irq();
 
 	inc_irq_stat(irq_spurious_count);
 
@@ -2388,12 +2404,12 @@ static int lapic_suspend(void)
 		apic_pm_state.apic_cmci = apic_read(APIC_LVTCMCI);
 #endif
 
-	local_irq_save(flags);
+	flags = hard_local_irq_save();
 	disable_local_APIC();
 
 	irq_remapping_disable();
 
-	local_irq_restore(flags);
+	hard_local_irq_restore(flags);
 	return 0;
 }
 
@@ -2406,7 +2422,7 @@ static void lapic_resume(void)
 	if (!apic_pm_state.active)
 		return;
 
-	local_irq_save(flags);
+	flags = hard_local_irq_save();
 
 	/*
 	 * IO-APIC and PIC have their own resume routines.
@@ -2464,7 +2480,7 @@ static void lapic_resume(void)
 
 	irq_remapping_reenable(x2apic_mode);
 
-	local_irq_restore(flags);
+	hard_local_irq_restore(flags);
 }
 
 /*

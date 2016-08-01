@@ -437,13 +437,19 @@ static inline void apic_set_eoi_write(void (*eoi_write)(u32 reg, u32 v)) {}
 
 #endif /* CONFIG_X86_LOCAL_APIC */
 
-static inline void ack_APIC_irq(void)
+static inline void __ack_APIC_irq(void)
 {
 	/*
-	 * ack_APIC_irq() actually gets compiled as a single instruction
+	 * __ack_APIC_irq() actually gets compiled as a single instruction
 	 * ... yummie.
 	 */
 	apic_eoi();
+}
+
+static inline void ack_APIC_irq(void)
+{
+	if (!irqs_pipelined())
+		__ack_APIC_irq();
 }
 
 static inline unsigned default_get_apic_id(unsigned long x)
