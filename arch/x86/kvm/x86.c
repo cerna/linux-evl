@@ -147,6 +147,7 @@ struct kvm_shared_msrs_global {
 struct kvm_shared_msrs {
 	struct user_return_notifier urn;
 	bool registered;
+	bool dirty;
 	struct kvm_shared_msr_values {
 		u64 host;
 		u64 curr;
@@ -209,9 +210,29 @@ static inline void kvm_async_pf_hash_reset(struct kvm_vcpu *vcpu)
 		vcpu->arch.apf.gfns[i] = ~0;
 }
 
+static void kvm_restore_shared_msrs(struct kvm_shared_msrs *locals)
+{
+	struct kvm_shared_msr_values *values;
+	unsigned long flags;
+	unsigned int slot;
+
+	flags = hard_cond_local_irq_save();
+	if (locals->dirty) {
+		for (slot = 0; slot < shared_msrs_global.nr; ++slot) {
+			values = &locals->values[slot];
+			if (values->host != values->curr) {
+				wrmsrl(shared_msrs_global.msrs[slot],
+				       values->host);
+				values->curr = values->host;
+			}
+		}
+		locals->dirty = false;
+	}
+	hard_cond_local_irq_restore(flags);
+}
+
 static void kvm_on_user_return(struct user_return_notifier *urn)
 {
-	unsigned slot;
 	struct kvm_shared_msrs *locals
 		= container_of(urn, struct kvm_shared_msrs, urn);
 	struct kvm_shared_msr_values *values;
@@ -221,12 +242,13 @@ static void kvm_on_user_return(struct user_return_notifier *urn)
 	 * Disabling irqs at this point since the following code could be
 	 * interrupted and executed through kvm_arch_hardware_disable()
 	 */
-	local_irq_save(flags);
+	flags = hard_local_irq_save();
 	if (locals->registered) {
 		locals->registered = false;
 		user_return_notifier_unregister(urn);
+		dovetail_exit_vm_guest();
 	}
-	local_irq_restore(flags);
+	hard_local_irq_restore(flags);
 	for (slot = 0; slot < shared_msrs_global.nr; ++slot) {
 		values = &locals->values[slot];
 		if (values->host != values->curr) {
@@ -283,6 +305,7 @@ int kvm_set_shared_msr(unsigned slot, u64 value, u64 mask)
 	if (err)
 		return 1;
 
+	smsr->dirty = true;
 	if (!smsr->registered) {
 		smsr->urn.on_user_return = kvm_on_user_return;
 		user_return_notifier_register(&smsr->urn);
@@ -2886,6 +2909,7 @@ static void kvm_steal_time_set_preempted(struct kvm_vcpu *vcpu)
 
 void kvm_arch_vcpu_put(struct kvm_vcpu *vcpu)
 {
+	unsigned long flags;
 	int idx;
 	/*
 	 * Disable page faults because we're in atomic context here.
@@ -2904,10 +2928,46 @@ void kvm_arch_vcpu_put(struct kvm_vcpu *vcpu)
 	kvm_steal_time_set_preempted(vcpu);
 	srcu_read_unlock(&vcpu->kvm->srcu, idx);
 	pagefault_enable();
+
+	flags = hard_cond_local_irq_save();
+
 	kvm_x86_ops->vcpu_put(vcpu);
 	kvm_put_guest_fpu(vcpu);
 	vcpu->arch.last_host_tsc = rdtsc();
+
+	if (!smsr->dirty)
+		dovetail_exit_vm_guest();
+
+	hard_cond_local_irq_restore(flags);
+
+
+#ifdef CONFIG_DOVETAIL
+
+static void handle_kvm_stall(struct hypervisor_stall *nfy)
+{
+	unsigned int cpu = raw_smp_processor_id();
+	struct kvm_shared_msrs *smsr = per_cpu_ptr(shared_msrs, cpu);
+	struct kvm_vcpu *vcpu;
+
+	vcpu = container_of(nfy, struct kvm_vcpu, stall_notifier);
+	kvm_arch_vcpu_put(vcpu);
+	kvm_restore_shared_msrs(smsr);
+	dovetail_exit_vm_guest();
 }
+
+ static inline void kvm_dovetail_init(struct kvm_vcpu *vcpu)
+{
+	/*
+	 * Tell KVM when the host CPU is about to switch to the head
+	 * stage, therefore stalling the hypervisor running on the
+	 * root stage.
+	 */
+	vcpu->stall_notifier.handler = handle_kvm_stall;
+}
+
+#else
+static inline void kvm_dovetail_init(struct kvm_vcpu *vcpu) { }
+#endif
 
 static int kvm_vcpu_ioctl_get_lapic(struct kvm_vcpu *vcpu,
 				    struct kvm_lapic_state *s)
@@ -6853,6 +6913,10 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 	}
 
 	preempt_disable();
+	local_irq_disable();
+	hard_cond_local_irq_disable();
+
+	dovetail_enter_vm_guest(&vcpu->stall_notifier);
 
 	kvm_x86_ops->prepare_guest_switch(vcpu);
 	kvm_load_guest_fpu(vcpu);
@@ -6862,7 +6926,6 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 	 * IPI are then delayed after guest entry, which ensures that they
 	 * result in virtual interrupt delivery.
 	 */
-	local_irq_disable();
 	vcpu->mode = IN_GUEST_MODE;
 
 	srcu_read_unlock(&vcpu->kvm->srcu, vcpu->srcu_idx);
@@ -6894,6 +6957,7 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 	    || need_resched() || signal_pending(current)) {
 		vcpu->mode = OUTSIDE_GUEST_MODE;
 		smp_wmb();
+		hard_cond_local_irq_enable();
 		local_irq_enable();
 		preempt_enable();
 		vcpu->srcu_idx = srcu_read_lock(&vcpu->kvm->srcu);
@@ -7955,6 +8019,7 @@ int kvm_arch_vcpu_init(struct kvm_vcpu *vcpu)
 
 	kvm_async_pf_hash_reset(vcpu);
 	kvm_pmu_init(vcpu);
+	kvm_dovetail_init(vcpu);
 
 	vcpu->arch.pending_external_vector = -1;
 
