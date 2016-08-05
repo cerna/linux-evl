@@ -274,6 +274,10 @@ static __always_inline cputime_t steal_account_process_time(cputime_t maxtime)
 		return steal_cputime;
 	}
 #endif
+#ifdef CONFIG_DOVETAIL
+	if (irq_pipeline_steal_tick())
+		return maxtime;
+#endif
 	return 0;
 }
 
