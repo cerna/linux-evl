@@ -479,10 +479,13 @@ static int lapic_next_event(unsigned long delta,
 static int lapic_next_deadline(unsigned long delta,
 			       struct clock_event_device *evt)
 {
+	unsigned long flags;
 	u64 tsc;
 
+	flags = hard_cond_local_irq_save();
 	tsc = rdtsc();
 	wrmsrl(MSR_IA32_TSC_DEADLINE, tsc + (((u64) delta) * TSC_DIVISOR));
+	hard_cond_local_irq_restore(flags);
 	return 0;
 }
 
@@ -544,7 +547,7 @@ static struct clock_event_device lapic_clockevent = {
 	.name				= "lapic",
 	.features			= CLOCK_EVT_FEAT_PERIODIC |
 					  CLOCK_EVT_FEAT_ONESHOT | CLOCK_EVT_FEAT_C3STOP
-					  | CLOCK_EVT_FEAT_DUMMY,
+					  | CLOCK_EVT_FEAT_DUMMY | CLOCK_EVT_FEAT_PIPELINE,
 	.shift				= 32,
 	.set_state_shutdown		= lapic_timer_shutdown,
 	.set_state_periodic		= lapic_timer_set_periodic,
@@ -553,9 +556,26 @@ static struct clock_event_device lapic_clockevent = {
 	.set_next_event			= lapic_next_event,
 	.broadcast			= lapic_timer_broadcast,
 	.rating				= 100,
-	.irq				= -1,
+	.irq				= LAPIC_TIMER_IRQ,
 };
 static DEFINE_PER_CPU(struct clock_event_device, lapic_events);
+
+#ifdef CONFIG_IRQ_PIPELINE
+
+static irqreturn_t lapic_hp_handler(int virq, void *dev_id)
+{
+	clockevents_handle_event(this_cpu_ptr(&lapic_events));
+
+	return IRQ_HANDLED;
+}
+
+static struct irqaction hp_timer_action = {
+	.handler = lapic_hp_handler,
+	.name = "High-precision LAPIC timer interrupt",
+	.flags = IRQF_TIMER,
+};
+
+#endif
 
 /*
  * Setup the local APIC timer for this CPU. Copy the initialized values
@@ -910,6 +930,9 @@ void __init setup_boot_APIC_clock(void)
 
 	/* Setup the lapic or request the broadcast */
 	setup_APIC_timer();
+#ifdef CONFIG_IRQ_PIPELINE
+	setup_irq(LAPIC_TIMER_IRQ, &hp_timer_action);
+#endif
 	amd_e400_c1e_apic_setup();
 }
 
