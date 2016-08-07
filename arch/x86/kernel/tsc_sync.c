@@ -140,6 +140,8 @@ void check_tsc_sync_source(int cpu)
 	 */
 	atomic_set(&stop_count, 0);
 
+	hard_cond_local_irq_disable();
+
 	/*
 	 * Wait for the target to arrive:
 	 */
@@ -191,6 +193,7 @@ void check_tsc_sync_target(void)
 	if (unsynchronized_tsc() || tsc_clocksource_reliable)
 		return;
 
+	hard_cond_local_irq_disable();
 	/*
 	 * Register this CPU's participation and wait for the
 	 * source CPU to start the measurement:
