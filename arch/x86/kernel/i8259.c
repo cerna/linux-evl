@@ -31,7 +31,7 @@
 static void init_8259A(int auto_eoi);
 
 static int i8259A_auto_eoi;
-DEFINE_RAW_SPINLOCK(i8259A_lock);
+DEFINE_HARD_SPINLOCK(i8259A_lock);
 
 /*
  * 8259A PIC functions to handle ISA devices:
@@ -179,7 +179,8 @@ handle_real_irq:
 		 /* 'Specific EOI' to master-IRQ2 */
 		outb(0x60+PIC_CASCADE_IR, PIC_MASTER_CMD);
 	} else {
-		inb(PIC_MASTER_IMR);	/* DUMMY - (do we need this?) */
+		if (!irqs_pipelined())
+			inb(PIC_MASTER_IMR);	/* DUMMY - (do we need this?) */
 		outb(cached_master_mask, PIC_MASTER_IMR);
 		outb(0x60+irq, PIC_MASTER_CMD);	/* 'Specific EOI to master */
 	}
@@ -224,6 +225,8 @@ struct irq_chip i8259A_chip = {
 	.irq_disable	= disable_8259A_irq,
 	.irq_unmask	= enable_8259A_irq,
 	.irq_mask_ack	= mask_and_ack_8259A,
+	.irq_hold	= mask_and_ack_8259A,
+	.flags		= IRQCHIP_PIPELINE_SAFE,
 };
 
 static char irq_trigger[2];
