@@ -1296,6 +1296,7 @@ out:
 
 		if (kill_it || do_memory_failure(&m))
 			force_sig(SIGBUS, current);
+		hard_local_irq_disable();
 		local_irq_disable();
 		ist_end_non_atomic();
 	} else {
