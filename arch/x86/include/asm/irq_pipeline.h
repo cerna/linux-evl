@@ -40,6 +40,8 @@ struct ipipe_arch_sysinfo {
 #define IPIPE_NR_XIRQS		NR_IRQS
 #endif /* CONFIG_X86_LOCAL_APIC */
 
+#define LAPIC_TIMER_IRQ		apicm_vector_irq(LOCAL_TIMER_VECTOR)
+
 static inline bool is_apic_irqnr(unsigned int irq)
 {
 #ifdef CONFIG_X86_LOCAL_APIC
@@ -166,6 +168,10 @@ static inline u64 __ipipe_tsc_get(void)
 
 struct irq_stage;
 static inline void arch_irq_push_stage(struct irq_stage *stage) { }
+
+#else /* !CONFIG_IRQ_PIPELINE */
+
+#define LAPIC_TIMER_IRQ		-1
 
 #endif /* !CONFIG_IRQ_PIPELINE */
 
