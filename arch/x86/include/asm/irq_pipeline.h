@@ -40,6 +40,8 @@ struct ipipe_arch_sysinfo {
 #define IPIPE_NR_XIRQS		NR_IRQS
 #endif /* CONFIG_X86_LOCAL_APIC */
 
+#define LAPIC_TIMER_IRQ		apicm_vector_irq(LOCAL_TIMER_VECTOR)
+
 static inline bool is_apic_irqnr(unsigned int irq)
 {
 #ifdef CONFIG_X86_LOCAL_APIC
@@ -143,6 +145,10 @@ static inline bool arch_steal_pipelined_tick(struct pt_regs *regs)
 #define ipipe_tsc2us(t)	((t) / (__ipipe_hrclock_freq / 1000000UL))
 
 #endif   /* CONFIG_X86_64 */
+
+#else
+
+#define LAPIC_TIMER_IRQ		-1
 
 #endif /* !CONFIG_IRQ_PIPELINE */
 
