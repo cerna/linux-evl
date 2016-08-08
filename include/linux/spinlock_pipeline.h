@@ -17,6 +17,16 @@
 		__locked;						\
 	})
 
+#define mutable_spin_lock_init(__rlock)	hard_spin_lock_init(__rlock)
+
+#define mutable_spin_lock_irqsave(__rlock, __flags)			\
+	do {								\
+		(__flags) = __mutable_spin_lock_irqsave(__rlock);	\
+	} while (0)
+
+#define mutable_spin_trylock_irqsave(__rlock, __flags)			\
+	__mutable_spin_trylock_irqsave(__rlock, &(__flags))
+
 #if defined(CONFIG_SMP) || defined(CONFIG_DEBUG_SPINLOCK)
 
 #ifdef CONFIG_DEBUG_SPINLOCK
@@ -131,6 +141,38 @@ int hard_spin_is_contended(struct raw_spinlock *rlock)
 #else
 	return 0;
 #endif
+}
+
+void mutable_spin_lock(struct raw_spinlock *rlock);
+
+void mutable_spin_unlock(struct raw_spinlock *rlock);
+
+void mutable_spin_lock_irq(struct raw_spinlock *rlock);
+
+void mutable_spin_unlock_irq(struct raw_spinlock *rlock);
+
+void mutable_spin_unlock_irqrestore(struct raw_spinlock *rlock,
+				    unsigned long flags);
+
+unsigned long __mutable_spin_lock_irqsave(struct raw_spinlock *rlock);
+
+int mutable_spin_trylock(struct raw_spinlock *rlock);
+
+int __mutable_spin_trylock_irqsave(struct raw_spinlock *rlock,
+				   unsigned long *vflags);
+
+int mutable_spin_trylock_irq(struct raw_spinlock *rlock);
+
+static inline
+int mutable_spin_is_locked(struct raw_spinlock *rlock)
+{
+	return hard_spin_is_locked(rlock);
+}
+
+static inline
+int mutable_spin_is_contended(struct raw_spinlock *rlock)
+{
+	return hard_spin_is_contended(rlock);
 }
 
 #else  /* !SMP && !DEBUG_SPINLOCK */

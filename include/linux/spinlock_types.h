@@ -97,6 +97,9 @@ void __bad_spinlock_type(void);
 		else if (__builtin_types_compatible_p(typeof(__lock),	\
 						 hard_spinlock_t *))	\
 			hard_ ## __base_op(__RAWLOCK(__lock), ##__args); \
+		else if (__builtin_types_compatible_p(typeof(__lock),	\
+						 mutable_spinlock_t *))	\
+			mutable_ ## __base_op(__RAWLOCK(__lock), ##__args); \
 		else							\
 			__bad_spinlock_type();				\
 	} while (0)
@@ -110,6 +113,9 @@ void __bad_spinlock_type(void);
 		else if (__builtin_types_compatible_p(typeof(__lock),	\
 						 hard_spinlock_t *))	\
 			__ret = hard_ ## __base_op(__RAWLOCK(__lock), ##__args); \
+		else if (__builtin_types_compatible_p(typeof(__lock),	\
+						 mutable_spinlock_t *))	\
+			mutable_ ## __base_op(__RAWLOCK(__lock), ##__args); \
 		else							\
 			__bad_spinlock_type();				\
 		__ret;							\
@@ -124,9 +130,21 @@ typedef struct hard_spinlock {
 	struct raw_spinlock rlock;
 } hard_spinlock_t;
 
+#define DEFINE_MUTABLE_SPINLOCK(x)	mutable_spinlock_t x = {	\
+		.rlock = __RAW_SPIN_LOCK_UNLOCKED(x),			\
+	}
+
+typedef struct mutable_spinlock {
+	/* XXX: offset_of(struct mutable_spinlock, rlock) == 0 */
+	struct raw_spinlock rlock;
+	unsigned long hwflags;
+} mutable_spinlock_t;
+
 #else
 
 typedef raw_spinlock_t hard_spinlock_t;
+
+typedef raw_spinlock_t mutable_spinlock_t;
 
 #define LOCK_ALTERNATIVES(__lock, __base_op, __raw_form, __args...)	\
 	__raw_form
@@ -135,6 +153,8 @@ typedef raw_spinlock_t hard_spinlock_t;
 	__raw_form
 
 #define DEFINE_HARD_SPINLOCK(x)		DEFINE_RAW_SPINLOCK(x)
+
+#define DEFINE_MUTABLE_SPINLOCK(x)	DEFINE_RAW_SPINLOCK(x)
 
 #define __RAWLOCK(x) (x)
 
