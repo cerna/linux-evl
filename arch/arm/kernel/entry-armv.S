@@ -4,6 +4,7 @@
  *  Copyright (C) 1996,1997,1998 Russell King.
  *  ARM700 fix by Matthew Godbolt (linux-user@willothewisp.demon.co.uk)
  *  nommu support by Hyok S. Choi (hyok.choi@samsung.com)
+ *  Copyright (C) 2005 Stelian Pop.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -46,6 +47,10 @@
 	ldr	pc, [r1]
 #else
 	arch_irq_handler_default
+#endif
+#ifdef CONFIG_IRQ_PIPELINE
+	bl	__ipipe_check_root_interruptible
+	cmp	r0, #1
 #endif
 9997:
 	.endm
@@ -217,6 +222,9 @@ ENDPROC(__dabt_svc)
 __irq_svc:
 	svc_entry
 	irq_handler
+#ifdef CONFIG_IRQ_PIPELINE
+	bne	1f
+#endif
 
 #ifdef CONFIG_PREEMPT
 	ldr	r8, [tsk, #TI_PREEMPT]		@ get preempt count
@@ -227,6 +235,7 @@ __irq_svc:
 	blne	svc_preempt
 #endif
 
+1:
 	svc_exit r5, irq = 1			@ return from exception
  UNWIND(.fnend		)
 ENDPROC(__irq_svc)
@@ -462,6 +471,10 @@ __irq_usr:
 	usr_entry
 	kuser_cmpxchg_check
 	irq_handler
+#ifdef CONFIG_IRQ_PIPELINE
+ THUMB(	it ne)
+	bne	ret_to_user_from_irq_nocheck
+#endif
 	get_thread_info tsk
 	mov	why, #0
 	b	ret_to_user_from_irq
