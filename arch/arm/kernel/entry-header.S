@@ -53,6 +53,12 @@
 #endif
 	.endm
 
+	.macro	check_irqs_disabled
+#ifdef CONFIG_IRQ_PIPELINE_DEBUG
+	bl	__ipipe_bugon_irqs_enabled
+#endif
+	.endm
+	
 #ifdef CONFIG_CPU_V7M
 /*
  * ARMv7-M exception entry/exit macros.
@@ -200,6 +206,7 @@
 	.macro	svc_exit, rpsr, irq = 0
 	.if	\irq != 0
 	@ IRQs already off
+	check_irqs_disabled
 #ifdef CONFIG_TRACE_IRQFLAGS
 	@ The parent context IRQs must have been enabled to get here in
 	@ the first place, so there's no point checking the PSR I bit.
@@ -293,6 +300,7 @@
 
 
 	.macro	restore_user_regs, fast = 0, offset = 0
+	check_irqs_disabled
 	uaccess_enable r1, isb=0
 #ifndef CONFIG_THUMB2_KERNEL
 	@ ARM mode restore
@@ -369,6 +377,13 @@
 	bl	context_tracking_user_enter
 	.endif
 #endif
+	.endm
+
+	.macro slow_restore_user_regs
+	/* perform architecture specific actions before user return */
+	arch_ret_to_user r1, lr
+	ct_user_enter save = 0
+	restore_user_regs fast = 0, offset = 0
 	.endm
 
 /*
