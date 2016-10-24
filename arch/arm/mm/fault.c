@@ -30,6 +30,74 @@
 
 #ifdef CONFIG_MMU
 
+#ifdef CONFIG_IRQ_PIPELINE
+/*
+ * We need to synchronize the virtual interrupt state with the hard
+ * interrupt state we received on entry, then turn hardirqs back on to
+ * allow code which does not require strict serialization to be
+ * preempted by an out-of-band activity.
+ *
+ * TRACING: the entry code already told lockdep and tracers about the
+ * hard interrupt state on entry to fault handlers, so no need to
+ * reflect changes to that state via calls to trace_hardirqs_*
+ * helpers. From the main kernel's point of view, there is no change.
+ */
+static inline
+unsigned long fault_entry(struct pt_regs *regs)
+{
+	unsigned long flags;
+	int nosync = 1;
+
+	flags = hard_local_irq_save();
+	if (hard_irqs_disabled_flags(flags))
+		nosync = test_and_set_stage_bit(STAGE_STALL_BIT,
+					irq_root_this_context());
+	hard_local_irq_enable();
+
+	return irqs_merge_flags(flags, nosync);
+}
+
+static inline void fault_exit(unsigned long combo)
+{
+	unsigned long flags;
+	int nosync;
+
+	WARN_ON_ONCE(irq_pipeline_debug() && hard_irqs_disabled());
+
+	/*
+	 * '!nosync' here means that we had to turn on the stall bit
+	 * in fault_entry() to mirror the hard interrupt state,
+	 * because hard irqs were off but the stall bit was
+	 * clear. Conversely, nosync in fault_exit() means that the
+	 * stall bit state currently reflects the hard interrupt state
+	 * we received on fault_entry().
+	 *
+	 * No hard_local_irq_restore() below, ever, but
+	 * hard_local_irq_{enable|disable}() exclusively. See
+	 * irq_stage_restore() for an explanation.
+	 */
+	flags = irqs_split_flags(combo, &nosync);
+	if (!nosync) {
+		hard_local_irq_disable();
+		clear_stage_bit(STAGE_STALL_BIT, irq_root_this_context());
+		if (!hard_irqs_disabled_flags(flags))
+			hard_local_irq_enable();
+	} else if (hard_irqs_disabled_flags(flags))
+		hard_local_irq_disable();
+}
+
+#else	/* !CONFIG_IRQ_PIPELINE */
+
+static inline
+unsigned long fault_entry(struct pt_regs *regs)
+{
+	return 0;
+}
+
+static inline void fault_exit(unsigned long x) { }
+
+#endif	/* !CONFIG_IRQ_PIPELINE */
+
 #ifdef CONFIG_KPROBES
 static inline int notify_page_fault(struct pt_regs *regs, unsigned int fsr)
 {
@@ -192,14 +260,22 @@ void do_bad_area(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 {
 	struct task_struct *tsk = current;
 	struct mm_struct *mm = tsk->active_mm;
+	unsigned long irqflags;
 
 	/*
 	 * If we are in kernel mode at this point, we
 	 * have no context to handle this fault with.
 	 */
-	if (user_mode(regs))
+	if (user_mode(regs)) {
+		irqflags = fault_entry(regs);
 		__do_user_fault(tsk, addr, fsr, SIGSEGV, SEGV_MAPERR, regs);
-	else
+		fault_exit(irqflags);
+	} else
+		/*
+		 * irq_pipeline: kernel faults are either quickly
+		 * recoverable via fixup, or lethal. In both cases, we
+		 * can skip the interrupt state synchronization.
+		 */
 		__do_kernel_fault(mm, addr, fsr, regs);
 }
 
@@ -266,9 +342,12 @@ do_page_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 	struct mm_struct *mm;
 	int fault, sig, code;
 	unsigned int flags = FAULT_FLAG_ALLOW_RETRY | FAULT_FLAG_KILLABLE;
+	unsigned long irqflags;
+
+	irqflags = fault_entry(regs);
 
 	if (notify_page_fault(regs, fsr))
-		return 0;
+		goto out;
 
 	tsk = current;
 	mm  = tsk->mm;
@@ -322,7 +401,7 @@ retry:
 	if ((fault & VM_FAULT_RETRY) && fatal_signal_pending(current)) {
 		if (!user_mode(regs))
 			goto no_context;
-		return 0;
+		goto out;
 	}
 
 	/*
@@ -357,7 +436,7 @@ retry:
 	 * Handle the "normal" case first - VM_FAULT_MAJOR
 	 */
 	if (likely(!(fault & (VM_FAULT_ERROR | VM_FAULT_BADMAP | VM_FAULT_BADACCESS))))
-		return 0;
+		goto out;
 
 	/*
 	 * If we are in kernel mode at this point, we
@@ -373,7 +452,7 @@ retry:
 		 * got oom-killed)
 		 */
 		pagefault_out_of_memory();
-		return 0;
+		goto out;
 	}
 
 	if (fault & VM_FAULT_SIGBUS) {
@@ -394,10 +473,13 @@ retry:
 	}
 
 	__do_user_fault(tsk, addr, fsr, sig, code, regs);
-	return 0;
+	goto out;
 
 no_context:
 	__do_kernel_fault(mm, addr, fsr, regs);
+out:
+	fault_exit(irqflags);
+
 	return 0;
 }
 #else					/* CONFIG_MMU */
@@ -430,10 +512,13 @@ static int __kprobes
 do_translation_fault(unsigned long addr, unsigned int fsr,
 		     struct pt_regs *regs)
 {
+	unsigned long irqflags;
 	unsigned int index;
 	pgd_t *pgd, *pgd_k;
 	pud_t *pud, *pud_k;
 	pmd_t *pmd, *pmd_k;
+
+	WARN_ON_ONCE(irqs_pipelined() && !hard_irqs_disabled());
 
 	if (addr < TASK_SIZE)
 		return do_page_fault(addr, fsr, regs);
@@ -485,7 +570,9 @@ do_translation_fault(unsigned long addr, unsigned int fsr,
 	return 0;
 
 bad_area:
+	irqflags = fault_entry(regs);
 	do_bad_area(addr, fsr, regs);
+	fault_exit(irqflags);
 	return 0;
 }
 #else					/* CONFIG_MMU */
@@ -505,7 +592,11 @@ do_translation_fault(unsigned long addr, unsigned int fsr,
 static int
 do_sect_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 {
+	unsigned long irqflags;
+
+	irqflags = fault_entry(regs);
 	do_bad_area(addr, fsr, regs);
+	fault_exit(irqflags);
 	return 0;
 }
 #endif /* CONFIG_ARM_LPAE */
@@ -553,11 +644,13 @@ asmlinkage void
 do_DataAbort(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 {
 	const struct fsr_info *inf = fsr_info + fsr_fs(fsr);
+	unsigned long irqflags;
 	struct siginfo info;
 
 	if (!inf->fn(addr, fsr & ~FSR_LNX_PF, regs))
 		return;
 
+	irqflags = fault_entry(regs);
 	pr_alert("Unhandled fault: %s (0x%03x) at 0x%08lx\n",
 		inf->name, fsr, addr);
 	show_pte(current->mm, addr);
@@ -568,6 +661,7 @@ do_DataAbort(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 	info.si_code  = inf->code;
 	info.si_addr  = (void __user *)addr;
 	arm_notify_die("", regs, &info, fsr, 0);
+	fault_exit(irqflags);
 }
 
 void __init
@@ -587,11 +681,13 @@ asmlinkage void
 do_PrefetchAbort(unsigned long addr, unsigned int ifsr, struct pt_regs *regs)
 {
 	const struct fsr_info *inf = ifsr_info + fsr_fs(ifsr);
+	unsigned long irqflags;
 	struct siginfo info;
 
 	if (!inf->fn(addr, ifsr | FSR_LNX_PF, regs))
 		return;
 
+	irqflags = fault_entry(regs);
 	pr_alert("Unhandled prefetch abort: %s (0x%03x) at 0x%08lx\n",
 		inf->name, ifsr, addr);
 
@@ -601,6 +697,7 @@ do_PrefetchAbort(unsigned long addr, unsigned int ifsr, struct pt_regs *regs)
 	info.si_code  = inf->code;
 	info.si_addr  = (void __user *)addr;
 	arm_notify_die("", regs, &info, ifsr, 0);
+	fault_exit(irqflags);
 }
 
 /*

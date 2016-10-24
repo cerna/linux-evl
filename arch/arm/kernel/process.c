@@ -68,11 +68,15 @@ void (*arm_pm_idle)(void);
 
 void arch_cpu_idle(void)
 {
+	/*
+	 * Turn on irqs only virtually, the idling op will turn them
+	 * on in the CPU upon return from interrupt.
+	 */
+	root_irq_enable_nosync();
 	if (arm_pm_idle)
 		arm_pm_idle();
 	else
 		cpu_do_idle();
-	local_irq_enable();
 }
 
 void arch_cpu_idle_prepare(void)
