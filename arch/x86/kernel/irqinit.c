@@ -102,6 +102,8 @@ void __init init_IRQ(void)
 static void __init smp_intr_init(void)
 {
 #ifdef CONFIG_SMP
+	int ret;
+
 	/*
 	 * The reschedule interrupt is a CPU-to-CPU reschedule-helper
 	 * IPI, driven by wakeup.
@@ -118,9 +120,19 @@ static void __init smp_intr_init(void)
 	/* Low priority IPI to cleanup after moving an irq */
 	set_intr_gate(IRQ_MOVE_CLEANUP_VECTOR, irq_move_cleanup_interrupt);
 	set_bit(IRQ_MOVE_CLEANUP_VECTOR, used_vectors);
+	if (irqs_pipelined()) {
+		ret = irq_alloc_descs(IRQ_MOVE_CLEANUP_VECTOR, 0, 1, 0);
+		BUG_ON(IRQ_MOVE_CLEANUP_VECTOR != ret);
+	}
 
 	/* IPI used for rebooting/stopping */
 	alloc_intr_gate(REBOOT_VECTOR, reboot_interrupt);
+	if (irqs_pipelined()) {
+		alloc_intr_gate_notrace(IPIPE_RESCHEDULE_VECTOR,
+					ipipe_reschedule_interrupt);
+		alloc_intr_gate_notrace(IPIPE_CRITICAL_VECTOR,
+					ipipe_critical_interrupt);
+	}
 #endif /* CONFIG_SMP */
 }
 
@@ -155,6 +167,9 @@ static void __init apic_intr_init(void)
 	/* IPI vectors for APIC spurious and error interrupts */
 	alloc_intr_gate(SPURIOUS_APIC_VECTOR, spurious_interrupt);
 	alloc_intr_gate(ERROR_APIC_VECTOR, error_interrupt);
+	if (irqs_pipelined())
+		alloc_intr_gate_notrace(IPIPE_HRTIMER_VECTOR,
+					ipipe_hrtimer_interrupt);
 
 	/* IRQ work interrupts: */
 # ifdef CONFIG_IRQ_WORK
