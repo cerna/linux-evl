@@ -1371,6 +1371,11 @@ void syscall_init(void)
 DEFINE_PER_CPU(struct orig_ist, orig_ist);
 
 static DEFINE_PER_CPU(unsigned long, debug_stack_addr);
+
+DEFINE_PER_CPU(u32, debug_idt_ctr);
+
+#ifndef CONFIG_IRQ_PIPELINE
+
 DEFINE_PER_CPU(int, debug_stack_usage);
 
 int is_debug_stack(unsigned long addr)
@@ -1380,8 +1385,6 @@ int is_debug_stack(unsigned long addr)
 		 addr > (__this_cpu_read(debug_stack_addr) - DEBUG_STKSZ));
 }
 NOKPROBE_SYMBOL(is_debug_stack);
-
-DEFINE_PER_CPU(u32, debug_idt_ctr);
 
 void debug_stack_set_zero(void)
 {
@@ -1398,6 +1401,8 @@ void debug_stack_reset(void)
 		load_current_idt();
 }
 NOKPROBE_SYMBOL(debug_stack_reset);
+
+#endif /* !CONFIG_IRQ_PIPELINE */
 
 #else	/* CONFIG_X86_64 */
 
