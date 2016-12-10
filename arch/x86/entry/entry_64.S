@@ -69,7 +69,8 @@ ENDPROC(native_usergs_sysret64)
  * make sure the stack pointer does not get reset back to the top
  * of the debug stack, and instead just reuses the current stack.
  */
-#if defined(CONFIG_DYNAMIC_FTRACE) && defined(CONFIG_TRACE_IRQFLAGS)
+#if defined(CONFIG_DYNAMIC_FTRACE) && defined(CONFIG_TRACE_IRQFLAGS) \
+	&& !defined(CONFIG_IRQ_PIPELINE)
 
 .macro TRACE_IRQS_OFF_DEBUG
 	call	debug_stack_set_zero
@@ -408,6 +409,7 @@ END(__switch_to_asm)
 ENTRY(ret_from_fork)
 	FRAME_BEGIN			/* help unwinder find end of stack */
 	movq	%rax, %rdi
+	ENABLE_INTERRUPTS_IF_PIPELINED(CLBR_RAX)
 	call	schedule_tail		/* rdi: 'prev' task parameter */
 
 	testq	%rbx, %rbx		/* from kernel_thread? */
@@ -496,7 +498,9 @@ END(irq_entries_start)
 	 */
 	movq	%rsp, %rdi
 	incl	PER_CPU_VAR(irq_count)
+#ifndef CONFIG_IRQ_PIPELINE
 	cmovzq	PER_CPU_VAR(irq_stack_ptr), %rsp
+#endif
 	pushq	%rdi
 	/* We entered an interrupt context - irqs are off: */
 	TRACE_IRQS_OFF
@@ -512,7 +516,18 @@ END(irq_entries_start)
 common_interrupt:
 	ASM_CLAC
 	addq	$-0x80, (%rsp)			/* Adjust vector to [-256, -1] range */
+#ifdef CONFIG_IRQ_PIPELINE
+	interrupt enter_irq_pipeline
+	testl	%eax, %eax
+	jnz	ret_from_intr
+	decl	PER_CPU_VAR(irq_count)
+	popq	%rsp
+	testl	$3,CS(%rsp)
+	jz	restore_regs_and_iret
+	jmp	retint_swapgs_notrace
+#else
 	interrupt do_IRQ
+#endif
 	/* 0(%rsp): old RSP */
 ret_from_intr:
 	DISABLE_INTERRUPTS(CLBR_ANY)
@@ -530,6 +545,7 @@ GLOBAL(retint_user)
 	mov	%rsp,%rdi
 	call	prepare_exit_to_usermode
 	TRACE_IRQS_IRETQ
+retint_swapgs_notrace:
 	SWAPGS
 	jmp	restore_regs_and_iret
 
@@ -542,6 +558,14 @@ retint_kernel:
 	jnc	1f
 0:	cmpl	$0, PER_CPU_VAR(__preempt_count)
 	jnz	1f
+#ifdef CONFIG_IRQ_PIPELINE
+	/*
+	 * We may have preempted call_softirq before __do_softirq raised or
+	 * after it lowered the preemption counter.
+	 */
+	cmpl	$0,PER_CPU_VAR(irq_count)
+	jge	1f
+#endif
 	call	preempt_schedule_irq
 	jmp	0b
 1:
@@ -659,8 +683,19 @@ ENTRY(\sym)
 	ASM_CLAC
 	pushq	$~(\num)
 .Lcommon_\sym:
+#ifdef CONFIG_IRQ_PIPELINE
+	interrupt enter_irq_pipeline
+	testl	%eax, %eax
+	jnz	ret_from_intr
+	decl	PER_CPU_VAR(irq_count)
+	popq	%rsp
+	testl	$3,CS(%rsp)
+	jz	restore_regs_and_iret
+	jmp	retint_swapgs_notrace
+#else
 	interrupt \do_sym
 	jmp	ret_from_intr
+#endif
 END(\sym)
 .endm
 
@@ -725,6 +760,14 @@ apicinterrupt THERMAL_APIC_VECTOR		thermal_interrupt		smp_thermal_interrupt
 apicinterrupt CALL_FUNCTION_SINGLE_VECTOR	call_function_single_interrupt	smp_call_function_single_interrupt
 apicinterrupt CALL_FUNCTION_VECTOR		call_function_interrupt		smp_call_function_interrupt
 apicinterrupt RESCHEDULE_VECTOR			reschedule_interrupt		smp_reschedule_interrupt
+#ifdef CONFIG_IRQ_PIPELINE
+apicinterrupt3 IPIPE_RESCHEDULE_VECTOR		head_reschedule_interrupt	enter_irq_pipeline
+apicinterrupt3 IPIPE_CRITICAL_VECTOR		head_critical_interrupt		enter_irq_pipeline
+#endif
+#endif
+
+#ifdef CONFIG_IRQ_PIPELINE
+apicinterrupt3 IPIPE_HRTIMER_VECTOR		head_hrtimer_interrupt		enter_irq_pipeline
 #endif
 
 apicinterrupt ERROR_APIC_VECTOR			error_interrupt			smp_error_interrupt
@@ -893,12 +936,16 @@ bad_gs:
 ENTRY(do_softirq_own_stack)
 	pushq	%rbp
 	mov	%rsp, %rbp
+	DISABLE_INTERRUPTS_IF_PIPELINED(CLBR_RAX)
 	incl	PER_CPU_VAR(irq_count)
 	cmove	PER_CPU_VAR(irq_stack_ptr), %rsp
+	ENABLE_INTERRUPTS_IF_PIPELINED(CLBR_RAX)
 	push	%rbp				/* frame pointer backlink */
 	call	__do_softirq
+	DISABLE_INTERRUPTS_IF_PIPELINED(CLBR_RAX)
 	leaveq
 	decl	PER_CPU_VAR(irq_count)
+	ENABLE_INTERRUPTS_IF_PIPELINED(CLBR_RAX)
 	ret
 END(do_softirq_own_stack)
 
@@ -994,8 +1041,13 @@ apicinterrupt3 HYPERVISOR_CALLBACK_VECTOR \
 	hyperv_callback_vector hyperv_vector_handler
 #endif /* CONFIG_HYPERV */
 
+#ifdef CONFIG_IRQ_PIPELINE
+idtentry debug			do_debug		has_error_code=0	paranoid=1
+idtentry int3			do_int3			has_error_code=0	paranoid=1
+#else
 idtentry debug			do_debug		has_error_code=0	paranoid=1 shift_ist=DEBUG_STACK
 idtentry int3			do_int3			has_error_code=0	paranoid=1 shift_ist=DEBUG_STACK
+#endif
 idtentry stack_segment		do_stack_segment	has_error_code=1
 
 #ifdef CONFIG_XEN

@@ -121,6 +121,13 @@ static void __init smp_intr_init(void)
 
 	/* IPI used for rebooting/stopping */
 	alloc_intr_gate(REBOOT_VECTOR, reboot_interrupt);
+
+	if (irqs_pipelined()) {
+		alloc_intr_gate_notrace(IPIPE_RESCHEDULE_VECTOR,
+					head_reschedule_interrupt);
+		alloc_intr_gate_notrace(IPIPE_CRITICAL_VECTOR,
+					head_critical_interrupt);
+	}
 #endif /* CONFIG_SMP */
 }
 
@@ -155,6 +162,9 @@ static void __init apic_intr_init(void)
 	/* IPI vectors for APIC spurious and error interrupts */
 	alloc_intr_gate(SPURIOUS_APIC_VECTOR, spurious_interrupt);
 	alloc_intr_gate(ERROR_APIC_VECTOR, error_interrupt);
+	if (irqs_pipelined())
+		alloc_intr_gate_notrace(IPIPE_HRTIMER_VECTOR,
+					head_hrtimer_interrupt);
 
 	/* IRQ work interrupts: */
 # ifdef CONFIG_IRQ_WORK

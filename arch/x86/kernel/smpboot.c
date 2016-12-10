@@ -1381,6 +1381,8 @@ void __init native_smp_prepare_boot_cpu(void)
 
 void __init native_smp_cpus_done(unsigned int max_cpus)
 {
+	irq_pipeline_start_smp();
+
 	pr_debug("Boot done\n");
 
 	if (x86_has_numa_in_package)

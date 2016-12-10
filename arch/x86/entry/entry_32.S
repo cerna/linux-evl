@@ -265,6 +265,7 @@ ENTRY(ret_from_fork)
 	 * schedule_tail() is asmlinkage so we have to put its 'prev' argument
 	 * on the stack.
 	 */
+	ENABLE_INTERRUPTS_IF_PIPELINED(CLBR_NONE)
 	pushl	%eax
 	call	schedule_tail
 	popl	%eax
@@ -649,9 +650,50 @@ common_interrupt:
 	ENCODE_FRAME_POINTER
 	TRACE_IRQS_OFF
 	movl	%esp, %eax
+#ifdef CONFIG_IRQ_PIPELINE
+	call	enter_irq_pipeline
+	testl	%eax,%eax
+	jnz	ret_from_intr
+	jmp	.Lrestore_nocheck
+#else	
 	call	do_IRQ
 	jmp	ret_from_intr
+#endif	
 ENDPROC(common_interrupt)
+
+#ifdef CONFIG_IRQ_PIPELINE
+
+#define BUILD_INTERRUPT2(name, nr)	\
+ENTRY(name)				\
+	ASM_CLAC;			\
+	pushl	$~(nr);			\
+	SAVE_ALL;			\
+	ENCODE_FRAME_POINTER;		\
+	TRACE_IRQS_OFF			\
+	movl	%esp, %eax;		\
+	call	enter_irq_pipeline;	\
+	testl	%eax,%eax;		\
+	jnz	ret_from_intr;		\
+	jmp	.Lrestore_nocheck;	\
+ENDPROC(name)
+
+/*
+ * We never call the handler directly, we have to go through the
+ * pipeline instead, which sets the proper routing in
+ * arch_irq_pipeline_init(), so we may ignore the function arg.
+ */
+#define BUILD_INTERRUPT3(name, nr, fn)	\
+	BUILD_INTERRUPT2(name, nr)
+
+#ifdef CONFIG_X86_LOCAL_APIC
+	BUILD_INTERRUPT2(head_hrtimer_interrupt, IPIPE_HRTIMER_VECTOR)
+#ifdef CONFIG_SMP	
+	BUILD_INTERRUPT2(head_reschedule_interrupt, IPIPE_RESCHEDULE_VECTOR)
+	BUILD_INTERRUPT2(head_critical_interrupt, IPIPE_CRITICAL_VECTOR)
+#endif
+#endif
+
+#else /* !CONFIG_IRQ_PIPELINE */
 
 #define BUILD_INTERRUPT3(name, nr, fn)	\
 ENTRY(name)				\
@@ -665,6 +707,7 @@ ENTRY(name)				\
 	jmp	ret_from_intr;		\
 ENDPROC(name)
 
+#endif /* !CONFIG_IRQ_PIPELINE */
 
 #ifdef CONFIG_TRACING
 # define TRACE_BUILD_INTERRUPT(name, nr)	BUILD_INTERRUPT3(trace_##name, nr, smp_trace_##name)
