@@ -32,6 +32,16 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/syscalls.h>
 
+#ifdef CONFIG_IRQ_PIPELINE
+#define disable_local_irqs()	hard_local_irq_disable()
+#define enable_local_irqs()	hard_local_irq_enable()
+#define check_irqs_disabled()	hard_irqs_disabled()
+#else
+#define disable_local_irqs()	local_irq_disable()
+#define enable_local_irqs()	local_irq_enable()
+#define check_irqs_disabled()	irqs_disabled()
+#endif
+
 #ifdef CONFIG_CONTEXT_TRACKING
 /* Called on entry from user mode with IRQs off. */
 __visible inline void enter_from_user_mode(void)
@@ -144,7 +154,7 @@ static void exit_to_usermode_loop(struct pt_regs *regs, u32 cached_flags)
 	 */
 	while (true) {
 		/* We have work to do. */
-		local_irq_enable();
+		enable_local_irqs();
 
 		if (cached_flags & _TIF_NEED_RESCHED)
 			schedule();
@@ -165,7 +175,7 @@ static void exit_to_usermode_loop(struct pt_regs *regs, u32 cached_flags)
 			fire_user_return_notifiers();
 
 		/* Disable IRQs and retry */
-		local_irq_disable();
+		disable_local_irqs();
 
 		cached_flags = READ_ONCE(current_thread_info()->flags);
 
@@ -180,8 +190,9 @@ __visible inline void prepare_exit_to_usermode(struct pt_regs *regs)
 	struct thread_info *ti = current_thread_info();
 	u32 cached_flags;
 
-	if (IS_ENABLED(CONFIG_PROVE_LOCKING) && WARN_ON(!irqs_disabled()))
-		local_irq_disable();
+	if (IS_ENABLED(CONFIG_PROVE_LOCKING) &&
+	    WARN_ON(!check_irqs_disabled()))
+		disable_local_irqs();
 
 	lockdep_sys_exit();
 
@@ -246,8 +257,9 @@ __visible inline void syscall_return_slowpath(struct pt_regs *regs)
 	CT_WARN_ON(ct_state() != CONTEXT_KERNEL);
 
 	if (IS_ENABLED(CONFIG_PROVE_LOCKING) &&
-	    WARN(irqs_disabled(), "syscall %ld left IRQs disabled", regs->orig_ax))
-		local_irq_enable();
+	    WARN(check_irqs_disabled(), "syscall %ld left IRQs disabled",
+		 regs->orig_ax))
+		enable_local_irqs();
 
 	/*
 	 * First do one-time work.  If these work items are enabled, we
@@ -256,7 +268,7 @@ __visible inline void syscall_return_slowpath(struct pt_regs *regs)
 	if (unlikely(cached_flags & SYSCALL_EXIT_WORK_FLAGS))
 		syscall_slow_exit_work(regs, cached_flags);
 
-	local_irq_disable();
+	disable_local_irqs();
 	prepare_exit_to_usermode(regs);
 }
 

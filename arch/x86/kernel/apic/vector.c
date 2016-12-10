@@ -30,7 +30,7 @@ struct apic_chip_data {
 
 struct irq_domain *x86_vector_domain;
 EXPORT_SYMBOL_GPL(x86_vector_domain);
-static DEFINE_RAW_SPINLOCK(vector_lock);
+static DEFINE_HARD_SPINLOCK(vector_lock);
 static cpumask_var_t vector_cpumask, vector_searchmask, searched_cpumask;
 static struct irq_chip lapic_controller;
 #ifdef	CONFIG_X86_IO_APIC

@@ -30,6 +30,11 @@ static inline unsigned long native_save_fl(void)
 	return flags;
 }
 
+static inline unsigned long native_save_flags(void)
+{
+	return native_save_fl();
+}
+
 static inline void native_restore_fl(unsigned long flags)
 {
 	asm volatile("push %0 ; popf"
@@ -38,9 +43,21 @@ static inline void native_restore_fl(unsigned long flags)
 		     :"memory", "cc");
 }
 
+static inline void native_irq_restore(unsigned long flags)
+{
+	return native_restore_fl(flags);
+}
+
 static inline void native_irq_disable(void)
 {
 	asm volatile("cli": : :"memory");
+}
+
+static inline unsigned long native_irq_save(void)
+{
+	unsigned long flags = native_save_flags();
+	native_irq_disable();
+	return flags;
 }
 
 static inline void native_irq_enable(void)
@@ -58,13 +75,27 @@ static inline __cpuidle void native_halt(void)
 	asm volatile("hlt": : :"memory");
 }
 
+static inline int native_irqs_disabled_flags(unsigned long flags)
+{
+	return !(flags & X86_EFLAGS_IF);
+}
+
+static inline int native_irqs_disabled(void)
+{
+	unsigned long flags = native_save_flags();
+
+	return native_irqs_disabled_flags(flags);
+}
+
 #endif
 
 #ifdef CONFIG_PARAVIRT
 #include <asm/paravirt.h>
 #else
 #ifndef __ASSEMBLY__
-#include <linux/types.h>
+#include <asm/irq_pipeline.h>
+
+#ifndef CONFIG_IRQ_PIPELINE
 
 static inline notrace unsigned long arch_local_save_flags(void)
 {
@@ -85,6 +116,8 @@ static inline notrace void arch_local_irq_enable(void)
 {
 	native_irq_enable();
 }
+
+#endif /* !CONFIG_IRQ_PIPELINE */
 
 /*
  * Used in the idle loop; sti takes one instruction cycle
@@ -113,10 +146,23 @@ static inline notrace unsigned long arch_local_irq_save(void)
 	arch_local_irq_disable();
 	return flags;
 }
-#else
+
+static inline int arch_irqs_disabled_flags(unsigned long flags)
+{
+	return native_irqs_disabled_flags(flags);
+}
+
+#else  /* __ASSEMBLY__ */
 
 #define ENABLE_INTERRUPTS(x)	sti
 #define DISABLE_INTERRUPTS(x)	cli
+#ifdef CONFIG_IRQ_PIPELINE
+#define ENABLE_INTERRUPTS_IF_PIPELINED(x)	ENABLE_INTERRUPTS(x)
+#define DISABLE_INTERRUPTS_IF_PIPELINED(x)	DISABLE_INTERRUPTS(x)
+#else
+#define ENABLE_INTERRUPTS_IF_PIPELINED(x)
+#define DISABLE_INTERRUPTS_IF_PIPELINED(x)
+#endif
 
 #ifdef CONFIG_X86_64
 #define SWAPGS	swapgs
@@ -151,20 +197,6 @@ static inline notrace unsigned long arch_local_irq_save(void)
 #endif /* __ASSEMBLY__ */
 #endif /* CONFIG_PARAVIRT */
 
-#ifndef __ASSEMBLY__
-static inline int arch_irqs_disabled_flags(unsigned long flags)
-{
-	return !(flags & X86_EFLAGS_IF);
-}
-
-static inline int arch_irqs_disabled(void)
-{
-	unsigned long flags = arch_local_save_flags();
-
-	return arch_irqs_disabled_flags(flags);
-}
-#endif /* !__ASSEMBLY__ */
-
 #ifdef __ASSEMBLY__
 #ifdef CONFIG_TRACE_IRQFLAGS
 #  define TRACE_IRQS_ON		call trace_hardirqs_on_thunk;
@@ -187,7 +219,10 @@ static inline int arch_irqs_disabled(void)
 	pushl %eax;				\
 	pushl %ecx;				\
 	pushl %edx;				\
+	pushfl;					\
+	sti;					\
 	call lockdep_sys_exit;			\
+	popfl;					\
 	popl %edx;				\
 	popl %ecx;				\
 	popl %eax;
@@ -197,6 +232,13 @@ static inline int arch_irqs_disabled(void)
 #  define LOCKDEP_SYS_EXIT
 #  define LOCKDEP_SYS_EXIT_IRQ
 #endif
+#else
+static inline int arch_irqs_disabled(void)
+{
+	unsigned long flags = arch_local_save_flags();
+
+	return arch_irqs_disabled_flags(flags);
+}
 #endif /* __ASSEMBLY__ */
 
 #endif

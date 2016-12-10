@@ -2205,6 +2205,11 @@ static int __init uv_bau_init(void)
 
 	alloc_intr_gate(vector, uv_bau_message_intr1);
 
+	if (irqs_pipelined())
+		for_each_possible_cpu(cur_cpu)
+			per_cpu(vector_irq, cur_cpu)[vector] =
+			irq_to_desc(apicm_vector_irq(vector));
+
 	for_each_possible_blade(uvhub) {
 		if (uv_blade_nr_possible_cpus(uvhub)) {
 			unsigned long val;
