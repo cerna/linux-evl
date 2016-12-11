@@ -49,6 +49,7 @@ static inline unsigned long fault_entry(struct pt_regs *regs)
 	unsigned long flags;
 	int stalled;
 
+	dovetail_handle_trap(ARM_TRAP_ACCESS, regs);
 	flags = hard_local_irq_save();
 	stalled = __test_and_set_bit(STAGE_STALL_BIT, &irq_root_status);
 	hard_local_irq_enable();
@@ -313,9 +314,12 @@ do_page_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 	struct mm_struct *mm;
 	int fault, sig, code;
 	unsigned int flags = FAULT_FLAG_ALLOW_RETRY | FAULT_FLAG_KILLABLE;
+	unsigned long irqflags;
+
+	irqflags = fault_entry(regs);
 
 	if (notify_page_fault(regs, fsr))
-		return 0;
+		goto out;
 
 	tsk = current;
 	mm  = tsk->mm;
@@ -369,7 +373,7 @@ retry:
 	if ((fault & VM_FAULT_RETRY) && fatal_signal_pending(current)) {
 		if (!user_mode(regs))
 			goto no_context;
-		return 0;
+		goto out;
 	}
 
 	/*
@@ -404,7 +408,7 @@ retry:
 	 * Handle the "normal" case first - VM_FAULT_MAJOR
 	 */
 	if (likely(!(fault & (VM_FAULT_ERROR | VM_FAULT_BADMAP | VM_FAULT_BADACCESS))))
-		return 0;
+		goto out;
 
 	/*
 	 * If we are in kernel mode at this point, we
@@ -420,7 +424,7 @@ retry:
 		 * got oom-killed)
 		 */
 		pagefault_out_of_memory();
-		return 0;
+		goto out;
 	}
 
 	if (fault & VM_FAULT_SIGBUS) {
@@ -441,10 +445,13 @@ retry:
 	}
 
 	__do_user_fault(tsk, addr, fsr, sig, code, regs);
-	return 0;
+	goto out;
 
 no_context:
 	__do_kernel_fault(mm, addr, fsr, regs);
+out:
+	fault_exit(irqflags);
+
 	return 0;
 }
 #else					/* CONFIG_MMU */
@@ -477,10 +484,13 @@ static int __kprobes
 do_translation_fault(unsigned long addr, unsigned int fsr,
 		     struct pt_regs *regs)
 {
+	unsigned long irqflags;
 	unsigned int index;
 	pgd_t *pgd, *pgd_k;
 	pud_t *pud, *pud_k;
 	pmd_t *pmd, *pmd_k;
+
+	BUG_ON(irqs_pipelined() && !hard_irqs_disabled());
 
 	if (addr < TASK_SIZE)
 		return do_page_fault(addr, fsr, regs);
@@ -532,7 +542,9 @@ do_translation_fault(unsigned long addr, unsigned int fsr,
 	return 0;
 
 bad_area:
+	irqflags = fault_entry(regs);
 	do_bad_area(addr, fsr, regs);
+	fault_exit(irqflags);
 	return 0;
 }
 #else					/* CONFIG_MMU */
@@ -552,7 +564,11 @@ do_translation_fault(unsigned long addr, unsigned int fsr,
 static int
 do_sect_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 {
+	unsigned long irqflags;
+
+	irqflags = fault_entry(regs);
 	do_bad_area(addr, fsr, regs);
+	fault_exit(irqflags);
 	return 0;
 }
 #endif /* CONFIG_ARM_LPAE */
@@ -563,6 +579,7 @@ do_sect_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 static int
 do_bad(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 {
+	dovetail_handle_trap(ARM_TRAP_DABT, regs);
 	return 1;
 }
 
@@ -600,11 +617,13 @@ asmlinkage void
 do_DataAbort(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 {
 	const struct fsr_info *inf = fsr_info + fsr_fs(fsr);
+	unsigned long irqflags;
 	struct siginfo info;
 
 	if (!inf->fn(addr, fsr & ~FSR_LNX_PF, regs))
 		return;
 
+	irqflags = fault_entry(regs);
 	pr_alert("Unhandled fault: %s (0x%03x) at 0x%08lx\n",
 		inf->name, fsr, addr);
 	show_pte(current->mm, addr);
@@ -614,6 +633,7 @@ do_DataAbort(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 	info.si_code  = inf->code;
 	info.si_addr  = (void __user *)addr;
 	arm_notify_die("", regs, &info, fsr, 0);
+	fault_exit(irqflags);
 }
 
 void __init
@@ -633,11 +653,13 @@ asmlinkage void
 do_PrefetchAbort(unsigned long addr, unsigned int ifsr, struct pt_regs *regs)
 {
 	const struct fsr_info *inf = ifsr_info + fsr_fs(ifsr);
+	unsigned long irqflags;
 	struct siginfo info;
 
 	if (!inf->fn(addr, ifsr | FSR_LNX_PF, regs))
 		return;
 
+	irqflags = fault_entry(regs);
 	pr_alert("Unhandled prefetch abort: %s (0x%03x) at 0x%08lx\n",
 		inf->name, ifsr, addr);
 
@@ -646,6 +668,7 @@ do_PrefetchAbort(unsigned long addr, unsigned int ifsr, struct pt_regs *regs)
 	info.si_code  = inf->code;
 	info.si_addr  = (void __user *)addr;
 	arm_notify_die("", regs, &info, ifsr, 0);
+	fault_exit(irqflags);
 }
 
 /*
