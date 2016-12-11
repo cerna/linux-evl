@@ -35,6 +35,7 @@
 #include "entry-header.S"
 #include <asm/entry-macro-multi.S>
 #include <asm/probes.h>
+#include <asm/dovetail.h>
 
 /*
  * Interrupt handling.
@@ -275,6 +276,11 @@ __und_svc:
 #else
 	svc_entry
 #endif
+#ifdef CONFIG_DOVETAIL
+	mov	r0, #ARM_TRAP_UNDEFINSTR
+	mov	r1, sp				@ r1 = &regs
+	bl	dovetail_handle_trap
+#endif
 	@
 	@ call emulation code, which returns using r9 if it has emulated
 	@ the instruction, or the more conventional lr if we are to treat
@@ -487,6 +493,13 @@ ENDPROC(__irq_usr)
 	.align	5
 __und_usr:
 	usr_entry uaccess=0
+
+#ifdef CONFIG_DOVETAIL
+	mov	r0, #ARM_TRAP_UNDEFINSTR
+	mov	r1, sp				@ r1 = &regs
+	bl	dovetail_handle_trap
+	uaccess_enable ip
+#endif
 
 	mov	r2, r4
 	mov	r3, r5
