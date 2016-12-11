@@ -782,6 +782,8 @@ do_alignment(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 	if (interrupts_enabled(regs))
 		hard_local_irq_enable();
 
+	dovetail_handle_trap(IPIPE_TRAP_ALIGNMENT, regs);
+
 	instrptr = instruction_pointer(regs);
 
 	if (thumb_mode(regs)) {
