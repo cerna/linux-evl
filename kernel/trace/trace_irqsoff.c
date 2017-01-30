@@ -50,7 +50,7 @@ static inline int
 irq_trace(void)
 {
 	return ((trace_type & TRACER_IRQS_OFF) &&
-		irqs_disabled());
+		on_root_stage() && irqs_disabled());
 }
 #else
 # define irq_trace() (0)
