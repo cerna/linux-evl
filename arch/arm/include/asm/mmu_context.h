@@ -54,13 +54,18 @@ static inline void check_and_switch_context(struct mm_struct *mm,
 	if (unlikely(mm->context.vmalloc_seq != init_mm.context.vmalloc_seq))
 		__check_vmalloc_seq(mm);
 
-	if (irqs_disabled())
+	if (on_root_stage() && irqs_disabled())
 		/*
 		 * cpu_switch_mm() needs to flush the VIVT caches. To avoid
 		 * high interrupt latencies, defer the call and continue
 		 * running with the old mm. Since we only support UP systems
 		 * on non-ASID CPUs, the old mm will remain valid until the
 		 * finish_arch_post_lock_switch() call.
+		 *
+		 * DOVETAIL: never defer context switch when running
+		 * over the head stage. Since we may be called with hw
+		 * IRQs enabled (EFI), pick the IRQ-safe root stage
+		 * check.
 		 */
 		mm->context.switch_pending = 1;
 	else
@@ -73,6 +78,7 @@ static inline void check_and_switch_context(struct mm_struct *mm,
 static inline void finish_arch_post_lock_switch(void)
 {
 	struct mm_struct *mm = current->mm;
+	unsigned long flags;
 
 	if (mm && mm->context.switch_pending) {
 		/*
@@ -84,7 +90,9 @@ static inline void finish_arch_post_lock_switch(void)
 		preempt_disable();
 		if (mm->context.switch_pending) {
 			mm->context.switch_pending = 0;
+			dovetail_switch_mm_enter(flags);
 			cpu_switch_mm(mm->pgd, mm);
+			dovetail_switch_mm_exit(flags);
 		}
 		preempt_enable_no_resched();
 	}
@@ -103,7 +111,7 @@ init_new_context(struct task_struct *tsk, struct mm_struct *mm)
 #endif	/* CONFIG_CPU_HAS_ASID */
 
 #define destroy_context(mm)		do { } while(0)
-#define activate_mm(prev,next)		switch_mm(prev, next, NULL)
+#define activate_mm(prev,next)		__switch_mm(prev, next, NULL)
 
 /*
  * This is called when "tsk" is about to enter lazy TLB mode.
@@ -119,14 +127,8 @@ enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk)
 {
 }
 
-/*
- * This is the actual mm switch as far as the scheduler
- * is concerned.  No registers are touched.  We avoid
- * calling the CPU specific function when the mm hasn't
- * actually changed.
- */
 static inline void
-switch_mm(struct mm_struct *prev, struct mm_struct *next,
+__switch_mm(struct mm_struct *prev, struct mm_struct *next,
 	  struct task_struct *tsk)
 {
 #ifdef CONFIG_MMU
@@ -150,6 +152,23 @@ switch_mm(struct mm_struct *prev, struct mm_struct *next,
 #endif
 }
 
+/*
+ * This is the actual mm switch as far as the scheduler
+ * is concerned.  No registers are touched.  We avoid
+ * calling the CPU specific function when the mm hasn't
+ * actually changed.
+ */
+static inline void
+switch_mm(struct mm_struct *prev, struct mm_struct *next,
+	  struct task_struct *tsk)
+{
+	unsigned long flags;
+
+	dovetail_switch_mm_enter(flags);
+	__switch_mm(prev, next, tsk);
+	dovetail_switch_mm_exit(flags);
+}
+	  
 #define deactivate_mm(tsk,mm)	do { } while (0)
 
 #endif
