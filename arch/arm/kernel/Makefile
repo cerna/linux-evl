@@ -88,6 +88,7 @@ obj-$(CONFIG_DEBUG_LL)	+= debug.o
 obj-$(CONFIG_EARLY_PRINTK)	+= early_printk.o
 obj-$(CONFIG_RAW_PRINTK)	+= raw_printk.o
 obj-$(CONFIG_IRQ_PIPELINE)	+= irq_pipeline.o
+obj-$(CONFIG_DOVETAIL)		+= dovetail.o ipipe_tsc.o ipipe_tsc_asm.o
 
 obj-$(CONFIG_ARM_VIRT_EXT)	+= hyp-stub.o
 AFLAGS_hyp-stub.o		:=-Wa,-march=armv7-a

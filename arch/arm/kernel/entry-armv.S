@@ -854,6 +854,46 @@ ENDPROC(__switch_to)
 #endif
 	.endm
 
+#ifdef CONFIG_DOVETAIL
+	/*
+	 * Here we store data shared with user-space for
+	 * tsc-emulation. If CONFIG_DOVETAIL is enabled
+	 *__ipipe_kuser_get_tsc will be overwritten with the real TSC
+	 * emulation code.
+	 */
+	.globl	__ipipe_tsc_area
+	.equ	__ipipe_tsc_area, CONFIG_VECTORS_BASE + 0x1000 + __ipipe_tsc_area_start - __kuser_helper_end
+
+	.globl  __ipipe_tsc_addr
+	.equ	__ipipe_tsc_addr, CONFIG_VECTORS_BASE + 0x1000 + .LCcntr_addr - __kuser_helper_end
+
+	.globl	__ipipe_tsc_get
+	.equ	__ipipe_tsc_get, CONFIG_VECTORS_BASE + 0x1000 + __ipipe_kuser_get_tsc - __kuser_helper_end
+
+	.align 5
+	.globl  __ipipe_tsc_area_start
+__ipipe_tsc_area_start:
+	.rep  3
+	.word 0
+	.endr
+
+	.rep  4
+	.word 0
+	.endr
+.LCcntr_addr:
+	.word 0
+
+	.align 5
+__ipipe_kuser_get_tsc:
+	nop
+	mov	r0, #0
+	mov	r1, #0
+	usr_ret	lr
+	.rep 20
+	.word 0
+	.endr
+#endif /* CONFIG_DOVETAIL */
+
 	.macro	kuser_pad, sym, size
 	.if	(. - \sym) & 3
 	.rept	4 - (. - \sym) & 3

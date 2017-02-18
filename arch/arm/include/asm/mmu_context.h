@@ -28,7 +28,8 @@ void __check_vmalloc_seq(struct mm_struct *mm);
 
 #ifdef CONFIG_CPU_HAS_ASID
 
-void check_and_switch_context(struct mm_struct *mm, struct task_struct *tsk);
+void check_and_switch_context(struct mm_struct *mm, struct task_struct *tsk,
+			      bool may_defer);
 static inline int
 init_new_context(struct task_struct *tsk, struct mm_struct *mm)
 {
@@ -51,12 +52,15 @@ static inline void a15_erratum_get_cpumask(int this_cpu, struct mm_struct *mm,
 #ifdef CONFIG_MMU
 
 static inline void check_and_switch_context(struct mm_struct *mm,
-					    struct task_struct *tsk)
+					    struct task_struct *tsk,
+					    bool may_defer)
 {
+	WARN_ON_ONCE(dovetail_debug() && !hard_irqs_disabled());
+
 	if (unlikely(mm->context.vmalloc_seq != init_mm.context.vmalloc_seq))
 		__check_vmalloc_seq(mm);
 
-	if (irqs_disabled())
+	if (may_defer && irqs_disabled())
 		/*
 		 * cpu_switch_mm() needs to flush the VIVT caches. To avoid
 		 * high interrupt latencies, defer the call and continue
@@ -75,6 +79,7 @@ static inline void check_and_switch_context(struct mm_struct *mm,
 static inline void finish_arch_post_lock_switch(void)
 {
 	struct mm_struct *mm = current->mm;
+	unsigned long flags;
 
 	if (mm && mm->context.switch_pending) {
 		/*
@@ -86,7 +91,9 @@ static inline void finish_arch_post_lock_switch(void)
 		preempt_disable();
 		if (mm->context.switch_pending) {
 			mm->context.switch_pending = 0;
+			dovetail_switch_mm_enter(flags);
 			cpu_switch_mm(mm->pgd, mm);
+			dovetail_switch_mm_exit(flags);
 		}
 		preempt_enable_no_resched();
 	}
@@ -105,7 +112,7 @@ init_new_context(struct task_struct *tsk, struct mm_struct *mm)
 #endif	/* CONFIG_CPU_HAS_ASID */
 
 #define destroy_context(mm)		do { } while(0)
-#define activate_mm(prev,next)		switch_mm(prev, next, NULL)
+#define activate_mm(prev,next)		__switch_mm(prev, next, NULL, true)
 
 /*
  * This is called when "tsk" is about to enter lazy TLB mode.
@@ -121,15 +128,9 @@ enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk)
 {
 }
 
-/*
- * This is the actual mm switch as far as the scheduler
- * is concerned.  No registers are touched.  We avoid
- * calling the CPU specific function when the mm hasn't
- * actually changed.
- */
 static inline void
-switch_mm(struct mm_struct *prev, struct mm_struct *next,
-	  struct task_struct *tsk)
+__switch_mm(struct mm_struct *prev, struct mm_struct *next,
+	    struct task_struct *tsk, bool may_defer)
 {
 #ifdef CONFIG_MMU
 	unsigned int cpu = smp_processor_id();
@@ -145,13 +146,48 @@ switch_mm(struct mm_struct *prev, struct mm_struct *next,
 		__flush_icache_all();
 
 	if (!cpumask_test_and_set_cpu(cpu, mm_cpumask(next)) || prev != next) {
-		check_and_switch_context(next, tsk);
+		check_and_switch_context(next, tsk, may_defer);
+#ifdef CONFIG_DOVETAIL
+		/* may_defer is always false when dovetailing. */
+		*raw_cpu_ptr(&irq_pipeline.active_mm) = next;
+#endif
 		if (cache_is_vivt())
 			cpumask_clear_cpu(cpu, mm_cpumask(prev));
 	}
 #endif
 }
 
+/*
+ * This is the actual mm switch as far as the scheduler
+ * is concerned.  No registers are touched.  We avoid
+ * calling the CPU specific function when the mm hasn't
+ * actually changed.
+ */
+static inline void
+switch_mm(struct mm_struct *prev, struct mm_struct *next,
+	  struct task_struct *tsk)
+{
+	unsigned long flags;
+
+	dovetail_switch_mm_enter(flags);
+	__switch_mm(prev, next, tsk, true);
+	dovetail_switch_mm_exit(flags);
+}
+	  
 #define deactivate_mm(tsk,mm)	do { } while (0)
 
+#ifdef CONFIG_DOVETAIL
+/*
+ * The mm switching service a co-kernel may invoke from the head stage
+ * exclusively, as part of its private context switch procedure
+ * (hard_irqs_disabled).
+ */
+static inline void
+dovetail_switch_mm(struct mm_struct *prev, struct mm_struct *next,
+		   struct task_struct *tsk)
+{
+	__switch_mm(prev, next, tsk, false);
+}
+#endif
+	  
 #endif
