@@ -32,6 +32,7 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
+#include <linux/dovetail.h>
 #include <soc/imx/timer.h>
 
 /*
@@ -78,6 +79,7 @@
 struct imx_timer {
 	enum imx_gpt_type type;
 	void __iomem *base;
+	unsigned long pbase;
 	int irq;
 	struct clk *clk_per;
 	struct clk *clk_ipg;
@@ -164,10 +166,39 @@ static unsigned long imx_read_current_timer(void)
 	return readl_relaxed(sched_clock_reg);
 }
 
+#ifdef CONFIG_DOVETAIL
+
+static struct __ipipe_tscinfo tsc_info = {
+       .type = IPIPE_TSC_TYPE_FREERUNNING,
+       .u = {
+	       {
+		       .mask = 0xffffffff,
+	       },
+       },
+};
+
+static void mxc_tsc_init(struct imx_timer *imxtm)
+{
+	tsc_info.u.counter_paddr = imxtm->pbase + imxtm->gpt->reg_tcn;
+	tsc_info.counter_vaddr = (unsigned long)imxtm->base + imxtm->gpt->reg_tcn;
+	tsc_info.freq = clk_get_rate(imxtm->clk_per);
+	__ipipe_tsc_register(&tsc_info);
+
+}
+
+#else  /* !CONFIG_DOVETAIL */
+
+static inline
+void mxc_tsc_init(struct imx_timer *imxtm)
+{ }
+
+#endif  /* CONFIG_DOVETAIL */
+
 static int __init mxc_clocksource_init(struct imx_timer *imxtm)
 {
 	unsigned int c = clk_get_rate(imxtm->clk_per);
 	void __iomem *reg = imxtm->base + imxtm->gpt->reg_tcn;
+	int ret;
 
 	imx_delay_timer.read_current_timer = &imx_read_current_timer;
 	imx_delay_timer.freq = c;
@@ -176,8 +207,14 @@ static int __init mxc_clocksource_init(struct imx_timer *imxtm)
 	sched_clock_reg = reg;
 
 	sched_clock_register(mxc_read_sched_clock, 32, c);
-	return clocksource_mmio_init(reg, "mxc_timer1", c, 200, 32,
-			clocksource_mmio_readl_up);
+	ret = clocksource_mmio_init(reg, "mxc_timer1", c, 200, 32,
+				    clocksource_mmio_readl_up);
+	if (ret)
+		return ret;
+
+	mxc_tsc_init(imxtm);
+
+	return 0;
 }
 
 /* clock event */
@@ -468,10 +505,21 @@ void __init mxc_timer_init(unsigned long pbase, int irq, enum imx_gpt_type type)
 	imxtm->base = ioremap(pbase, SZ_4K);
 	BUG_ON(!imxtm->base);
 
+	imxtm->pbase = pbase;
 	imxtm->type = type;
 	imxtm->irq = irq;
 
 	_mxc_timer_init(imxtm);
+}
+
+static inline unsigned long get_timer_base_dt(struct device_node *np)
+{
+	struct resource res;
+
+	if (of_address_to_resource(np, 0, &res))
+		return 0;
+
+	return res.start;
 }
 
 static int __init mxc_timer_init_dt(struct device_node *np,  enum imx_gpt_type type)
@@ -488,6 +536,7 @@ static int __init mxc_timer_init_dt(struct device_node *np,  enum imx_gpt_type t
 	if (!imxtm)
 		return -ENOMEM;
 
+	imxtm->pbase = get_timer_base_dt(np);
 	imxtm->base = of_iomap(np, 0);
 	if (!imxtm->base)
 		return -ENXIO;
