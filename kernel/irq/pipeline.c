@@ -1438,6 +1438,8 @@ void __init irq_pipeline_init_early(void)
 	fixup_percpu_data();
 }
 
+atomic_t foobar;
+
 /**
  *	irq_pipeline_init - Main pipeline core inits
  *
@@ -1464,6 +1466,8 @@ void __init irq_pipeline_init(void)
 	arch_irq_pipeline_init();
 
 	pr_info("IRQ pipeline enabled\n");
+
+ 	atomic_add_return(1, &foobar);
 }
 
 #ifndef CONFIG_SPARSE_IRQ
