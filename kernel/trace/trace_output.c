@@ -390,13 +390,20 @@ int trace_print_lat_fmt(struct trace_seq *s, struct trace_entry *entry)
 	int hardirq;
 	int softirq;
 	int nmi;
+	int pipeline = 0;
+	int head_stage = 0;
 
 	nmi = entry->flags & TRACE_FLAG_NMI;
 	hardirq = entry->flags & TRACE_FLAG_HARDIRQ;
 	softirq = entry->flags & TRACE_FLAG_SOFTIRQ;
+	if (irqs_pipelined()) {
+		pipeline = entry->flags & TRACE_FLAG_PIPELINE;
+		head_stage = entry->flags & TRACE_FLAG_HEAD_STAGE;
+	}
 
 	irqs_off =
 		(entry->flags & TRACE_FLAG_IRQS_OFF) ? 'd' :
+		(entry->flags & TRACE_FLAG_IRQS_DISABLED) ? 'D' :
 		(entry->flags & TRACE_FLAG_IRQS_NOSUPPORT) ? 'X' :
 		'.';
 
@@ -417,6 +424,7 @@ int trace_print_lat_fmt(struct trace_seq *s, struct trace_entry *entry)
 	}
 
 	hardsoft_irq =
+		pipeline             ? '~' :
 		(nmi && hardirq)     ? 'Z' :
 		nmi                  ? 'z' :
 		(hardirq && softirq) ? 'H' :
@@ -427,7 +435,9 @@ int trace_print_lat_fmt(struct trace_seq *s, struct trace_entry *entry)
 	trace_seq_printf(s, "%c%c%c",
 			 irqs_off, need_resched, hardsoft_irq);
 
-	if (entry->preempt_count)
+	if (irqs_pipelined() && head_stage)
+		trace_seq_putc(s, '*');
+	else if (entry->preempt_count)
 		trace_seq_printf(s, "%x", entry->preempt_count);
 	else
 		trace_seq_putc(s, '.');
