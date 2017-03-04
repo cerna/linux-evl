@@ -323,6 +323,13 @@ static inline unsigned long irq_stage_disable(void)
 
 void irq_stage_restore(unsigned long flags);
 
+#define irq_stage_save_flags(__flags)				\
+	do {							\
+		__flags = hard_local_save_flags();		\
+		__flags = arch_irqs_merge_flags((__flags), 	\
+					irqs_disabled());	\
+	} while (0)
+
 #else /* !CONFIG_IRQ_PIPELINE */
 
 static inline bool __on_root_stage(void)
@@ -381,6 +388,8 @@ static inline bool irq_stage_disabled(void)
 	})
 
 #define irq_stage_restore(__flags)	raw_local_irq_restore(__flags)
+
+#define irq_stage_save_flags(__flags)	raw_local_save_flags(__flags)
 
 #endif /* CONFIG_IRQ_PIPELINE */
 
