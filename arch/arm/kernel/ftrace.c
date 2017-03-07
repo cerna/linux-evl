@@ -48,7 +48,7 @@ static int __ftrace_modify_code(void *data)
 
 void arch_ftrace_update_code(int command)
 {
-	stop_machine(__ftrace_modify_code, &command, NULL);
+	stop_machine_pipelined(__ftrace_modify_code, &command, NULL);
 }
 
 static unsigned long ftrace_nop_replace(struct dyn_ftrace *rec)

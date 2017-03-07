@@ -141,4 +141,16 @@ static inline int stop_machine_from_inactive_cpu(cpu_stop_fn_t fn, void *data,
 }
 
 #endif	/* CONFIG_SMP || CONFIG_HOTPLUG_CPU */
+
+#ifdef CONFIG_IRQ_PIPELINE
+int stop_machine_pipelined(cpu_stop_fn_t fn, void *data,
+			   const struct cpumask *cpus);
+#else
+static inline int stop_machine_pipelined(cpu_stop_fn_t fn, void *data,
+					 const struct cpumask *cpus)
+{
+	return stop_machine(fn, data, cpus);
+}
+#endif
+
 #endif	/* _LINUX_STOP_MACHINE */
