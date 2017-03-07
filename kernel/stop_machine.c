@@ -226,6 +226,7 @@ static int multi_cpu_stop(void *data)
 		}
 	} while (curstate != MULTI_STOP_EXIT);
 
+	hard_irq_enable();
 	local_irq_restore(flags);
 	return err;
 }
@@ -605,6 +606,7 @@ int stop_machine_cpuslocked(cpu_stop_fn_t fn, void *data,
 		local_irq_save(flags);
 		hard_irq_disable();
 		ret = (*fn)(data);
+		hard_irq_enable();
 		local_irq_restore(flags);
 
 		return ret;
