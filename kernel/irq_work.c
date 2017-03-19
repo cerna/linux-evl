@@ -56,6 +56,11 @@ void __weak arch_irq_work_raise(void)
 	 */
 }
 
+void __weak irq_local_work_raise(void)
+{
+	arch_irq_work_raise();
+}
+
 #ifdef CONFIG_SMP
 /*
  * Enqueue the irq_work @work on @cpu unless it's already pending
@@ -97,10 +102,10 @@ bool irq_work_queue(struct irq_work *work)
 	if (work->flags & IRQ_WORK_LAZY) {
 		if (llist_add(&work->llnode, this_cpu_ptr(&lazy_list)) &&
 		    tick_nohz_tick_stopped())
-			arch_irq_work_raise();
+			irq_local_work_raise();
 	} else {
 		if (llist_add(&work->llnode, this_cpu_ptr(&raised_list)))
-			arch_irq_work_raise();
+			irq_local_work_raise();
 	}
 
 	preempt_enable();
