@@ -269,8 +269,8 @@ endif
 endif
 endif
 
-ifeq ($(CONFIG_XENOMAI),y)
-KBUILD_CFLAGS += -Iarch/$(SRCARCH)/cobalt/include -Iinclude/cobalt
+ifeq ($(CONFIG_STEELY),y)
+KBUILD_CFLAGS += -Iarch/$(SRCARCH)/steely/include -Iinclude/steely
 endif
 
 export	TEXT_OFFSET GZFLAGS MMUEXT
@@ -287,7 +287,7 @@ core-$(CONFIG_VFP)		+= arch/arm/vfp/
 core-$(CONFIG_XEN)		+= arch/arm/xen/
 core-$(CONFIG_KVM_ARM_HOST) 	+= arch/arm/kvm/
 core-$(CONFIG_VDSO)		+= arch/arm/vdso/
-core-$(CONFIG_XENOMAI)		+= arch/arm/cobalt/
+core-$(CONFIG_STEELY)		+= arch/arm/steely/
 
 # If we have a machine-specific directory, then include it in the build.
 core-y				+= arch/arm/kernel/ arch/arm/mm/ arch/arm/common/

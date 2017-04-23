@@ -306,6 +306,8 @@ source "init/Kconfig"
 
 source "kernel/Kconfig.freezer"
 
+source "kernel/Kconfig.steely"
+
 menu "System Type"
 
 config MMU
@@ -689,6 +691,7 @@ config ARCH_MULTI_V6_V7
 	select MIGHT_HAVE_CACHE_L2X0
 	select HAVE_IRQ_PIPELINE
 	select HAVE_DOVETAIL
+	select HAVE_ARCH_STEELY
 
 config ARCH_MULTI_CPU_AUTO
 	def_bool !(ARCH_MULTI_V4 || ARCH_MULTI_V4T || ARCH_MULTI_V6_V7)

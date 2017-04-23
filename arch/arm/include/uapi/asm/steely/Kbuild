@@ -1,0 +1,6 @@
+# UAPI Header export list
+header-y += arith.h
+header-y += features.h
+header-y += fptest.h
+header-y += syscall.h
+header-y += tsc.h
