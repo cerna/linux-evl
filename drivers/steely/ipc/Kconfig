@@ -1,0 +1,81 @@
+menu "Real-time IPC drivers"
+
+config STEELY_RTIPC
+	tristate "RTIPC protocol family"
+	help
+
+	This driver provides the real-time IPC protocol family
+	(PF_RTIPC) over RTDM.
+
+config STEELY_RTIPC_XDDP
+	depends on STEELY_RTIPC
+	select STEELY_PIPE
+	default y
+	bool "XDDP cross-domain datagram protocol"
+	help
+
+	Steely's XDDP protocol enables threads to exchange datagrams
+	across the main kernel <-> steely core boundary, using
+	"message pipes".
+
+	Message pipes are bi-directional FIFO communication channels
+	allowing data exchange between real-time Steely threads and
+	regular (i.e. non real-time) user-space processes. Message
+	pipes are datagram-based and thus natively preserve message
+	boundaries, but they can also be used in byte stream mode when
+	sending from the real-time to the non real-time domain.
+
+	The maximum number of communication ports available in the
+	system can be configured using the STEELY_PIPE_NRDEV option
+	from the Nucleus menu.
+
+config STEELY_RTIPC_IDDP
+	depends on STEELY_RTIPC
+	select STEELY_MAP
+	default y
+	bool "IDDP intra-domain datagram protocol"
+	help
+
+	Steely's IDDP protocol enables real-time threads to exchange
+	datagrams within the Steely domain.
+
+config STEELY_IDDP_NRPORT
+	depends on STEELY_RTIPC_IDDP
+	int "Number of IDDP communication ports"
+	default 32
+	help
+
+	This parameter defines the number of IDDP ports available in
+	the system for creating receiver endpoints. Port numbers range
+	from 0 to CONFIG_STEELY_IDDP_NRPORT - 1.
+
+config STEELY_RTIPC_BUFP
+	depends on STEELY_RTIPC
+	select STEELY_MAP
+	default y
+	bool "Buffer protocol"
+	help
+
+	The buffer protocol implements a byte-oriented, one-way
+	Producer-Consumer data path, which makes it a bit faster than
+	datagram-oriented protocols. All messages written are buffered
+	into a single memory area in strict FIFO order, until read by
+	the consumer.
+
+	This protocol prevents short writes, and only allows short
+	reads when a potential deadlock situation arises (i.e. readers
+	and writers waiting for each other indefinitely), which
+	usually means that the buffer size does not fit the use peer
+	threads are making from the protocol.
+
+config STEELY_BUFP_NRPORT
+	depends on STEELY_RTIPC_BUFP
+	int "Number of BUFP communication ports"
+	default 32
+	help
+
+	This parameter defines the number of BUFP ports available in
+	the system for creating receiver endpoints. Port numbers range
+	from 0 to CONFIG_STEELY_BUFP_NRPORT - 1.
+
+endmenu

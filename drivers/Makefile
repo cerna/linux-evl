@@ -160,6 +160,9 @@ obj-$(CONFIG_RPMSG)		+= rpmsg/
 obj-$(CONFIG_VIRT_DRIVERS)	+= virt/
 obj-$(CONFIG_HYPERV)		+= hv/
 
+# Co-kernel drivers
+obj-$(CONFIG_STEELY)		+= steely/
+
 obj-$(CONFIG_PM_DEVFREQ)	+= devfreq/
 obj-$(CONFIG_EXTCON)		+= extcon/
 obj-$(CONFIG_MEMORY)		+= memory/

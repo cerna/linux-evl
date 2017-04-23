@@ -1,0 +1,5 @@
+# UAPI Header export list
+header-y += autotune.h
+header-y += ipc.h
+header-y += rtdm.h
+header-y += testing.h

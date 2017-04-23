@@ -1,0 +1,10 @@
+# UAPI Header export list
+header-y += heap.h
+header-y += limits.h
+header-y += pipe.h
+header-y += synch.h
+header-y += thread.h
+header-y += trace.h
+header-y += types.h
+header-y += urw.h
+header-y += vdso.h

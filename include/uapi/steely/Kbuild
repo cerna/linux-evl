@@ -1,0 +1,14 @@
+# UAPI Header export list
+header-y += cond.h
+header-y += corectl.h
+header-y += event.h
+header-y += monitor.h
+header-y += mutex.h
+header-y += sched.h
+header-y += sem.h
+header-y += signal.h
+header-y += syscall.h
+header-y += thread.h
+header-y += time.h
+header-y += kernel/
+header-y += rtdm/

@@ -1,0 +1,57 @@
+
+# Steely real-time co-kernel
+config HAVE_ARCH_STEELY
+	bool
+
+menuconfig STEELY
+	bool "Enable the Steely core"
+	depends on HAVE_ARCH_STEELY
+	select DOVETAIL
+	help
+	  Xenomai's Steely core is a real-time extension to the Linux
+	  kernel, which exhibits very short interrupt and scheduling
+	  latency, without affecting the regular kernel services.
+
+	  This option enables the set of extended kernel services
+	  required to run the real-time applications in user-space.
+
+	  Please visit http://xenomai.org for more information.
+
+if STEELY
+
+source "kernel/steely/Kconfig"
+source "drivers/steely/Kconfig"
+
+config STEELY_ARCH_SYS3264
+        def_bool n
+
+config STEELY_ARCH_OUTOFLINE_XNLOCK
+       bool
+       default y
+
+if MIGRATION
+comment "WARNING! Page migration (CONFIG_MIGRATION) may increase"
+comment "latency."
+endif
+
+config VERSION_MAJOR
+       int
+       default 0
+
+config VERSION_MINOR
+       int
+       default 0
+
+config REVISION_LEVEL
+       int
+       default 1
+
+config VERSION_STRING
+       string
+       default none
+
+config VERSION_NAME
+       string
+       default none
+
+endif

@@ -1,0 +1,485 @@
+
+menu "Core features"
+
+config STEELY_SCHED_CLASSES
+	bool "Extra scheduling classes"
+	default n
+	help
+	The Steely kernel implements a set of scheduling classes.
+	Each scheduling class defines its own set of rules for
+	determining when and how to select a new thread to run.
+
+	Steely has a built-in real-time class, which supports both
+	preemptive fixed-priority FIFO, and round-robin scheduling.
+
+	Enabling CONFIG_STEELY_SCHED_CLASSES allows you to select
+	additional scheduling classes to enable in the Steely kernel.
+
+	If in doubt, say N.
+
+config STEELY_SCHED_WEAK
+	bool "Weak scheduling class"
+	default n
+	depends on STEELY_SCHED_CLASSES
+	help
+	This option creates a Steely scheduling class for mapping
+	members of the regular POSIX SCHED_FIFO/RR policies to a low
+	priority class of the Steely kernel, providing no real-time
+	guarantee. Therefore, up to a hundred non real-time priority
+	levels are available from the SCHED_WEAK policy.
+
+	When CONFIG_STEELY_SCHED_WEAK is disabled, Steely still
+	supports a single non real-time priority level (i.e. zero
+	priority), assigned to members of the SCHED_OTHER class.
+
+	SCHED_WEAK/SCHED_OTHER threads can access Steely resources,
+	wait on Steely synchronization objects, but cannot compete for
+	the CPU with members of the real-time Steely classes.
+
+	Since Steely assumes no real-time requirement for
+	SCHED_WEAK/SCHED_OTHER threads, they are automatically moved
+	back to secondary mode upon return from any Steely syscall if
+	necessary, unless they hold a Steely mutex, which would defer
+	the transition until such mutex is released.
+
+	If in doubt, say N.
+
+config STEELY_SCHED_TP
+	bool "Temporal partitioning"
+	default n
+	depends on STEELY_SCHED_CLASSES
+	help
+	This option enables support for temporal partitioning.
+
+	If in doubt, say N.
+
+config STEELY_SCHED_TP_NRPART
+	int "Number of partitions"
+	default 4
+	range 1 1024
+	depends on STEELY_SCHED_TP
+	help
+	Define here the maximum number of temporal partitions the TP
+	scheduler may have to handle.
+
+config STEELY_SCHED_SPORADIC
+	bool "Sporadic scheduling"
+	default n
+	depends on STEELY_SCHED_CLASSES
+	help
+	This option enables support for the sporadic scheduling policy
+	in the Steely kernel (SCHED_SPORADIC), also known as POSIX
+	sporadic server.
+
+	It can be used to enforce a capped limit on the execution time
+	of a thread within a given period of time.
+
+	If in doubt, say N.
+
+config STEELY_SCHED_SPORADIC_MAXREPL
+	int "Maximum number of pending replenishments"
+	default 8
+	range 4 16
+	depends on STEELY_SCHED_SPORADIC
+	help
+	For performance reason, the budget replenishment information
+	is statically stored on a per-thread basis. This parameter
+	defines the maximum number of replenishment requests that can
+	be pending concurrently for any given thread that undergoes
+	sporadic scheduling (system minimum is 4).
+
+config STEELY_SCHED_QUOTA
+	bool "Thread groups with runtime quota"
+	default n
+	depends on STEELY_SCHED_CLASSES
+	help
+	This option enables the SCHED_QUOTA scheduling policy in the
+	Steely kernel.
+
+	This policy enforces a limitation on the CPU consumption of
+	threads over a globally defined period, known as the quota
+	interval. This is done by pooling threads with common
+	requirements in groups, and giving each group a share of the
+	global period (see CONFIG_STEELY_SCHED_QUOTA_PERIOD).
+
+	When threads have entirely consumed the quota allotted to the
+	group they belong to, the latter is suspended as a whole,
+	until the next quota interval starts. At this point, a new
+	runtime budget is given to each group, in accordance with its
+	share.
+
+	If in doubt, say N.
+
+config STEELY_SCHED_QUOTA_PERIOD
+	int "Quota interval (us)"
+	default 10000
+	range 100 1000000000
+	depends on STEELY_SCHED_QUOTA
+	help
+	The global period thread groups can get a share of.
+
+config STEELY_SCHED_QUOTA_NR_GROUPS
+	int "Number of thread groups"
+	default 32
+	range 1 1024
+	depends on STEELY_SCHED_QUOTA
+	help
+	The overall number of thread groups which may be defined
+	across all CPUs.
+
+config STEELY_STATS
+	bool "Runtime statistics"
+	depends on STEELY_VFILE
+	default y
+	help
+	This option causes the Steely kernel to collect various
+	per-thread runtime statistics, which are accessible through
+	the /proc/steely/sched/stat interface.
+
+config STEELY_SHIRQ
+	bool "Shared interrupts"
+	help
+	Enables support for both level- and edge-triggered shared
+	interrupts, so that multiple real-time interrupt handlers
+	are allowed to control dedicated hardware devices which are
+	configured to share the same interrupt line.
+
+config STEELY_RR_QUANTUM
+	int "Round-robin quantum (us)"
+	default 1000
+	help
+	This parameter defines the duration of the default round-robin
+	time quantum expressed as a count of micro-seconds. This value
+	may be overriden internally by Steely services which do
+	provide a round-robin interval.
+
+config STEELY_AUTOTUNE
+        tristate "Auto-tuning"
+        default y
+	select STEELY_DRIVERS_AUTOTUNE
+        help
+	Enable auto-tuning capabilities. Auto-tuning is used for
+	adjusting the core timing services to the intrinsic latency of
+	the platform.
+
+config STEELY_SCALABLE_SCHED
+	bool "O(1) scheduler"
+	help
+	This option causes a multi-level priority queue to be used in
+	the real-time scheduler, so that it operates in constant-time
+	regardless of the number of _concurrently runnable_ threads
+	(which might be much lower than the total number of active
+	threads).
+
+	Its use is recommended for large multi-threaded systems
+	involving more than 10 of such threads; otherwise, the default
+	linear method usually performs better with lower memory
+	footprints.
+
+choice
+	prompt "Timer indexing method"
+	default STEELY_TIMER_LIST
+	help
+	This option allows to select the underlying data structure
+	which is going to be used for ordering the outstanding
+	software timers managed by the Steely kernel.
+
+config STEELY_TIMER_LIST
+	bool "Linear"
+	help
+	Use a linked list. Albeit O(N), this simple data structure is
+	particularly efficient when only a few timers (< 10) may be
+	concurrently outstanding at any point in time.
+
+config STEELY_TIMER_RBTREE
+	bool "Tree"
+	help
+	Use a red-black tree. This data structure is efficient when a
+	high number of software timers may be concurrently
+	outstanding at any point in time.
+
+endchoice
+
+config STEELY_HOSTRT
+       depends on DOVETAIL_HAVE_HOSTRT
+       def_bool y
+
+config STEELY_PIPE
+	bool
+
+config STEELY_MAP
+	bool
+
+config STEELY_EXTCLOCK
+       bool
+
+config STEELY_EXTENSION
+       bool
+
+config STEELY_VFILE
+       bool
+       depends on PROC_FS
+       default y
+
+endmenu
+
+menu "Sizes and static limits"
+
+config STEELY_PIPE_NRDEV
+	int "Number of pipe devices"
+	depends on STEELY_PIPE
+	default 32
+	help
+	Message pipes are bi-directional FIFO communication channels
+	allowing data exchange between Steely threads and regular
+	POSIX threads. Pipes natively preserve message boundaries, but
+	can also be used in byte streaming mode from kernel to
+	user-space.
+
+	This option sets the maximum number of pipe devices supported
+	in the system. Pipe devices are named /dev/rtpN where N is a
+	device minor number ranging from 0 to STEELY_PIPE_NRDEV - 1.
+
+config STEELY_REGISTRY_NRSLOTS
+	int "Number of registry slots"
+	default 512
+	help
+	The registry is used by the Steely kernel to export named
+	resources to user-space programs via the /proc interface.
+	Each named resource occupies a registry slot. This option sets
+	the maximum number of resources the registry can handle.
+
+config STEELY_SYS_HEAPSZ
+	int "Size of system heap (Kb)"
+	default 512
+	help
+	The system heap is used for various internal allocations by
+	the Steely kernel. The size is expressed in Kilobytes.
+
+config STEELY_PRIVATE_HEAPSZ
+	int "Size of private heap (Kb)"
+	default 64
+	help
+	The Steely kernel implements fast IPC mechanisms within the
+	scope of a process which require a private kernel memory heap
+	to be mapped in the address space of each Steely application
+	process. This option can be used to set the size of this
+	per-process heap.
+
+	64k is considered a large enough size for common use cases.
+
+config STEELY_SHARED_HEAPSZ
+	int "Size of shared heap (Kb)"
+	default 64
+	help
+	The Steely kernel implements fast IPC mechanisms between
+	processes which require a shared kernel memory heap to be
+	mapped in the address space of all Steely application
+	processes. This option can be used to set the size of this
+	system-wide heap.
+
+	64k is considered a large enough size for common use cases.
+
+config STEELY_NRTIMERS
+       int "Maximum number of POSIX timers per process"
+       default 128
+       help
+       This tunable controls how many POSIX timers can exist at any
+       given time for each Steely process (a timer is created by a
+       call to the timer_create() service of the Steely/POSIX API).
+
+config STEELY_DEBUG_TRACE_LOGSZ
+       int "Trace log size"
+       depends on STEELY_DEBUG_TRACE_RELAX
+       default 16
+       help
+       The size (kilobytes) of the trace log of relax requests. Once
+       this limit is reached, subsequent traces will be silently
+       discarded.
+
+       Writing to /proc/steely/debug/relax empties the trace log.
+
+endmenu
+
+menu "Latency settings"
+
+config STEELY_TIMING_SCHEDLAT
+	int "User scheduling latency (ns)"
+	default 0
+	help
+	The user scheduling latency is the time between the
+	termination of an interrupt handler and the execution of the
+	first instruction of the real-time application thread this
+	handler resumes. A default value of 0 (recommended) will cause
+	a pre-calibrated value to be used.
+
+	If the auto-tuner is enabled, this value will be used as the
+	factory default when running "autotune --reset".
+
+config STEELY_TIMING_KSCHEDLAT
+	int "Intra-kernel scheduling latency (ns)"
+	default 0
+	help
+	The intra-kernel scheduling latency is the time between the
+	termination of an interrupt handler and the execution of the
+	first instruction of the RTDM kernel thread this handler
+	resumes. A default value of 0 (recommended) will cause a
+	pre-calibrated value to be used.
+
+	Intra-kernel latency is usually significantly lower than user
+	scheduling latency on MMU-enabled platforms, due to CPU cache
+	latency.
+
+	If the auto-tuner is enabled, this value will be used as the
+	factory default when running "autotune --reset".
+
+config STEELY_TIMING_IRQLAT
+	int "Interrupt latency (ns)"
+	default 0
+	help
+	The interrupt latency is the time between the occurrence of an
+	IRQ and the first instruction of the interrupt handler which
+	will service it. A default value of 0 (recommended) will cause
+	a pre-calibrated value to be used.
+
+	If the auto-tuner is enabled, this value will be used as the
+	factory default when running "autotune --reset".
+
+endmenu
+
+menuconfig STEELY_DEBUG
+	depends on STEELY_VFILE
+	bool "Debug support"
+	help
+	  When enabled, various debugging features can be switched
+	  on. They can help to find problems in applications, drivers,
+	  and the Steely kernel. STEELY_DEBUG by itself does not have
+	  any impact on the generated code.
+
+if STEELY_DEBUG
+
+config STEELY_DEBUG_STEELY
+	bool "Steely runtime assertions"
+	help
+	  This option activates various assertions inside the Steely
+	  kernel. This option has limited overhead.
+
+config STEELY_DEBUG_CONTEXT
+       bool "Check for calling context"
+       help
+         This option enables checks for the calling context in the
+         Steely kernel, aimed at detecting when regular Linux routines
+         are entered from a real-time context, and conversely.
+
+config STEELY_DEBUG_LOCKING
+	bool "Spinlock debugging support"
+	default y if SMP
+	help
+	  This option activates runtime assertions, and measurements
+	  of spinlocks spinning time and duration in the Steely
+	  kernel. It helps finding latency spots due to interrupt
+	  masked sections. Statistics about the longest masked section
+	  can be found in /proc/steely/debug/lock.
+
+	  This option may induce a measurable overhead on low end
+	  machines.
+
+config STEELY_DEBUG_USER
+	bool "User consistency checks"
+	help
+	  This option enables a set of consistency checks for
+	  detecting wrong runtime behavior in user applications.
+
+	  With some of the debug categories, threads can ask for
+	  notification when a problem is detected, by turning on the
+	  PTHREAD_WARNSW mode bit with pthread_setmode_np().  Steely
+	  sends the Linux-originated SIGDEBUG signal for notifying
+	  threads, along with a reason code passed into the associated
+	  siginfo data (see pthread_setmode_np()).
+	
+	  Some of these runtime checks may induce overhead, enable
+	  them for debugging purposes only.
+
+if STEELY_DEBUG_USER
+
+config STEELY_DEBUG_MUTEX_RELAXED
+       bool "Detect relaxed mutex owner"
+       default y
+       help
+         A thread which attempts to acquire a mutex currently owned by
+         another thread running in secondary/relaxed mode thread will
+         suffer unwanted latencies, due to a priority inversion.
+         debug notifications are enabled for such thread, it receives
+         a SIGDEBUG signal.
+
+	 This option has some overhead in real-time mode over
+	 contented mutexes.
+ 
+config STEELY_DEBUG_MUTEX_SLEEP
+       bool "Detect sleeping with mutex"
+       default y
+       help
+         A thread which goes sleeping while holding a mutex is prone
+         to cause unwanted latencies to other threads serialized by
+         the same lock. If debug notifications are enabled for such
+         thread, it receives a SIGDEBUG signal right before entering
+	 sleep.
+
+	 This option has noticeable overhead in real-time mode as it
+	 disables the normal fast mutex operations from user-space,
+	 causing a system call for each mutex acquisition/release.
+
+config STEELY_DEBUG_POSIX_SYNCHRO
+        bool "Detect POSIX synchronization issues"
+	default n
+	help
+	  When this debug category is enabled, calls to the thread
+	  synchronization services are checked for consistency, beyond
+	  the requirements of the POSIX standard. In most cases, a
+	  faulty call results in error EPERM when detected.
+
+	  This option has negligible overhead.
+ 
+config STEELY_DEBUG_LEGACY
+        bool "Detect usage of legacy constructs/features"
+	default n
+	help
+	    Turns on detection of legacy API usage.
+
+endif # STEELY_DEBUG_USER
+
+config STEELY_DEBUG_TRACE_RELAX
+	bool "Trace relax requests"
+	default n
+	help
+	  This option enables recording of unwanted relax requests from
+	  user-space applications leaving the real-time domain, logging
+	  the thread information and code location involved. All records
+	  are readable from /proc/steely/debug/relax, and can be
+	  decoded using the "slackspot" utility.
+
+config STEELY_WATCHDOG
+	bool "Watchdog support"
+	default y
+	help
+	  This option activates a watchdog aimed at detecting runaway
+	  Steely threads. If enabled, the watchdog triggers after a
+	  given period of uninterrupted real-time activity has elapsed
+	  without Linux interaction in the meantime.
+
+	  In such an event, the current thread is moved out the
+	  real-time domain, receiving a SIGDEBUG signal from the Linux
+	  kernel immediately after.
+
+	  The timeout value of the watchdog can be set using the
+	  STEELY_WATCHDOG_TIMEOUT parameter.
+
+config STEELY_WATCHDOG_TIMEOUT
+	depends on STEELY_WATCHDOG
+	int "Watchdog timeout"
+	default 4
+	range 1 60
+	help
+	  Watchdog timeout value (in seconds).
+
+endif # STEELY_DEBUG

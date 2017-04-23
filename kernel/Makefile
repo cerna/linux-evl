@@ -113,6 +113,8 @@ obj-$(CONFIG_MEMBARRIER) += membarrier.o
 
 obj-$(CONFIG_HAS_IOMEM) += memremap.o
 
+obj-$(CONFIG_STEELY) += steely/
+
 $(obj)/configs.o: $(obj)/config_data.h
 
 targets += config_data.gz

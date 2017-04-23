@@ -1,0 +1,7 @@
+menu "Drivers"
+
+source "drivers/steely/autotune/Kconfig"
+source "drivers/steely/ipc/Kconfig"
+source "drivers/steely/testing/Kconfig"
+
+endmenu

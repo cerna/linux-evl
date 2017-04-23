@@ -1,0 +1,4 @@
+# UAPI Header export list
+arith.h
+features.h
+syscall.h
