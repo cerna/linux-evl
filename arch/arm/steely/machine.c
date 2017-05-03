@@ -1,4 +1,4 @@
-/**
+/*
  *   Copyright (C) 2005 Stelian Pop
  *
  *   Xenomai is free software; you can redistribute it and/or

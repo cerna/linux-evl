@@ -1,4 +1,4 @@
-/**
+/*
  *   Copyright &copy; 2002-2004 Philippe Gerum.
  *
  *   ARM port
