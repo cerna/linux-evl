@@ -1,5 +1,4 @@
-/**
- * @file
+/*
  * Real-Time Driver Model for Xenomai, testing device profile header
  *
  * @note Copyright (C) 2005 Jan Kiszka <jan.kiszka@web.de>
@@ -87,23 +86,15 @@ struct rttst_swtest_error {
 
 #define RTIOC_TYPE_TESTING		RTDM_CLASS_TESTING
 
-/*!
- * @name Sub-Classes of RTDM_CLASS_TESTING
- * @{ */
-/** subclass name: "timerbench" */
+/* subclass name: "timerbench" */
 #define RTDM_SUBCLASS_TIMERBENCH	0
-/** subclass name: "irqbench" */
+/* subclass name: "irqbench" */
 #define RTDM_SUBCLASS_IRQBENCH		1
-/** subclass name: "switchtest" */
+/* subclass name: "switchtest" */
 #define RTDM_SUBCLASS_SWITCHTEST	2
-/** subclase name: "rtdm" */
+/* subclase name: "rtdm" */
 #define RTDM_SUBCLASS_RTDMTEST		3
-/** @} */
 
-/*!
- * @anchor TSTIOCTLs @name IOCTLs
- * Testing device IOCTLs
- * @{ */
 #define RTTST_RTIOC_INTERM_BENCH_RES \
 	_IOWR(RTIOC_TYPE_TESTING, 0x00, struct rttst_interm_bench_res)
 
@@ -152,6 +143,4 @@ struct rttst_swtest_error {
 #define RTTST_RTIOC_RTDM_PING_SECONDARY \
 	_IOR(RTIOC_TYPE_TESTING, 0x43, __u32)
   
-/** @} */
-
 #endif /* !_RTDM_UAPI_TESTING_H */

@@ -27,20 +27,6 @@
 #include <steely/arith.h>
 #include <trace/events/steely-core.h>
 
-/**
- * @ingroup steely_core
- * @defgroup steely_core_timer Timer services
- *
- * The Xenomai timer facility depends on a clock source (xnclock) for
- * scheduling the next activation times.
- *
- * The core provides and depends on a monotonic clock source (nkclock)
- * with nanosecond resolution, driving the platform timer hardware
- * exposed by the interrupt pipeline.
- *
- * @{
- */
-
 bool xntimer_is_heading(struct xntimer *timer)
 {
 	struct xnsched *sched = timer->sched;
@@ -74,40 +60,6 @@ static void program_timer(struct xntimer *timer, xntimerq_t *q)
 	}
 }
 
-/**
- * Arm a timer.
- *
- * Activates a timer so that the associated timeout handler will be
- * fired after each expiration time. A timer can be either periodic or
- * one-shot, depending on the reload value passed to this routine. The
- * given timer must have been previously initialized.
- *
- * A timer is attached to the clock specified in xntimer_init().
- *
- * @param timer The address of a valid timer descriptor.
- *
- * @param value The date of the initial timer shot, expressed in
- * nanoseconds.
- *
- * @param interval The reload value of the timer. It is a periodic
- * interval value to be used for reprogramming the next timer shot,
- * expressed in nanoseconds. If @a interval is equal to XN_INFINITE,
- * the timer will not be reloaded after it has expired.
- *
- * @param mode The timer mode. It can be XN_RELATIVE if @a value shall
- * be interpreted as a relative date, XN_ABSOLUTE for an absolute date
- * based on the monotonic clock of the related time base (as returned
- * my xnclock_read_monotonic()), or XN_REALTIME if the absolute date
- * is based on the adjustable real-time date for the relevant clock
- * (obtained from xnclock_read_realtime()).
- *
- * @return 0 is returned upon success, or -ETIMEDOUT if an absolute
- * date in the past has been given. In such an event, the timer is
- * nevertheless armed for the next shot in the timeline if @a interval
- * is different from XN_INFINITE.
- *
- * @coretags{unrestricted, atomic-entry}
- */
 int xntimer_start(struct xntimer *timer,
 		  xnticks_t value, xnticks_t interval,
 		  xntmode_t mode)
@@ -199,19 +151,6 @@ bool __xntimer_deactivate(struct xntimer *timer)
 	return heading;
 }
 
-/**
- * @fn int xntimer_stop(struct xntimer *timer)
- *
- * @brief Disarm a timer.
- *
- * This service deactivates a timer previously armed using
- * xntimer_start(). Once disarmed, the timer can be subsequently
- * re-armed using the latter service.
- *
- * @param timer The address of a valid timer descriptor.
- *
- * @coretags{unrestricted, atomic-entry}
- */
 void __xntimer_stop(struct xntimer *timer)
 {
 	struct xnclock *clock = xntimer_clock(timer);
@@ -230,21 +169,6 @@ void __xntimer_stop(struct xntimer *timer)
 }
 EXPORT_SYMBOL_GPL(__xntimer_stop);
 
-/**
- * @fn xnticks_t xntimer_get_date(struct xntimer *timer)
- *
- * @brief Return the absolute expiration date.
- *
- * Return the next expiration date of a timer as an absolute count of
- * nanoseconds.
- *
- * @param timer The address of a valid timer descriptor.
- *
- * @return The expiration date in nanoseconds. The special value
- * XN_INFINITE is returned if @a timer is currently disabled.
- *
- * @coretags{unrestricted, atomic-entry}
- */
 xnticks_t xntimer_get_date(struct xntimer *timer)
 {
 	if (!xntimer_running_p(timer))
@@ -254,24 +178,6 @@ xnticks_t xntimer_get_date(struct xntimer *timer)
 }
 EXPORT_SYMBOL_GPL(xntimer_get_date);
 
-/**
- * @fn xnticks_t xntimer_get_timeout(struct xntimer *timer)
- *
- * @brief Return the relative expiration date.
- *
- * This call returns the count of nanoseconds remaining until the
- * timer expires.
- *
- * @param timer The address of a valid timer descriptor.
- *
- * @return The count of nanoseconds until expiry. The special value
- * XN_INFINITE is returned if @a timer is currently disabled.  It
- * might happen that the timer expires when this service runs (even if
- * the associated handler has not been fired yet); in such a case, 1
- * is returned.
- *
- * @coretags{unrestricted, atomic-entry}
- */
 xnticks_t __xntimer_get_timeout(struct xntimer *timer)
 {
 	struct xnclock *clock;
@@ -286,55 +192,6 @@ xnticks_t __xntimer_get_timeout(struct xntimer *timer)
 	return xnclock_ticks_to_ns(clock, expiry - now);
 }
 EXPORT_SYMBOL_GPL(__xntimer_get_timeout);
-
-/**
- * @fn void xntimer_init(struct xntimer *timer,struct xnclock *clock,void (*handler)(struct xntimer *timer), struct xnsched *sched, int flags)
- * @brief Initialize a timer object.
- *
- * Creates a timer. When created, a timer is left disarmed; it must be
- * started using xntimer_start() in order to be activated.
- *
- * @param timer The address of a timer descriptor the nucleus will use
- * to store the object-specific data.  This descriptor must always be
- * valid while the object is active therefore it must be allocated in
- * permanent memory.
- *
- * @param clock The clock the timer relates to. Xenomai defines a
- * monotonic system clock, with nanosecond resolution, named
- * nkclock. In addition, external clocks driven by other tick sources
- * may be created dynamically if CONFIG_STEELY_EXTCLOCK is defined.
- *
- * @param handler The routine to call upon expiration of the timer.
- *
- * @param sched An optional pointer to the per-CPU scheduler slot the
- * new timer is affine to. If non-NULL, the timer will fire on the CPU
- * @a sched is bound to, otherwise it will fire either on the current
- * CPU if real-time, or on the first real-time CPU.
- *
- * @param flags A set of flags describing the timer. The valid flags are:
- *
- * - XNTIMER_NOBLCK, the timer won't be frozen while GDB takes over
- * control of the application.
- *
- * A set of clock gravity hints can be passed via the @a flags
- * argument, used for optimizing the built-in heuristics aimed at
- * latency reduction:
- *
- * - XNTIMER_IGRAVITY, the timer activates a leaf timer handler.
- * - XNTIMER_KGRAVITY, the timer activates a kernel thread.
- * - XNTIMER_UGRAVITY, the timer activates a user-space thread.
- *
- * There is no limitation on the number of timers which can be
- * created/active concurrently.
- *
- * @coretags{unrestricted}
- */
-#ifdef DOXYGEN_CPP
-void xntimer_init(struct xntimer *timer, struct xnclock *clock,
-		  void (*handler)(struct xntimer *timer),
-		  struct xnsched *sched,
-		  int flags);
-#endif
 
 void __xntimer_init(struct xntimer *timer,
 		    struct xnclock *clock,
@@ -448,18 +305,6 @@ static inline void __xntimer_set_clock(struct xntimer *timer,
 	switch_clock_tracking(timer, newclock);
 }
 
-/**
- * @brief Set the reference clock of a timer.
- *
- * This service changes the reference clock pacing a timer. If the
- * clock timers are tracked, the tracking information is updated too.
- *
- * @param timer The address of a valid timer descriptor.
- *
- * @param newclock The address of a valid clock descriptor.
- *
- * @coretags{unrestricted, atomic-entry}
- */
 void xntimer_set_clock(struct xntimer *timer,
 		       struct xnclock *newclock)
 {
@@ -470,19 +315,6 @@ void xntimer_set_clock(struct xntimer *timer,
 
 #endif /* CONFIG_STEELY_EXTCLOCK */
 
-/**
- * @fn void xntimer_destroy(struct xntimer *timer)
- *
- * @brief Release a timer object.
- *
- * Destroys a timer. After it has been destroyed, all resources
- * associated with the timer have been released. The timer is
- * automatically deactivated before deletion if active on entry.
- *
- * @param timer The address of a valid timer descriptor.
- *
- * @coretags{unrestricted}
- */
 void xntimer_destroy(struct xntimer *timer)
 {
 	struct xnclock *clock __maybe_unused = xntimer_clock(timer);
@@ -503,20 +335,6 @@ EXPORT_SYMBOL_GPL(xntimer_destroy);
 
 #ifdef CONFIG_SMP
 
-/**
- * Migrate a timer.
- *
- * This call migrates a timer to another cpu. In order to avoid
- * pathological cases, it must be called from the CPU to which @a
- * timer is currently attached.
- *
- * @param timer The address of the timer object to be migrated.
- *
- * @param sched The address of the destination per-CPU scheduler
- * slot.
- *
- * @coretags{unrestricted, atomic-entry}
- */
 void __xntimer_migrate(struct xntimer *timer, struct xnsched *sched)
 {				/* nklocked, IRQs off */
 	struct xnclock *clock;
@@ -574,23 +392,6 @@ EXPORT_SYMBOL_GPL(xntimer_set_sched);
 
 #endif /* CONFIG_SMP */
 
-/**
- * Get the count of overruns for the last tick.
- *
- * This service returns the count of pending overruns for the last
- * tick of a given timer, as measured by the difference between the
- * expected expiry date of the timer and the date @a now passed as
- * argument.
- *
- * @param timer The address of a valid timer descriptor.
- *
- * @param now current date (as
- * xnclock_read_raw(xntimer_clock(timer)))
- *
- * @return the number of overruns of @a timer at date @a now
- *
- * @coretags{unrestricted, atomic-entry}
- */
 unsigned long long xntimer_get_overruns(struct xntimer *timer, xnticks_t now)
 {
 	xnticks_t period = timer->interval;
@@ -691,5 +492,3 @@ void xntimerq_insert(xntimerq_t *q, xntimerh_t *holder)
 }
 
 #endif
-
-/** @} */

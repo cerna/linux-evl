@@ -34,18 +34,6 @@
 #include "posix/internal.h"
 #include "procfs.h"
 
-/**
- * @defgroup steely Steely
- *
- * Steely supplements the native Linux kernel in dual kernel
- * configurations. It deals with all time-critical activities, such as
- * handling interrupts, and scheduling real-time threads. The Steely
- * kernel has higher priority over all the native kernel activities.
- *
- * Steely provides an implementation of the POSIX and RTDM interfaces
- * based on a set of generic RTOS building blocks.
- */
-
 static unsigned long clockfreq_arg;
 module_param_named(clockfreq, clockfreq_arg, ulong, 0444);
 
@@ -400,50 +388,3 @@ fail:
 	return ret;
 }
 device_initcall(steely_init);
-
-/**
- * @ingroup steely
- * @defgroup steely_core Steely kernel
- *
- * The Steely core is a co-kernel which supplements the Linux kernel
- * for delivering real-time services with very low latency. It
- * implements a set of generic RTOS building blocks, which the
- * Steely/POSIX and Steely/RTDM APIs are based on.  Steely has higher
- * priority over the Linux kernel activities.
- *
- * @{
- *
- * @page steely-core-tags Dual kernel service tags
- *
- * The Steely kernel services may be restricted to particular calling
- * contexts, or entail specific side-effects. To describe this
- * information, each service documented by this section bears a set of
- * tags when applicable.
- *
- * The table below matches the tags used throughout the documentation
- * with the description of their meaning for the caller.
- *
- * @par
- * <b>Context tags</b>
- * <TABLE>
- * <TR><TH>Tag</TH> <TH>Context on entry</TH></TR>
- * <TR><TD>primary-only</TD>	<TD>Must be called from a Steely task in primary mode</TD></TR>
- * <TR><TD>primary-timed</TD>	<TD>Requires a Steely task in primary mode if timed</TD></TR>
- * <TR><TD>coreirq-only</TD>	<TD>Must be called from a Steely IRQ handler</TD></TR>
- * <TR><TD>secondary-only</TD>	<TD>Must be called from a Steely task in secondary mode or regular Linux task</TD></TR>
- * <TR><TD>rtdm-task</TD>	<TD>Must be called from a RTDM driver task</TD></TR>
- * <TR><TD>mode-unrestricted</TD>	<TD>May be called from a Steely task in either primary or secondary mode</TD></TR>
- * <TR><TD>task-unrestricted</TD>	<TD>May be called from a Steely or regular Linux task indifferently</TD></TR>
- * <TR><TD>unrestricted</TD>	<TD>May be called from any context previously described</TD></TR>
- * <TR><TD>atomic-entry</TD>	<TD>Caller must currently hold the big Steely kernel lock (nklock)</TD></TR>
- * </TABLE>
- *
- * @par
- * <b>Possible side-effects</b>
- * <TABLE>
- * <TR><TH>Tag</TH> <TH>Description</TH></TR>
- * <TR><TD>might-switch</TD>	<TD>The Steely kernel may switch context</TD></TR>
- * </TABLE>
- *
- * @}
- */

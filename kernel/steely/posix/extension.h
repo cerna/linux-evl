@@ -75,7 +75,7 @@ static inline void steely_set_extref(struct steely_extref *ref,
 	ref->private = priv;
 }
 
-/**
+/*
  * All macros return non-zero if some thread-level extension code was
  * called, leaving the output value into __ret. Otherwise, the __ret
  * value is undefined.

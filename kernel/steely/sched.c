@@ -31,12 +31,6 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/steely-core.h>
 
-/**
- * @ingroup steely_core
- * @defgroup steely_core_sched Thread scheduling control
- * @{
- */
-
 DEFINE_PER_CPU(struct xnsched, nksched);
 EXPORT_PER_CPU_SYMBOL_GPL(nksched);
 
@@ -94,17 +88,6 @@ void xnsched_register_classes(void)
 static unsigned long wd_timeout_arg = CONFIG_STEELY_WATCHDOG_TIMEOUT;
 module_param_named(watchdog_timeout, wd_timeout_arg, ulong, 0644);
 
-/**
- * @internal
- * @fn void watchdog_handler(struct xntimer *timer)
- * @brief Process watchdog ticks.
- *
- * This internal routine handles incoming watchdog ticks to detect
- * software lockups. It kills any offending thread which is found to
- * monopolize the CPU so as to starve the Linux kernel for too long.
- *
- * @coretags{coreirq-only, atomic-entry}
- */
 static void watchdog_handler(struct xntimer *timer)
 {
 	struct xnsched *sched = xnsched_current();
@@ -751,56 +734,6 @@ struct xnthread *xnsched_rt_pick(struct xnsched *sched)
 
 #endif /* !CONFIG_STEELY_SCALABLE_SCHED */
 
-/**
- * @fn int xnsched_run(void)
- * @brief The rescheduling procedure.
- *
- * This is the central rescheduling routine which should be called to
- * validate and apply changes which have previously been made to the
- * nucleus scheduling state, such as suspending, resuming or changing
- * the priority of threads.  This call performs context switches as
- * needed. xnsched_run() schedules out the current thread if:
- *
- * - the current thread is about to block.
- * - a runnable thread from a higher priority scheduling class is
- * waiting for the CPU.
- * - the current thread does not lead the runnable threads from its
- * own scheduling class (i.e. round-robin).
- *
- * The Steely core implements a lazy rescheduling scheme so that most
- * of the services affecting the threads state MUST be followed by a
- * call to the rescheduling procedure for the new scheduling state to
- * be applied.
- *
- * In other words, multiple changes on the scheduler state can be done
- * in a row, waking threads up, blocking others, without being
- * immediately translated into the corresponding context switches.
- * When all changes have been applied, xnsched_run() should be called
- * for considering those changes, and possibly switching context.
- *
- * As a notable exception to the previous principle however, every
- * action which ends up suspending the current thread begets an
- * implicit call to the rescheduling procedure on behalf of the
- * blocking service.
- *
- * Typically, self-suspension or sleeping on a synchronization object
- * automatically leads to a call to the rescheduling procedure,
- * therefore the caller does not need to explicitly issue
- * xnsched_run() after such operations.
- *
- * The rescheduling procedure always leads to a null-effect if it is
- * called on behalf of an interrupt service routine. Any outstanding
- * scheduler lock held by the outgoing thread will be restored when
- * the thread is scheduled back in.
- *
- * Calling this procedure with no applicable context switch pending is
- * harmless and simply leads to a null-effect.
- *
- * @return Non-zero is returned if a context switch actually happened,
- * otherwise zero if the current thread was left running.
- *
- * @coretags{unrestricted}
- */
 static inline int test_resched(struct xnsched *sched)
 {
 	int resched = xnsched_resched_p(sched);
@@ -1451,5 +1384,3 @@ void xnsched_cleanup_proc(void)
 }
 
 #endif /* CONFIG_STEELY_VFILE */
-
-/** @} */

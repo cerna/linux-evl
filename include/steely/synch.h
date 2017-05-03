@@ -25,10 +25,6 @@
 #include <uapi/steely/kernel/synch.h>
 #include <uapi/steely/kernel/thread.h>
 
-/**
- * @addtogroup steely_core_synch
- * @{
- */
 #define XNSYNCH_CLAIMED  0x100	/* Claimed by other thread(s) (PI) */
 #define XNSYNCH_CEILING  0x200	/* Actively boosting (PP) */
 
@@ -51,22 +47,22 @@ struct xnthread;
 struct xnsynch;
 
 struct xnsynch {
-	/** wait (weighted) prio in thread->boosters */
+	/* wait (weighted) prio in thread->boosters */
 	int wprio;
-	/** thread->boosters */
+	/* thread->boosters */
 	struct list_head next;
-	/**
+	/*
 	 *  &variable holding the current priority ceiling value
 	 *  (xnsched_class_rt-based, [1..255], XNSYNCH_PP).
 	 */
 	u32 *ceiling_ref;
-	/** Status word */
+	/* Status word */
 	unsigned long status;
-	/** Pending threads */
+	/* Pending threads */
 	struct list_head pendq;
-	/** Thread which owns the resource */
+	/* Thread which owns the resource */
 	struct xnthread *owner;
-	 /** Pointer to fast lock word */
+	 /* Pointer to fast lock word */
 	atomic_t *fastlock;
 	/* Cleanup handler */
 	void (*cleanup)(struct xnsynch *synch);
@@ -173,7 +169,5 @@ int xnsynch_flush(struct xnsynch *synch, int reason);
 void xnsynch_requeue_sleeper(struct xnthread *thread);
 
 void xnsynch_forget_sleeper(struct xnthread *thread);
-
-/** @} */
 
 #endif /* !_STEELY_KERNEL_SYNCH_H_ */

@@ -27,18 +27,6 @@
 #include <steely/heap.h>
 #include <steely/vfile.h>
 
-/**
- * @ingroup steely_core
- * @defgroup steely_core_heap Dynamic memory allocation services
- *
- * The implementation of the memory allocator follows the algorithm
- * described in a USENIX 1988 paper called "Design of a General
- * Purpose Memory Allocator for the 4.3BSD Unix Kernel" by Marshall
- * K. McKusick and Michael J. Karels. You can find it at various
- * locations on the net, including
- * http://docs.FreeBSD.org/44doc/papers/kernmalloc.pdf.
- *@{
- */
 struct xnheap steely_heap;		/* System heap */
 EXPORT_SYMBOL_GPL(steely_heap);
 
@@ -165,34 +153,6 @@ static void init_freelist(struct xnheap *heap)
 	heap->freelist = heap->membase;
 }
 
-/**
- * @fn xnheap_init(struct xnheap *heap, void *membase, u32 size)
- * @brief Initialize a memory heap.
- *
- * Initializes a memory heap suitable for time-bounded allocation
- * requests of dynamic memory.
- *
- * @param heap The address of a heap descriptor to initialize.
- *
- * @param membase The address of the storage area.
- *
- * @param size The size in bytes of the storage area.  @a size
- * must be a multiple of PAGE_SIZE and smaller than 2 Gb in the
- * current implementation.
- *
- * @return 0 is returned upon success, or:
- *
- * - -EINVAL is returned if @a size is either:
- *
- *   - not aligned on PAGE_SIZE
- *   - smaller than 2 * PAGE_SIZE
- *   - greater than 2 Gb (XNHEAP_MAXHEAPSZ)
- *
- * - -ENOMEM is returned upon failure of allocating the meta-data area
- * used internally to maintain the heap.
- *
- * @coretags{secondary-only}
- */
 int xnheap_init(struct xnheap *heap, void *membase, u32 size)
 {
 	spl_t s;
@@ -244,16 +204,6 @@ int xnheap_init(struct xnheap *heap, void *membase, u32 size)
 }
 EXPORT_SYMBOL_GPL(xnheap_init);
 
-/**
- * @fn void xnheap_destroy(struct xnheap *heap)
- * @brief Destroys a memory heap.
- *
- * Destroys a memory heap.
- *
- * @param heap The heap descriptor.
- *
- * @coretags{secondary-only}
- */
 void xnheap_destroy(struct xnheap *heap)
 {
 	spl_t s;
@@ -269,19 +219,6 @@ void xnheap_destroy(struct xnheap *heap)
 }
 EXPORT_SYMBOL_GPL(xnheap_destroy);
 
-/**
- * @fn xnheap_set_name(struct xnheap *heap,const char *name,...)
- * @brief Set the heap's name string.
- *
- * Set the heap name that will be used in statistic outputs.
- *
- * @param heap The address of a heap descriptor.
- *
- * @param name Name displayed in statistic outputs. This parameter can
- * be a printk()-like format argument list.
- *
- * @coretags{task-unrestricted}
- */
 void xnheap_set_name(struct xnheap *heap, const char *name, ...)
 {
 	va_list args;
@@ -381,28 +318,6 @@ splitpage:
 	return headpage;
 }
 
-/**
- * @fn void *xnheap_alloc(struct xnheap *heap, u32 size)
- * @brief Allocate a memory block from a memory heap.
- *
- * Allocates a contiguous region of memory from an active memory heap.
- * Such allocation is guaranteed to be time-bounded.
- *
- * @param heap The descriptor address of the heap to get memory from.
- *
- * @param size The size in bytes of the requested block. Sizes lower
- * or equal to the page size are rounded either to the minimum
- * allocation size if lower than this value, or to the minimum
- * alignment size if greater or equal to this value. In the current
- * implementation, with MINALLOC = 8 and MINALIGN = 16, a 7 bytes
- * request will be rounded to 8 bytes, and a 17 bytes request will be
- * rounded to 32.
- *
- * @return The address of the allocated region upon success, or NULL
- * if no memory is available from the specified heap.
- *
- * @coretags{unrestricted}
- */
 void *xnheap_alloc(struct xnheap *heap, u32 size)
 {
 	u32 pagenum, bsize;
@@ -477,18 +392,6 @@ out:
 }
 EXPORT_SYMBOL_GPL(xnheap_alloc);
 
-/**
- * @fn void xnheap_free(struct xnheap *heap, void *block)
- * @brief Release a block to a memory heap.
- *
- * Releases a memory block to a heap.
- *
- * @param heap The heap descriptor.
- *
- * @param block The block to be returned to the heap.
- *
- * @coretags{unrestricted}
- */
 void xnheap_free(struct xnheap *heap, void *block)
 {
 	caddr_t freepage, lastpage, nextpage, tailpage, freeptr, *tailptr;
@@ -684,5 +587,3 @@ void xnheap_vfree(void *p)
 	vfree(p);
 }
 EXPORT_SYMBOL_GPL(xnheap_vfree);
-
-/** @} */

@@ -18,29 +18,6 @@
  */
 #include <linux/module.h>
 
-/**
- * @ingroup steely_core
- * @defgroup steely_core_arith In-kernel arithmetics
- *
- * A collection of helpers performing arithmetics not implicitly
- * available from kernel context via GCC helpers. Many of these
- * routines enable 64bit arithmetics on 32bit systems. Xenomai
- * architecture ports normally implement the performance critical ones
- * in hand-crafted assembly code (see
- * kernel/steely/arch/\<arch\>/include/uapi/asm/steely/arith.h).
- * @{
- */
-
-/**
- * Architecture-independent div64 operation with remainder.
- *
- * @param a dividend
- *
- * @param b divisor
- *
- * @param rem if non-NULL, a pointer to a 64bit variable for
- * collecting the remainder from the division.
- */
 unsigned long long xnarch_generic_full_divmod64(unsigned long long a,
 						unsigned long long b,
 						unsigned long long *rem)
@@ -61,5 +38,3 @@ unsigned long long xnarch_generic_full_divmod64(unsigned long long a,
 	return q;
 }
 EXPORT_SYMBOL_GPL(xnarch_generic_full_divmod64);
-
-/** @} */

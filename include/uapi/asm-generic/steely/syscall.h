@@ -25,11 +25,11 @@
 #define __STEELY_SYSCALL_BIT	0x10000000
 
 struct steely_bindreq {
-	/** Features userland requires. */
+	/* Features userland requires. */
 	__u32 feat_req;
-	/** ABI revision userland uses. */
+	/* ABI revision userland uses. */
 	__u32 abi_rev;
-	/** Features the Steely core provides. */
+	/* Features the Steely core provides. */
 	struct steely_featinfo feat_ret;
 };
 

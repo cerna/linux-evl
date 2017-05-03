@@ -29,24 +29,6 @@
 #include <steely/init.h>
 #include <trace/events/steely-rtdm.h>
 
-/**
- * @ingroup rtdm
- * @defgroup rtdm_profiles Device Profiles
- *
- * Pre-defined classes of real-time devices
- *
- * Device profiles define which operation handlers a driver of a
- * certain class of devices has to implement, which name or protocol
- * it has to register, which IOCTLs it has to provide, and further
- * details. Sub-classes can be defined in order to extend a device
- * profile with more hardware-specific functions.
- */
-
-/**
- * @addtogroup rtdm_driver_interface
- * @{
- */
-
 #define RTDM_DEVICE_MAGIC	0x82846877
 
 static struct rb_root protocol_devices;
@@ -130,12 +112,6 @@ struct rtdm_device *__rtdm_get_protodev(int protocol_family, int socket_type)
 
 	return dev;
 }
-
-/**
- * @ingroup rtdm_driver_interface
- * @defgroup rtdm_device_register Device Registration Services
- * @{
- */
 
 static char *rtdm_devnode(struct device *dev, umode_t *mode)
 {
@@ -337,30 +313,6 @@ static void unregister_driver(struct rtdm_driver *drv)
 	}
 }
 
-/**
- * @brief Register a RTDM device
- *
- * Registers a device in the RTDM namespace.
- *
- * @param[in] dev Device descriptor.
- *
- * @return 0 is returned upon success. Otherwise:
- *
- * - -EINVAL is returned if the descriptor contains invalid
- * entries. RTDM_PROFILE_INFO() must appear in the list of
- * initializers for the driver properties.
- *
- * - -EEXIST is returned if the specified device name of protocol ID is
- * already in use.
- *
- * - -ENOMEM is returned if a memory allocation failed in the process
- * of registering the device.
- *
- * - -EAGAIN is returned if no registry slot is available (check/raise
- * CONFIG_STEELY_REGISTRY_NRSLOTS).
- *
- * @coretags{secondary-only}
- */
 int rtdm_dev_register(struct rtdm_device *dev)
 {
 	struct class *kdev_class = rtdm_class;
@@ -491,16 +443,6 @@ fail:
 }
 EXPORT_SYMBOL_GPL(rtdm_dev_register);
 
-/**
- * @brief Unregister a RTDM device
- *
- * Removes the device from the RTDM namespace. This routine waits until
- * all connections to @a device have been closed prior to unregistering.
- *
- * @param[in] dev Device descriptor.
- *
- * @coretags{secondary-only}
- */
 void rtdm_dev_unregister(struct rtdm_device *dev)
 {
 	struct rtdm_driver *drv = dev->driver;
@@ -536,41 +478,6 @@ void rtdm_dev_unregister(struct rtdm_device *dev)
 }
 EXPORT_SYMBOL_GPL(rtdm_dev_unregister);
 
-/**
- * @brief Set the kernel device class of a RTDM driver.
- *
- * Set the kernel device class assigned to the RTDM driver. By
- * default, RTDM drivers belong to Linux's "rtdm" device class,
- * creating a device node hierarchy rooted at /dev/rtdm, and sysfs
- * nodes under /sys/class/rtdm.
- *
- * This call assigns a user-defined kernel device class to the RTDM
- * driver, so that its devices are created into a different system
- * hierarchy.
- *
- * rtdm_drv_set_sysclass() is meaningful only before the first device
- * which is attached to @a drv is registered by a call to
- * rtdm_dev_register().
- *
- * @param[in] drv Address of the RTDM driver descriptor.
- *
- * @param[in] cls Pointer to the kernel device class. NULL is allowed
- * to clear a previous setting, switching back to the default "rtdm"
- * device class.
- *
- * @return 0 on success, otherwise:
- *
- * - -EBUSY is returned if the kernel device class has already been
- * set for @a drv, or some device(s) attached to @a drv are currently
- * registered.
- *
- * @coretags{task-unrestricted}
- *
- * @attention The kernel device class set by this call is not related to
- * the RTDM class identification as defined by the @ref rtdm_profiles
- * "RTDM profiles" in any way. This is strictly related to the Linux
- * kernel device hierarchy.
- */
 int rtdm_drv_set_sysclass(struct rtdm_driver *drv, struct class *cls)
 {
 	if ((cls && drv->profile_info.kdev_class) ||
@@ -582,8 +489,6 @@ int rtdm_drv_set_sysclass(struct rtdm_driver *drv, struct class *cls)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(rtdm_drv_set_sysclass);
-
-/** @} */
 
 int __init rtdm_init(void)
 {
@@ -610,5 +515,3 @@ void rtdm_cleanup(void)
 	 * allowed to unregister as long as there are references.
 	 */
 }
-
-/*@}*/

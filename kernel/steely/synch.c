@@ -39,54 +39,6 @@ static inline int get_ceiling_value(struct xnsynch *synch)
 
 struct xnsynch *lookup_lazy_pp(xnhandle_t handle);
 
-/**
- * @ingroup steely_core
- * @defgroup steely_core_synch Thread synchronization services
- * @{
- */
-
-/**
- * @brief Initialize a synchronization object.
- *
- * Initializes a synchronization object. Xenomai threads can wait on
- * and signal such objects for serializing access to resources.
- * This object has built-in support for priority inheritance.
- *
- * @param synch The address of a synchronization object descriptor
- * Steely will use to store the object-specific data.  This descriptor
- * must always be valid while the object is active therefore it must
- * be allocated in permanent memory.
- *
- * @param flags A set of creation flags affecting the operation. The
- * valid flags are:
- *
- * - XNSYNCH_PRIO causes the threads waiting for the resource to pend
- * in priority order. Otherwise, FIFO ordering is used (XNSYNCH_FIFO).
- *
- * - XNSYNCH_OWNER indicates that the synchronization object shall
- * track the resource ownership, allowing a single owner at most at
- * any point in time. Note that setting this flag implies the use of
- * xnsynch_acquire() and xnsynch_release() instead of
- * xnsynch_sleep_on() and xnsynch_wakeup_*().
- *
- * - XNSYNCH_PI enables priority inheritance when a priority inversion
- * is detected among threads using this object.  XNSYNCH_PI implies
- * XNSYNCH_OWNER and XNSYNCH_PRIO.
- *
- * - XNSYNCH_PP enables priority protect to prevent priority inversion.
- * XNSYNCH_PP implies XNSYNCH_OWNER and XNSYNCH_PRIO.
- *
- * - XNSYNCH_DREORD (Disable REORDering) tells Steely not to reorder
- * the wait list upon priority change of a waiter. Reordering is the
- * default. Only applies when XNSYNCH_PRIO is present.
- *
- * @param fastlock Address of the fast lock word to be associated with
- * a synchronization object with ownership tracking. Therefore, a
- * valid fast-lock address is required if XNSYNCH_OWNER is set in @a
- * flags.
- *
- * @coretags{task-unrestricted}
- */
 void xnsynch_init(struct xnsynch *synch, int flags, atomic_t *fastlock)
 {
 	if (flags & (XNSYNCH_PI|XNSYNCH_PP))
@@ -108,28 +60,6 @@ void xnsynch_init(struct xnsynch *synch, int flags, atomic_t *fastlock)
 }
 EXPORT_SYMBOL_GPL(xnsynch_init);
 
-/**
- * @brief Initialize a synchronization object enforcing PP.
- *
- * This call is a variant of xnsynch_init() for initializing
- * synchronization objects enabling the priority protect protocol.
- *
- * @param synch The address of a synchronization object descriptor
- * Steely will use to store the object-specific data.  See
- * xnsynch_init().
- *
- * @param flags A set of creation flags affecting the operation. See
- * xnsynch_init(). XNSYNCH_PI is mutually exclusive with XNSYNCH_PP,
- * and won't be considered.
- *
- * @param fastlock Address of the fast lock word to be associated with
- * a synchronization object with ownership tracking. See xnsynch_init().
- *
- * @param ceiling_ref The address of the variable holding the current
- * priority ceiling value for this object.
- *
- * @coretags{task-unrestricted}
- */
 void xnsynch_init_protect(struct xnsynch *synch, int flags,
 			  atomic_t *fastlock, u32 *ceiling_ref)
 {
@@ -137,22 +67,6 @@ void xnsynch_init_protect(struct xnsynch *synch, int flags,
 	synch->ceiling_ref = ceiling_ref;
 }
 
-/**
- * @fn void xnsynch_destroy(struct xnsynch *synch)
- * @brief Destroy a synchronization object.
- *
- * Destroys the synchronization object @a synch, unblocking all
- * waiters with the XNRMID status.
- *
- * @return XNSYNCH_RESCHED is returned if at least one thread is
- * unblocked, which means the caller should invoke xnsched_run() for
- * applying the new scheduling state. Otherwise, XNSYNCH_DONE is
- * returned.
-
- * @sideeffect Same as xnsynch_flush().
- *
- * @coretags{task-unrestricted}
- */
 int xnsynch_destroy(struct xnsynch *synch)
 {
 	int ret;
@@ -164,40 +78,6 @@ int xnsynch_destroy(struct xnsynch *synch)
 }
 EXPORT_SYMBOL_GPL(xnsynch_destroy);
 
-/**
- * @fn int xnsynch_sleep_on(struct xnsynch *synch, xnticks_t timeout, xntmode_t timeout_mode);
- * @brief Sleep on an ownerless synchronization object.
- *
- * Makes the calling thread sleep on the specified synchronization
- * object, waiting for it to be signaled.
- *
- * This service should be called by upper interfaces wanting the
- * current thread to pend on the given resource. It must not be used
- * with synchronization objects that are supposed to track ownership
- * (XNSYNCH_OWNER).
- *
- * @param synch The descriptor address of the synchronization object
- * to sleep on.
- *
- * @param timeout The timeout which may be used to limit the time the
- * thread pends on the resource. This value is a wait time given as a
- * count of nanoseconds. It can either be relative, absolute
- * monotonic, or absolute adjustable depending on @a
- * timeout_mode. Passing XN_INFINITE @b and setting @a mode to
- * XN_RELATIVE specifies an unbounded wait. All other values are used
- * to initialize a watchdog timer.
- *
- * @param timeout_mode The mode of the @a timeout parameter. It can
- * either be set to XN_RELATIVE, XN_ABSOLUTE, or XN_REALTIME (see also
- * xntimer_start()).
- *
- * @return A bitmask which may include zero or one information bit
- * among XNRMID, XNTIMEO and XNBREAK, which should be tested by the
- * caller, for detecting respectively: object deletion, timeout or
- * signal/unblock conditions which might have happened while waiting.
- *
- * @coretags{primary-only, might-switch}
- */
 int xnsynch_sleep_on(struct xnsynch *synch, xnticks_t timeout,
 		     xntmode_t timeout_mode)
 {
@@ -232,26 +112,6 @@ int xnsynch_sleep_on(struct xnsynch *synch, xnticks_t timeout,
 }
 EXPORT_SYMBOL_GPL(xnsynch_sleep_on);
 
-/**
- * @fn struct xnthread *xnsynch_wakeup_one_sleeper(struct xnsynch *synch);
- * @brief Unblock the heading thread from wait.
- *
- * This service wakes up the thread which is currently leading the
- * synchronization object's pending list. The sleeping thread is
- * unblocked from its pending state, but no reschedule is performed.
- *
- * This service should be called by upper interfaces wanting to signal
- * the given resource so that a single waiter is resumed. It must not
- * be used with synchronization objects that are supposed to track
- * ownership (XNSYNCH_OWNER not set).
- *
- * @param synch The descriptor address of the synchronization object
- * whose ownership is changed.
- *
- * @return The descriptor address of the unblocked thread.
- *
- * @coretags{unrestricted}
- */
 struct xnthread *xnsynch_wakeup_one_sleeper(struct xnsynch *synch)
 {
 	struct xnthread *thread;
@@ -307,27 +167,6 @@ out:
 }
 EXPORT_SYMBOL_GPL(xnsynch_wakeup_many_sleepers);
 
-/**
- * @fn void xnsynch_wakeup_this_sleeper(struct xnsynch *synch, struct xnthread *sleeper);
- * @brief Unblock a particular thread from wait.
- *
- * This service wakes up a specific thread which is currently pending on
- * the given synchronization object. The sleeping thread is unblocked
- * from its pending state, but no reschedule is performed.
- *
- * This service should be called by upper interfaces wanting to signal
- * the given resource so that a specific waiter is resumed. It must not
- * be used with synchronization objects that are supposed to track
- * ownership (XNSYNCH_OWNER not set).
- *
- * @param synch The descriptor address of the synchronization object
- * whose ownership is changed.
- *
- * @param sleeper The thread to unblock which MUST be currently linked
- * to the synchronization object's pending queue (i.e. synch->pendq).
- *
- * @coretags{unrestricted}
- */
 void xnsynch_wakeup_this_sleeper(struct xnsynch *synch, struct xnthread *sleeper)
 {
 	spl_t s;
@@ -565,32 +404,6 @@ out:
 	curr->u_window->pp_pending = XN_NO_HANDLE;
 }
 
-/**
- * @fn int xnsynch_try_acquire(struct xnsynch *synch);
- * @brief Try acquiring the ownership of a synchronization object.
- *
- * This service should be called by upper interfaces wanting the
- * current thread to acquire the ownership of the given resource. If
- * the resource is already assigned to another thread, the call
- * returns with an error code.
- *
- * This service must be used only with synchronization objects that
- * track ownership (XNSYNCH_OWNER set.
- *
- * @param synch The descriptor address of the synchronization object
- * to acquire.
- *
- * @return Zero is returned if @a synch has been successfully
- * acquired. Otherwise:
- *
- * - -EDEADLK is returned if @a synch is currently held by the calling
- * thread.
- *
- * - -EBUSY is returned if @a synch is currently held by another
- * thread.
- *
- * @coretags{primary-only}
- */
 int xnsynch_try_acquire(struct xnsynch *synch)
 {
 	struct xnthread *curr;
@@ -618,44 +431,6 @@ int xnsynch_try_acquire(struct xnsynch *synch)
 }
 EXPORT_SYMBOL_GPL(xnsynch_try_acquire);
 
-/**
- * @fn int xnsynch_acquire(struct xnsynch *synch, xnticks_t timeout, xntmode_t timeout_mode);
- * @brief Acquire the ownership of a synchronization object.
- *
- * This service should be called by upper interfaces wanting the
- * current thread to acquire the ownership of the given resource. If
- * the resource is already assigned to another thread, the caller is
- * suspended.
- *
- * This service must be used only with synchronization objects that
- * track ownership (XNSYNCH_OWNER set.
- *
- * @param synch The descriptor address of the synchronization object
- * to acquire.
- *
- * @param timeout The timeout which may be used to limit the time the
- * thread pends on the resource. This value is a wait time given as a
- * count of nanoseconds. It can either be relative, absolute
- * monotonic, or absolute adjustable depending on @a
- * timeout_mode. Passing XN_INFINITE @b and setting @a mode to
- * XN_RELATIVE specifies an unbounded wait. All other values are used
- * to initialize a watchdog timer.
- *
- * @param timeout_mode The mode of the @a timeout parameter. It can
- * either be set to XN_RELATIVE, XN_ABSOLUTE, or XN_REALTIME (see also
- * xntimer_start()).
- *
- * @return A bitmask which may include zero or one information bit
- * among XNRMID, XNTIMEO and XNBREAK, which should be tested by the
- * caller, for detecting respectively: object deletion, timeout or
- * signal/unblock conditions which might have happened while waiting.
- *
- * @coretags{primary-only, might-switch}
- *
- * @note Unlike xnsynch_try_acquire(), this call does NOT check for
- * invalid recursive locking request, which means that such request
- * will always cause a deadlock for the caller.
- */
 int xnsynch_acquire(struct xnsynch *synch, xnticks_t timeout,
 		    xntmode_t timeout_mode)
 {
@@ -882,37 +657,6 @@ static bool transfer_ownership(struct xnsynch *synch,
 	return true;
 }
 
-/**
- * @fn bool xnsynch_release(struct xnsynch *synch, struct xnthread *curr)
- * @brief Release a resource and pass it to the next waiting thread.
- *
- * This service releases the ownership of the given synchronization
- * object. The thread which is currently leading the object's pending
- * list, if any, is unblocked from its pending state. However, no
- * reschedule is performed.
- *
- * This service must be used only with synchronization objects that
- * track ownership (XNSYNCH_OWNER set).
- *
- * @param synch The descriptor address of the synchronization object
- * whose ownership is changed.
- *
- * @param curr The descriptor address of the current thread, which
- * must own the object at the time of calling.
- *
- * @return True if a reschedule is required.
- *
- * @sideeffect
- *
- * - The effective priority of the previous resource owner might be
- * lowered to its base priority value as a consequence of the priority
- * boost being cleared.
- *
- * - The synchronization object ownership is transfered to the
- * unblocked thread.
- *
- * @coretags{primary-only, might-switch}
- */
 bool xnsynch_release(struct xnsynch *synch, struct xnthread *curr)
 {
 	bool need_resched = false;
@@ -993,19 +737,6 @@ void xnsynch_requeue_sleeper(struct xnthread *thread)
 }
 EXPORT_SYMBOL_GPL(xnsynch_requeue_sleeper);
 
-/**
- * @fn struct xnthread *xnsynch_peek_pendq(struct xnsynch *synch);
- * @brief Access the thread leading a synch object wait queue.
- *
- * This services returns the descriptor address of to the thread leading a
- * synchronization object wait queue.
- *
- * @param synch The descriptor address of the target synchronization object.
- *
- * @return The descriptor address of the unblocked thread.
- *
- * @coretags{unrestricted}
- */
 struct xnthread *xnsynch_peek_pendq(struct xnsynch *synch)
 {
 	struct xnthread *thread = NULL;
@@ -1023,42 +754,6 @@ struct xnthread *xnsynch_peek_pendq(struct xnsynch *synch)
 }
 EXPORT_SYMBOL_GPL(xnsynch_peek_pendq);
 
-/**
- * @fn int xnsynch_flush(struct xnsynch *synch, int reason);
- * @brief Unblock all waiters pending on a resource.
- *
- * This service atomically releases all threads which currently sleep
- * on a given resource. This service should be called by upper
- * interfaces under circumstances requiring that the pending queue of
- * a given resource is cleared, such as before the resource is
- * deleted.
- *
- * @param synch The descriptor address of the synchronization object
- * to be flushed.
- *
- * @param reason Some flags to set in the information mask of every
- * unblocked thread. Zero is an acceptable value. The following bits
- * are pre-defined by Steely:
- *
- * - XNRMID should be set to indicate that the synchronization object
- * is about to be destroyed (see xnthread_resume()).
- *
- * - XNBREAK should be set to indicate that the wait has been forcibly
- * interrupted (see xnthread_unblock()).
- *
- * @return XNSYNCH_RESCHED is returned if at least one thread is
- * unblocked, which means the caller should invoke xnsched_run() for
- * applying the new scheduling state. Otherwise, XNSYNCH_DONE is
- * returned.
- *
- * @sideeffect
- *
- * - The effective priority of the current resource owner might be
- * lowered to its base priority value as a consequence of the priority
- * inheritance boost being cleared.
- *
- * @coretags{unrestricted}
- */
 int xnsynch_flush(struct xnsynch *synch, int reason)
 {
 	struct xnthread *sleeper, *tmp;
@@ -1181,5 +876,3 @@ void xnsynch_detect_boosted_relax(struct xnthread *owner)
 }
 
 #endif /* STEELY_DEBUG(MUTEX_RELAXED) */
-
-/** @} */

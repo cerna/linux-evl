@@ -26,10 +26,6 @@
 #include <steely/assert.h>
 #include <steely/ancillaries.h>
 
-/**
- * @addtogroup steely_core_timer
- * @{
- */
 #define XN_INFINITE   ((xnticks_t)0)
 #define XN_NONBLOCK   ((xnticks_t)-1)
 
@@ -234,36 +230,36 @@ struct xntimer {
 #ifdef CONFIG_STEELY_EXTCLOCK
 	struct xnclock *clock;
 #endif
-	/** Link in timers list. */
+	/* Link in timers list. */
 	xntimerh_t aplink;
 	struct list_head adjlink;
-	/** Timer status. */
+	/* Timer status. */
 	unsigned long status;
-	/** Periodic interval (clock ticks, 0 == one shot). */
+	/* Periodic interval (clock ticks, 0 == one shot). */
 	xnticks_t interval;
-	/** Periodic interval (nanoseconds, 0 == one shot). */
+	/* Periodic interval (nanoseconds, 0 == one shot). */
 	xnticks_t interval_ns;
-	/** Count of timer ticks in periodic mode. */
+	/* Count of timer ticks in periodic mode. */
 	xnticks_t periodic_ticks;
-	/** First tick date in periodic mode. */
+	/* First tick date in periodic mode. */
 	xnticks_t start_date;
-	/** Date of next periodic release point (timer ticks). */
+	/* Date of next periodic release point (timer ticks). */
 	xnticks_t pexpect_ticks;
-	/** Sched structure to which the timer is attached. */
+	/* Sched structure to which the timer is attached. */
 	struct xnsched *sched;
-	/** Timeout handler. */
+	/* Timeout handler. */
 	void (*handler)(struct xntimer *timer);
 #ifdef CONFIG_STEELY_STATS
 #ifdef CONFIG_STEELY_EXTCLOCK
 	struct xnclock *tracker;
 #endif
-	/** Timer name to be displayed. */
+	/* Timer name to be displayed. */
 	char name[XNOBJECT_NAME_LEN];
-	/** Timer holder in timebase. */
+	/* Timer holder in timebase. */
 	struct list_head next_stat;
-	/** Number of timer schedules. */
+	/* Number of timer schedules. */
 	xnstat_counter_t scheduled;
-	/** Number of timer events. */
+	/* Number of timer events. */
 	xnstat_counter_t fired;
 #endif /* CONFIG_STEELY_STATS */
 };
@@ -429,21 +425,6 @@ bool __xntimer_deactivate(struct xntimer *timer);
 
 void xntimer_destroy(struct xntimer *timer);
 
-/**
- * @fn xnticks_t xntimer_interval(struct xntimer *timer)
- *
- * @brief Return the timer interval value.
- *
- * Return the timer interval value in nanoseconds.
- *
- * @param timer The address of a valid timer descriptor.
- *
- * @return The duration of a period in nanoseconds. The special value
- * XN_INFINITE is returned if @a timer is currently disabled or
- * one shot.
- *
- * @coretags{unrestricted, atomic-entry}
- */
 static inline xnticks_t xntimer_interval(struct xntimer *timer)
 {
 	return timer->interval_ns;
@@ -504,8 +485,6 @@ static inline void xntimer_dequeue(struct xntimer *timer,
 	timer->status |= XNTIMER_DEQUEUED;
 }
 
-/** @} */
-
 unsigned long long xntimer_get_overruns(struct xntimer *timer, xnticks_t now);
 
 #ifdef CONFIG_SMP
@@ -538,7 +517,5 @@ static inline bool xntimer_set_sched(struct xntimer *timer,
 
 char *xntimer_format_time(xnticks_t ns,
 			  char *buf, size_t bufsz);
-
-/** @} */
 
 #endif /* !_STEELY_KERNEL_TIMER_H */

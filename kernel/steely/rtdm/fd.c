@@ -190,20 +190,6 @@ int rtdm_fd_enter(struct rtdm_fd *fd, int ufd, unsigned int magic,
 	return ret;
 }
 
-/**
- * @brief Retrieve and lock a RTDM file descriptor
- *
- * @param[in] ufd User-side file descriptor
- * @param[in] magic Magic word for lookup validation
- *
- * @return Pointer to the RTDM file descriptor matching @a ufd, or
- * ERR_PTR(-EBADF).
- *
- * @note The file descriptor returned must be later released by a call
- * to rtdm_fd_put().
- *
- * @coretags{unrestricted}
- */
 struct rtdm_fd *rtdm_fd_get(int ufd, unsigned int magic)
 {
 	struct steely_ppd *p = steely_ppd_get(0);
@@ -278,16 +264,6 @@ static void __put_fd(struct rtdm_fd *fd, spl_t s)
 	}
 }
 
-/**
- * @brief Release a RTDM file descriptor obtained via rtdm_fd_get()
- *
- * @param[in] fd RTDM file descriptor to release
- *
- * @note Every call to rtdm_fd_get() must be matched by a call to
- * rtdm_fd_put().
- *
- * @coretags{unrestricted}
- */
 void rtdm_fd_put(struct rtdm_fd *fd)
 {
 	spl_t s;
@@ -297,20 +273,6 @@ void rtdm_fd_put(struct rtdm_fd *fd)
 }
 EXPORT_SYMBOL_GPL(rtdm_fd_put);
 
-/**
- * @brief Hold a reference on a RTDM file descriptor
- *
- * @param[in] fd Target file descriptor
- *
- * @note rtdm_fd_lock() increments the reference counter of @a fd. You
- * only need to call this function in special scenarios, e.g. when
- * keeping additional references to the file descriptor that have
- * different lifetimes. Only use rtdm_fd_lock() on descriptors that
- * are currently locked via an earlier rtdm_fd_get()/rtdm_fd_lock() or
- * while running a device operation handler.
- *
- * @coretags{unrestricted}
- */
 int rtdm_fd_lock(struct rtdm_fd *fd)
 {
 	spl_t s;
@@ -327,16 +289,6 @@ int rtdm_fd_lock(struct rtdm_fd *fd)
 }
 EXPORT_SYMBOL_GPL(rtdm_fd_lock);
 
-/**
- * @brief Drop a reference on a RTDM file descriptor
- *
- * @param[in] fd Target file descriptor
- *
- * @note Every call to rtdm_fd_lock() must be matched by a call to
- * rtdm_fd_unlock().
- *
- * @coretags{unrestricted}
- */
 void rtdm_fd_unlock(struct rtdm_fd *fd)
 {
 	spl_t s;
@@ -691,25 +643,6 @@ int rtdm_fd_valid_p(int ufd)
 	return fd != NULL;
 }
 
-/**
- * @brief Bind a selector to specified event types of a given file descriptor
- * @internal
- *
- * This function is invoked by higher RTOS layers implementing select-like
- * services. It shall not be called directly by RTDM drivers.
- *
- * @param[in] ufd User-side file descriptor to bind to
- * @param[in,out] selector Selector object that shall be bound to the given
- * event
- * @param[in] type Event type the caller is interested in
- *
- * @return 0 on success, otherwise:
- *
- * - -EBADF is returned if the file descriptor @a ufd cannot be resolved.
- * - -EINVAL is returned if @a type is invalid.
- *
- * @coretags{task-unrestricted}
- */
 int rtdm_fd_select(int ufd, struct xnselector *selector,
 		   unsigned int type)
 {

@@ -24,11 +24,6 @@
 #include <linux/cpumask.h>
 #include <steely/stat.h>
 
-/**
- * @addtogroup steely_core_irq
- * @{
- */
-
 /* Possible return values of a handler. */
 #define XN_IRQ_NONE	 0x1
 #define XN_IRQ_HANDLED	 0x2
@@ -52,60 +47,60 @@ struct xnsched;
 typedef int (*xnisr_t)(struct xnintr *intr);
 
 struct xnirqstat {
-	/** Number of handled receipts since attachment. */
+	/* Number of handled receipts since attachment. */
 	xnstat_counter_t hits;
-	/** Runtime accounting entity */
+	/* Runtime accounting entity */
 	xnstat_exectime_t account;
-	/** Accumulated accounting entity */
+	/* Accumulated accounting entity */
 	xnstat_exectime_t sum;
 };
 
 struct xnintr {
 #ifdef CONFIG_STEELY_SHIRQ
-	/** Next object in the IRQ-sharing chain. */
+	/* Next object in the IRQ-sharing chain. */
 	struct xnintr *next_handler;
 #endif
-	/** Number of consequent unhandled interrupts */
+	/* Number of consequent unhandled interrupts */
 	unsigned int unhandled;
-	/** Interrupt service routine. */
+	/* Interrupt service routine. */
 	xnisr_t isr;
-	/** Opaque device id. */
+	/* Opaque device id. */
 	void *dev_id;
-	/** runtime status */
+	/* runtime status */
 	unsigned long status;
-	/** Creation flags. */
+	/* Creation flags. */
 	int flags;
-	/** IRQ number. */
+	/* IRQ number. */
 	unsigned int irq;
-	/** Symbolic name. */
+	/* Symbolic name. */
 	const char *name;
-	/** Descriptor maintenance lock. */
+	/* Descriptor maintenance lock. */
 	raw_spinlock_t lock;
 #ifdef CONFIG_STEELY_STATS
-	/** Statistics. */
+	/* Statistics. */
 	struct xnirqstat *stats;
 #endif
 	struct list_head next;
 };
 
 struct xnintr_iterator {
-	/** Current CPU. */
+	/* Current CPU. */
 	int cpu;
-	/** Remaining CPUs to iterate over. */
+	/* Remaining CPUs to iterate over. */
 	struct cpumask cpus;
-	/** Current hit counter. */
+	/* Current hit counter. */
 	unsigned long hits;
-	/** Used CPU time in current accounting period. */
+	/* Used CPU time in current accounting period. */
 	xnticks_t exectime_period;
-	/** Length of accounting period. */
+	/* Length of accounting period. */
 	xnticks_t account_period;
-	/** Overall CPU time consumed. */
+	/* Overall CPU time consumed. */
 	xnticks_t exectime_total;
-	/** System-wide xnintr list revision (internal use). */
+	/* System-wide xnintr list revision (internal use). */
 	int list_rev;
-	/** Currently visited xnintr object (internal use). */
+	/* Currently visited xnintr object (internal use). */
 	struct xnintr *curr;
-	/** Previously visited xnintr object (internal use). */
+	/* Previously visited xnintr object (internal use). */
 	struct xnintr *prev;
 };
 
@@ -154,7 +149,5 @@ void xnintr_list_unlock(void);
 void *steely_alloc_irq_work(size_t size);
 
 void steely_free_irq_work(void *p);
-
-/** @} */
 
 #endif /* !_STEELY_KERNEL_INTR_H */

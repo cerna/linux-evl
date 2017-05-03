@@ -483,23 +483,6 @@ static void xnsched_quota_migrate(struct xnthread *thread, struct xnsched *sched
 	__xnthread_set_schedparam(thread, &xnsched_class_rt, &param);
 }
 
-/**
- * @ingroup steely_core_sched
- * @defgroup sched_quota SCHED_QUOTA scheduling policy
- *
- * The SCHED_QUOTA policy enforces a limitation on the CPU consumption
- * of threads over a globally defined period, known as the quota
- * interval. This is done by pooling threads with common requirements
- * in groups, and giving each group a share of the global period
- * (CONFIG_STEELY_SCHED_QUOTA_PERIOD).
- *
- * When threads have entirely consumed the quota allotted to the group
- * they belong to, the latter is suspended as a whole, until the next
- * quota interval starts. At this point, a new runtime budget is
- * given to each group, in accordance with its share.
- *
- *@{
- */
 int xnsched_quota_create_group(struct xnsched_quota_group *tg,
 			       struct xnsched *sched,
 			       int *quota_sum_r)
@@ -636,8 +619,6 @@ int xnsched_quota_sum_all(struct xnsched *sched)
 	return quota_sum_all(qs);
 }
 EXPORT_SYMBOL_GPL(xnsched_quota_sum_all);
-
-/** @} */
 
 #ifdef CONFIG_STEELY_VFILE
 

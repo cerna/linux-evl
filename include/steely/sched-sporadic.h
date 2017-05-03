@@ -23,11 +23,6 @@
 #error "please don't include steely/sched-sporadic.h directly"
 #endif
 
-/**
- * @addtogroup steely_core_sched
- * @{
- */
-
 #ifdef CONFIG_STEELY_SCHED_SPORADIC
 
 #define XNSCHED_SPORADIC_MIN_PRIO	1
@@ -69,7 +64,5 @@ static inline int xnsched_sporadic_init_thread(struct xnthread *thread)
 }
 
 #endif /* !CONFIG_STEELY_SCHED_SPORADIC */
-
-/** @} */
 
 #endif /* !_STEELY_KERNEL_SCHED_SPORADIC_H */

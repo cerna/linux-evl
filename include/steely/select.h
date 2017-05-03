@@ -22,11 +22,6 @@
 #include <steely/list.h>
 #include <steely/thread.h>
 
-/**
- * @addtogroup steely_core_select
- * @{
- */
-
 #define XNSELECT_READ      0
 #define XNSELECT_WRITE     1
 #define XNSELECT_EXCEPT    2
@@ -107,16 +102,6 @@ int xnselect_bind(struct xnselect *select_block,
 
 int __xnselect_signal(struct xnselect *select_block, unsigned int state);
 
-/**
- * Signal a file descriptor state change.
- *
- * @param select_block pointer to an @a xnselect structure representing the file
- * descriptor whose state changed;
- * @param state new value of the state.
- *
- * @retval 1 if rescheduling is needed;
- * @retval 0 otherwise.
- */
 static inline int
 xnselect_signal(struct xnselect *select_block, unsigned int state)
 {
@@ -141,7 +126,5 @@ void xnselector_destroy(struct xnselector *selector);
 int xnselect_mount(void);
 
 int xnselect_umount(void);
-
-/** @} */
 
 #endif /* _STEELY_KERNEL_SELECT_H */

@@ -31,11 +31,6 @@
 #include <steely/assert.h>
 #include <asm/steely/machine.h>
 
-/**
- * @addtogroup steely_core_sched
- * @{
- */
-
 /* Sched status flags */
 #define XNRESCHED	0x10000000	/* Needs rescheduling */
 #define XNINTCK		0x20000000	/* In master tick handler context */
@@ -46,62 +41,58 @@
 #define XNHDEFER	0x00002000	/* Host tick deferred */
 
 struct xnsched_rt {
-	xnsched_queue_t runnable;	/*!< Runnable thread queue. */
+	xnsched_queue_t runnable;	/* Runnable thread queue. */
 };
 
-/*!
- * \brief Scheduling information structure.
- */
-
 struct xnsched {
-	/*!< Scheduler specific status bitmask. */
+	/* Scheduler specific status bitmask. */
 	unsigned long status;
-	/*!< Scheduler specific local flags bitmask. */
+	/* Scheduler specific local flags bitmask. */
 	unsigned long lflags;
-	/*!< Current thread. */
+	/* Current thread. */
 	struct xnthread *curr;
 #ifdef CONFIG_SMP
-	/*!< Owner CPU id. */
+	/* Owner CPU id. */
 	int cpu;
-	/*!< Mask of CPUs needing rescheduling. */
+	/* Mask of CPUs needing rescheduling. */
 	struct cpumask resched;
 #endif
-	/*!< Context of built-in real-time class. */
+	/* Context of built-in real-time class. */
 	struct xnsched_rt rt;
 #ifdef CONFIG_STEELY_SCHED_WEAK
-	/*!< Context of weak scheduling class. */
+	/* Context of weak scheduling class. */
 	struct xnsched_weak weak;
 #endif
 #ifdef CONFIG_STEELY_SCHED_TP
-	/*!< Context of TP class. */
+	/* Context of TP class. */
 	struct xnsched_tp tp;
 #endif
 #ifdef CONFIG_STEELY_SCHED_SPORADIC
-	/*!< Context of sporadic scheduling class. */
+	/* Context of sporadic scheduling class. */
 	struct xnsched_sporadic pss;
 #endif
 #ifdef CONFIG_STEELY_SCHED_QUOTA
-	/*!< Context of runtime quota scheduling. */
+	/* Context of runtime quota scheduling. */
 	struct xnsched_quota quota;
 #endif
-	/*!< Interrupt nesting level. */
+	/* Interrupt nesting level. */
 	volatile unsigned inesting;
-	/*!< Host timer. */
+	/* Host timer. */
 	struct xntimer htimer;
-	/*!< Round-robin timer. */
+	/* Round-robin timer. */
 	struct xntimer rrbtimer;
-	/*!< Root thread control block. */
+	/* Root thread control block. */
 	struct xnthread rootcb;
 #ifdef CONFIG_STEELY_WATCHDOG
-	/*!< Watchdog timer object. */
+	/* Watchdog timer object. */
 	struct xntimer wdtimer;
-	/*!< Watchdog tick count. */
+	/* Watchdog tick count. */
 	int wdcount;
 #endif
 #ifdef CONFIG_STEELY_STATS
-	/*!< Last account switch date (ticks). */
+	/* Last account switch date (ticks). */
 	xnticks_t last_account_switch;
-	/*!< Currently active account */
+	/* Currently active account */
 	xnstat_exectime_t *current_account;
 #endif
 };
@@ -131,7 +122,7 @@ struct xnsched_class {
 			     const union xnsched_policy_param *p);
 	void (*sched_migrate)(struct xnthread *thread,
 			      struct xnsched *sched);
-	/**
+	/*
 	 * Set base scheduling parameters. This routine is indirectly
 	 * called upon a change of base scheduling settings through
 	 * __xnthread_set_schedparam() -> xnsched_set_policy(),
@@ -150,10 +141,7 @@ struct xnsched_class {
 	 * typically what the xnsched_set_effective_priority() helper
 	 * does for such handler.
 	 *
-	 * @param thread Affected thread.
-	 * @param p New base policy settings.
-	 *
-	 * @return True if the effective priority was updated
+	 * Returns true if the effective priority was updated
 	 * (thread->cprio).
 	 */
 	bool (*sched_setparam)(struct xnthread *thread,
@@ -391,28 +379,6 @@ void xnsched_migrate(struct xnthread *thread,
 void xnsched_migrate_passive(struct xnthread *thread,
 			     struct xnsched *sched);
 
-/**
- * @fn void xnsched_rotate(struct xnsched *sched, struct xnsched_class *sched_class, const union xnsched_policy_param *sched_param)
- * @brief Rotate a scheduler runqueue.
- *
- * The specified scheduling class is requested to rotate its runqueue
- * for the given scheduler. Rotation is performed according to the
- * scheduling parameter specified by @a sched_param.
- *
- * @note The nucleus supports round-robin scheduling for the members
- * of the RT class.
- *
- * @param sched The per-CPU scheduler hosting the target scheduling
- * class.
- *
- * @param sched_class The scheduling class which should rotate its
- * runqueue.
- *
- * @param sched_param The scheduling parameter providing rotation
- * information to the specified scheduling class.
- *
- * @coretags{unrestricted, atomic-entry}
- */
 static inline void xnsched_rotate(struct xnsched *sched,
 				  struct xnsched_class *sched_class,
 				  const union xnsched_policy_param *sched_param)
@@ -661,7 +627,5 @@ static inline void xnsched_kick(struct xnthread *thread)
 }
 
 #endif /* !CONFIG_STEELY_SCHED_CLASSES */
-
-/** @} */
 
 #endif /* !_STEELY_KERNEL_SCHED_H */

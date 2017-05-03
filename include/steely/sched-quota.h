@@ -23,11 +23,6 @@
 #error "please don't include steely/sched-quota.h directly"
 #endif
 
-/**
- * @addtogroup steely_core_sched
- * @{
- */
-
 #ifdef CONFIG_STEELY_SCHED_QUOTA
 
 #define XNSCHED_QUOTA_MIN_PRIO	1
@@ -87,7 +82,5 @@ xnsched_quota_find_group(struct xnsched *sched, int tgid);
 int xnsched_quota_sum_all(struct xnsched *sched);
 
 #endif /* !CONFIG_STEELY_SCHED_QUOTA */
-
-/** @} */
 
 #endif /* !_STEELY_KERNEL_SCHED_QUOTA_H */

@@ -80,9 +80,9 @@ typedef struct {
 } pthread_mutex_t;
 
 struct steely_local_hkey {
-	/** pthread_t from userland. */
+	/* pthread_t from userland. */
 	unsigned long u_pth;
-	/** kernel mm context. */
+	/* kernel mm context. */
 	struct mm_struct *mm;
 };
 
@@ -93,13 +93,13 @@ struct steely_thread {
 	struct steely_process *process;
 	struct list_head next;	/* in steely_thread_list */
 
-	/** Signal management. */
+	/* Signal management. */
 	sigset_t sigpending;
 	struct list_head sigqueues[_NSIG]; /* in steely_sigpending */
 	struct xnsynch sigwait;
 	struct list_head signext;
 
-	/** Monitor wait object and link holder. */
+	/* Monitor wait object and link holder. */
 	struct xnsynch monitor_synch;
 	struct list_head monitor_link;
 

@@ -1,4 +1,4 @@
-/**
+/*
  * This file is part of the Xenomai project.
  *
  * @note Copyright (C) 2009 Philippe Gerum <rpm@xenomai.org>

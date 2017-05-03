@@ -22,11 +22,6 @@
 #include <steely/synch.h>
 #include <steely/vfile.h>
 
-/**
- * @addtogroup steely_core_registry
- *
- * @{
- */
 struct xnpnode;
 
 struct xnobject {
@@ -193,7 +188,5 @@ unsigned xnregistry_hash_size(void);
 extern struct xnpnode_ops xnregistry_vfsnap_ops;
 
 extern struct xnpnode_ops xnregistry_vlink_ops;
-
-/** @} */
 
 #endif /* !_STEELY_KERNEL_REGISTRY_H */

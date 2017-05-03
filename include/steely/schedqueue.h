@@ -21,11 +21,6 @@
 
 #include <steely/list.h>
 
-/**
- * @addtogroup steely_core_sched
- * @{
- */
-
 #define XNSCHED_CLASS_WEIGHT_FACTOR	1024
 
 #ifdef CONFIG_STEELY_SCALABLE_SCHED
@@ -100,7 +95,5 @@ typedef struct list_head xnsched_queue_t;
 #endif /* !CONFIG_STEELY_SCALABLE_SCHED */
 
 struct xnthread *xnsched_findq(xnsched_queue_t *q, int prio);
-
-/** @} */
 
 #endif /* !_STEELY_KERNEL_SCHEDQUEUE_H */

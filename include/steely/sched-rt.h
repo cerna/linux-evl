@@ -23,11 +23,6 @@
 #error "please don't include steely/sched-rt.h directly"
 #endif
 
-/**
- * @addtogroup steely_core_sched
- * @{
- */
-
 /*
  * Global priority scale for the core scheduling class, available to
  * SCHED_STEELY members.
@@ -144,7 +139,5 @@ static inline struct xnthread *xnsched_rt_pick(struct xnsched *sched)
 #endif
 
 void xnsched_rt_tick(struct xnsched *sched);
-
-/** @} */
 
 #endif /* !_STEELY_KERNEL_SCHED_RT_H */

@@ -32,16 +32,6 @@
 #include <uapi/steely/time.h>
 #include <trace/events/steely-core.h>
 
-/**
- * @ingroup steely_core
- * @defgroup steely_core_clock Clock services
- *
- * A Steely clock combines the semantics of a clock source with a
- * clock event device.
- *
- * @{
- */
-
 static void adjust_timer(struct xntimer *timer, xntimerq_t *q,
 			 xnsticks_t delta)
 {
@@ -130,23 +120,6 @@ static void adjust_clock_timers(struct xnclock *clock, xnsticks_t delta)
 	}
 }
 
-/**
- * @fn void xnclock_adjust(struct xnclock *clock, xnsticks_t delta)
- * @brief Adjust a clock time.
- *
- * This service changes the epoch for the given clock by applying the
- * specified tick delta on its wallclock offset.
- *
- * @param clock The clock to adjust.
- *
- * @param delta The adjustment value expressed in nanoseconds.
- *
- * @coretags{task-unrestricted, atomic-entry}
- *
- * @note Xenomai tracks the system time in @a nkclock, as a
- * monotonously increasing count of ticks since the epoch. The epoch
- * is initially the same as the underlying machine time.
- */
 void xnclock_adjust(struct xnclock *clock, xnsticks_t delta)
 {
 	xnticks_t now;
@@ -435,22 +408,6 @@ static inline void cleanup_clock_proc(struct xnclock *clock) { }
 
 #endif	/* !CONFIG_STEELY_VFILE */
 
-/**
- * @brief Register a Xenomai clock.
- *
- * This service installs a new clock which may be used to drive
- * Xenomai timers.
- *
- * @param clock The new clock to register.
- *
- * @param affinity The set of CPUs we may expect the backing clock
- * device to tick on. As a special case, passing a NULL affinity mask
- * means that timer IRQs cannot be seen as percpu events, in which
- * case all outstanding timers will be maintained into a single global
- * queue instead of percpu timer queues.
- *
- * @coretags{secondary-only}
- */
 int xnclock_register(struct xnclock *clock, const struct cpumask *affinity)
 {
 	struct xntimerdata *tmd;
@@ -499,20 +456,6 @@ int xnclock_register(struct xnclock *clock, const struct cpumask *affinity)
 }
 EXPORT_SYMBOL_GPL(xnclock_register);
 
-/**
- * @fn void xnclock_deregister(struct xnclock *clock)
- * @brief Deregister a Xenomai clock.
- *
- * This service uninstalls a Xenomai clock previously registered with
- * xnclock_register().
- *
- * This service may be called once all timers driven by @a clock have
- * been stopped.
- *
- * @param clock The clock to deregister.
- *
- * @coretags{secondary-only}
- */
 void xnclock_deregister(struct xnclock *clock)
 {
 	struct xntimerdata *tmd;
@@ -532,21 +475,6 @@ void xnclock_deregister(struct xnclock *clock)
 }
 EXPORT_SYMBOL_GPL(xnclock_deregister);
 
-/**
- * @fn void xnclock_tick(struct xnclock *clock)
- * @brief Process a clock tick.
- *
- * This routine processes an incoming @a clock event, firing elapsed
- * timers as appropriate.
- *
- * @param clock The clock for which a new event was received.
- *
- * @coretags{coreirq-only, atomic-entry}
- *
- * @note The current CPU must be part of the real-time affinity set
- * unless the clock device has no percpu semantics, otherwise weird
- * things may happen.
- */
 void xnclock_tick(struct xnclock *clock)
 {
 	struct xnsched *sched = xnsched_current();
@@ -742,5 +670,3 @@ void __init xnclock_cleanup(void)
 {
 	xnclock_core_cleanup();
 }
-
-/** @} */

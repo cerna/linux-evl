@@ -47,12 +47,6 @@
 
 static DECLARE_WAIT_QUEUE_HEAD(join_all);
 
-/**
- * @ingroup steely_core
- * @defgroup steely_core_thread Thread services
- * @{
- */
-
 static void timeout_handler(struct xntimer *timer)
 {
 	struct xnthread *thread = container_of(timer, struct xnthread, rtimer);
@@ -493,64 +487,6 @@ void __xnthread_discard(struct xnthread *thread)
 	xnlock_put_irqrestore(&nklock, s);
 }
 
-/**
- * @fn void xnthread_init(struct xnthread *thread,const struct xnthread_init_attr *attr,struct xnsched_class *sched_class,const union xnsched_policy_param *sched_param)
- * @brief Initialize a new thread.
- *
- * Initializes a new thread. The thread is left dormant until it is
- * actually started by xnthread_start().
- *
- * @param thread The address of a thread descriptor Steely will use to
- * store the thread-specific data.  This descriptor must always be
- * valid while the thread is active therefore it must be allocated in
- * permanent memory. @warning Some architectures may require the
- * descriptor to be properly aligned in memory; this is an additional
- * reason for descriptors not to be laid in the program stack where
- * alignement constraints might not always be satisfied.
- *
- * @param attr A pointer to an attribute block describing the initial
- * properties of the new thread. Members of this structure are defined
- * as follows:
- *
- * - name: An ASCII string standing for the symbolic name of the
- * thread. This name is copied to a safe place into the thread
- * descriptor. This name might be used in various situations by Steely
- * for issuing human-readable diagnostic messages, so it is usually a
- * good idea to provide a sensible value here.  NULL is fine though
- * and means "anonymous".
- *
- * - flags: A set of creation flags affecting the operation. The
- * following flags can be part of this bitmask:
- *
- *   - XNSUSP creates the thread in a suspended state. In such a case,
- * the thread shall be explicitly resumed using the xnthread_resume()
- * service for its execution to actually begin, additionally to
- * issuing xnthread_start() for it. This flag can also be specified
- * when invoking xnthread_start() as a starting mode.
- *
- * - XNUSER shall be set if @a thread will be mapped over an existing
- * user-space task. Otherwise, a new kernel host task is created, then
- * paired with the new Xenomai thread.
- *
- * - affinity: The processor affinity of this thread. Passing
- * CPU_MASK_ALL means "any cpu" from the allowed core affinity mask
- * (steely_cpu_affinity). Passing an empty set is invalid.
- *
- * @param sched_class The initial scheduling class the new thread
- * should be assigned to.
- *
- * @param sched_param The initial scheduling parameters to set for the
- * new thread; @a sched_param must be valid within the context of @a
- * sched_class.
- *
- * @return 0 is returned on success. Otherwise, the following error
- * code indicates the cause of the failure:
- *
- * - -EINVAL is returned if @a attr->flags has invalid bits set, or @a
- *   attr->affinity is invalid (e.g. empty).
- *
- * @coretags{secondary-only}
- */
 int xnthread_init(struct xnthread *thread,
 		  const struct xnthread_init_attr *attr,
 		  struct xnsched_class *sched_class,
@@ -584,46 +520,6 @@ int xnthread_init(struct xnthread *thread,
 }
 EXPORT_SYMBOL_GPL(xnthread_init);
 
-/**
- * @fn int xnthread_start(struct xnthread *thread,const struct xnthread_start_attr *attr)
- * @brief Start a newly created thread.
- *
- * Starts a (newly) created thread, scheduling it for the first
- * time. This call releases the target thread from the XNDORMANT
- * state. This service also sets the initial mode for the new thread.
- *
- * @param thread The descriptor address of the started thread which
- * must have been previously initialized by a call to xnthread_init().
- *
- * @param attr A pointer to an attribute block describing the
- * execution properties of the new thread. Members of this structure
- * are defined as follows:
- *
- * - mode: The initial thread mode. The following flags can be part of
- * this bitmask:
- *
- *   - XNLOCK causes the thread to lock the scheduler when it starts.
- * The target thread will have to call the xnsched_unlock()
- * service to unlock the scheduler. A non-preemptible thread may still
- * block, in which case, the lock is reasserted when the thread is
- * scheduled back in.
- *
- *   - XNSUSP makes the thread start in a suspended state. In such a
- * case, the thread will have to be explicitly resumed using the
- * xnthread_resume() service for its execution to actually begin.
- *
- * - entry: The address of the thread's body routine. In other words,
- * it is the thread entry point.
- *
- * - cookie: A user-defined opaque cookie Steely will pass to the
- * emerging thread as the sole argument of its entry point.
- *
- * @retval 0 if @a thread could be started ;
- *
- * @retval -EBUSY if @a thread was not dormant or stopped ;
- *
- * @coretags{task-unrestricted, might-switch}
- */
 int xnthread_start(struct xnthread *thread,
 		   const struct xnthread_start_attr *attr)
 {
@@ -661,60 +557,6 @@ int xnthread_start(struct xnthread *thread,
 }
 EXPORT_SYMBOL_GPL(xnthread_start);
 
-/**
- * @fn void xnthread_set_mode(int clrmask,int setmask)
- * @brief Change control mode of the current thread.
- *
- * Change the control mode of the current thread. The control mode
- * affects several behaviours of the Steely core regarding this
- * thread.
- *
- * @param clrmask Clears the corresponding bits from the control mode
- * before setmask is applied. The scheduler lock held by the current
- * thread can be forcibly released by passing the XNLOCK bit in this
- * mask. In this case, the lock nesting count is also reset to zero.
- *
- * @param setmask The new thread mode. The following flags may be set
- * in this bitmask:
- *
- * - XNLOCK makes the current thread non-preemptible by other threads.
- * Unless XNTRAPLB is also set for the thread, the latter may still
- * block, dropping the lock temporarily, in which case, the lock will
- * be reacquired automatically when the thread resumes execution.
- *
- * - XNWARN enables debugging notifications for the current thread.  A
- * SIGDEBUG (Linux-originated) signal is sent when the following
- * atypical or abnormal behavior is detected:
- *
- *    - the current thread switches to secondary mode. Such notification
- *      comes in handy for detecting spurious relaxes.
- *
- *    - CONFIG_STEELY_DEBUG_MUTEX_RELAXED is enabled in the kernel
- *      configuration, and the current thread is sleeping on a Steely
- *      mutex currently owned by a thread running in secondary mode,
- *      which reveals a priority inversion.
- *
- *    - the current thread is about to sleep while holding a Steely
- *      mutex, and CONFIG_STEELY_DEBUG_MUTEX_SLEEP is enabled in the
- *      kernel configuration. Blocking for acquiring a mutex does not
- *      trigger such a signal though.
- *
- *    - the current thread has both XNTRAPLB and XNLOCK set, and
- *      attempts to block on a Steely service, which would cause a
- *      lock break.
- *
- * - XNTRAPLB disallows breaking the scheduler lock. In the default
- * case, a thread which holds the scheduler lock is allowed to drop it
- * temporarily for sleeping. If this mode bit is set, such thread
- * would return immediately with XNBREAK set from
- * xnthread_suspend(). If XNWARN is set for the current thread,
- * SIGDEBUG is sent in addition to raising the break condition.
- *
- * @coretags{primary-only, might-switch}
- *
- * @note Setting @a clrmask and @a setmask to zero leads to a nop,
- * in which case xnthread_set_mode() returns the current mode.
- */
 int xnthread_set_mode(int clrmask, int setmask)
 {
 	int oldmode, lock_count;
@@ -751,64 +593,6 @@ int xnthread_set_mode(int clrmask, int setmask)
 }
 EXPORT_SYMBOL_GPL(xnthread_set_mode);
 
-/**
- * @fn void xnthread_suspend(struct xnthread *thread, int mask,xnticks_t timeout, xntmode_t timeout_mode,struct xnsynch *wchan)
- * @brief Suspend a thread.
- *
- * Suspends the execution of a thread according to a given suspensive
- * condition. This thread will not be eligible for scheduling until it
- * all the pending suspensive conditions set by this service are
- * removed by one or more calls to xnthread_resume().
- *
- * @param thread The descriptor address of the suspended thread.
- *
- * @param mask The suspension mask specifying the suspensive condition
- * to add to the thread's wait mask. Possible values usable by the
- * caller are:
- *
- * - XNSUSP. This flag forcibly suspends a thread, regardless of any
- * resource to wait for. A reverse call to xnthread_resume()
- * specifying the XNSUSP bit must be issued to remove this condition,
- * which is cumulative with other suspension bits.@a wchan should be
- * NULL when using this suspending mode.
- *
- * - XNDELAY. This flags denotes a counted delay wait (in ticks) which
- * duration is defined by the value of the timeout parameter.
- *
- * - XNPEND. This flag denotes a wait for a synchronization object to
- * be signaled. The wchan argument must points to this object. A
- * timeout value can be passed to bound the wait. This suspending mode
- * should not be used directly by the client interface, but rather
- * through the xnsynch_sleep_on() call.
- *
- * @param timeout The timeout which may be used to limit the time the
- * thread pends on a resource. This value is a wait time given in
- * nanoseconds. It can either be relative, absolute monotonic, or
- * absolute adjustable depending on @a timeout_mode.
- *
- * Passing XN_INFINITE @b and setting @a timeout_mode to XN_RELATIVE
- * specifies an unbounded wait. All other values are used to
- * initialize a watchdog timer. If the current operation mode of the
- * system timer is oneshot and @a timeout elapses before
- * xnthread_suspend() has completed, then the target thread will not
- * be suspended, and this routine leads to a null effect.
- *
- * @param timeout_mode The mode of the @a timeout parameter. It can
- * either be set to XN_RELATIVE, XN_ABSOLUTE, or XN_REALTIME (see also
- * xntimer_start()).
- *
- * @param wchan The address of a pended resource. This parameter is
- * used internally by the synchronization object implementation code
- * to specify on which object the suspended thread pends. NULL is a
- * legitimate value when this parameter does not apply to the current
- * suspending mode (e.g. XNSUSP).
- *
- * @note If the target thread has received a Linux-originated signal,
- * then this service immediately exits without suspending the thread,
- * but raises the XNBREAK condition in its information mask.
- *
- * @coretags{unrestricted, might-switch}
- */
 void xnthread_suspend(struct xnthread *thread, int mask,
 		      xnticks_t timeout, xntmode_t timeout_mode,
 		      struct xnsynch *wchan)
@@ -982,49 +766,6 @@ abort:
 }
 EXPORT_SYMBOL_GPL(xnthread_suspend);
 
-/**
- * @fn void xnthread_resume(struct xnthread *thread,int mask)
- * @brief Resume a thread.
- *
- * Resumes the execution of a thread previously suspended by one or
- * more calls to xnthread_suspend(). This call removes a suspensive
- * condition affecting the target thread. When all suspensive
- * conditions are gone, the thread is left in a READY state at which
- * point it becomes eligible anew for scheduling.
- *
- * @param thread The descriptor address of the resumed thread.
- *
- * @param mask The suspension mask specifying the suspensive condition
- * to remove from the thread's wait mask. Possible values usable by
- * the caller are:
- *
- * - XNSUSP. This flag removes the explicit suspension condition. This
- * condition might be additive to the XNPEND condition.
- *
- * - XNDELAY. This flag removes the counted delay wait condition.
- *
- * - XNPEND. This flag removes the resource wait condition. If a
- * watchdog is armed, it is automatically disarmed by this
- * call. Unlike the two previous conditions, only the current thread
- * can set this condition for itself, i.e. no thread can force another
- * one to pend on a resource.
- *
- * When the thread is eventually resumed by one or more calls to
- * xnthread_resume(), the caller of xnthread_suspend() in the awakened
- * thread that suspended itself should check for the following bits in
- * its own information mask to determine what caused its wake up:
- *
- * - XNRMID means that the caller must assume that the pended
- * synchronization object has been destroyed (see xnsynch_flush()).
- *
- * - XNTIMEO means that the delay elapsed, or the watchdog went off
- * before the corresponding synchronization object was signaled.
- *
- * - XNBREAK means that the wait has been forcibly broken by a call to
- * xnthread_unblock().
- *
- * @coretags{unrestricted, might-switch}
- */
 void xnthread_resume(struct xnthread *thread, int mask)
 {
 	unsigned long oldstate;
@@ -1119,30 +860,6 @@ unlock_and_exit:
 }
 EXPORT_SYMBOL_GPL(xnthread_resume);
 
-/**
- * @fn int xnthread_unblock(struct xnthread *thread)
- * @brief Unblock a thread.
- *
- * Breaks the thread out of any wait it is currently in.  This call
- * removes the XNDELAY and XNPEND suspensive conditions previously put
- * by xnthread_suspend() on the target thread. If all suspensive
- * conditions are gone, the thread is left in a READY state at which
- * point it becomes eligible anew for scheduling.
- *
- * @param thread The descriptor address of the unblocked thread.
- *
- * This call neither releases the thread from the XNSUSP, XNRELAX,
- * XNDORMANT or XNHELD suspensive conditions.
- *
- * When the thread resumes execution, the XNBREAK bit is set in the
- * unblocked thread's information mask. Unblocking a non-blocked
- * thread is perfectly harmless.
- *
- * @return non-zero is returned if the thread was actually unblocked
- * from a pending wait state, 0 otherwise.
- *
- * @coretags{unrestricted, might-switch}
- */
 int xnthread_unblock(struct xnthread *thread)
 {
 	int ret = 1;
@@ -1189,51 +906,6 @@ int xnthread_unblock(struct xnthread *thread)
 }
 EXPORT_SYMBOL_GPL(xnthread_unblock);
 
-/**
- * @fn int xnthread_set_periodic(struct xnthread *thread,xnticks_t idate, xntmode_t timeout_mode, xnticks_t period)
- * @brief Make a thread periodic.
- *
- * Make a thread periodic by programming its first release point and
- * its period in the processor time line.  Subsequent calls to
- * xnthread_wait_period() will delay the thread until the next
- * periodic release point in the processor timeline is reached.
- *
- * @param thread The core thread to make periodic. If NULL, the
- * current thread is assumed.
- *
- * @param idate The initial (absolute) date of the first release
- * point, expressed in nanoseconds. The affected thread will be
- * delayed by the first call to xnthread_wait_period() until this
- * point is reached. If @a idate is equal to XN_INFINITE, the first
- * release point is set to @a period nanoseconds after the current
- * date. In the latter case, @a timeout_mode is not considered and can
- * have any valid value.
- *
- * @param timeout_mode The mode of the @a idate parameter. It can
- * either be set to XN_ABSOLUTE or XN_REALTIME with @a idate different
- * from XN_INFINITE (see also xntimer_start()).
- *
- * @param period The period of the thread, expressed in nanoseconds.
- * As a side-effect, passing XN_INFINITE attempts to stop the thread's
- * periodic timer; in the latter case, the routine always exits
- * succesfully, regardless of the previous state of this timer.
- *
- * @return 0 is returned upon success. Otherwise:
- *
- * - -ETIMEDOUT is returned @a idate is different from XN_INFINITE and
- * represents a date in the past.
- *
- * - -EINVAL is returned if @a period is different from XN_INFINITE
- * but shorter than the scheduling latency value for the target
- * system, as available from /proc/steely/latency. -EINVAL is also
- * returned if @a timeout_mode is not compatible with @a idate, such
- * as XN_RELATIVE with @a idate different from XN_INFINITE.
- *
- * - -EPERM is returned if @a thread is NULL, but the caller is not a
- * Xenomai thread.
- *
- * @coretags{task-unrestricted}
- */
 int xnthread_set_periodic(struct xnthread *thread, xnticks_t idate,
 			  xntmode_t timeout_mode, xnticks_t period)
 {
@@ -1297,37 +969,6 @@ unlock_and_exit:
 }
 EXPORT_SYMBOL_GPL(xnthread_set_periodic);
 
-/**
- * @fn int xnthread_wait_period(unsigned long *overruns_r)
- * @brief Wait for the next periodic release point.
- *
- * Make the current thread wait for the next periodic release point in
- * the processor time line.
- *
- * @param overruns_r If non-NULL, @a overruns_r must be a pointer to a
- * memory location which will be written with the count of pending
- * overruns. This value is copied only when xnthread_wait_period()
- * returns -ETIMEDOUT or success; the memory location remains
- * unmodified otherwise. If NULL, this count will never be copied
- * back.
- *
- * @return 0 is returned upon success; if @a overruns_r is valid, zero
- * is copied to the pointed memory location. Otherwise:
- *
- * - -EWOULDBLOCK is returned if xnthread_set_periodic() has not
- * previously been called for the calling thread.
- *
- * - -EINTR is returned if xnthread_unblock() has been called for the
- * waiting thread before the next periodic release point has been
- * reached. In this case, the overrun counter is reset too.
- *
- * - -ETIMEDOUT is returned if the timer has overrun, which indicates
- * that one or more previous release points have been missed by the
- * calling thread. If @a overruns_r is valid, the count of pending
- * overruns is copied to the pointed memory location.
- *
- * @coretags{primary-only, might-switch}
- */
 int xnthread_wait_period(unsigned long *overruns_r)
 {
 	unsigned long overruns = 0;
@@ -1375,35 +1016,6 @@ int xnthread_wait_period(unsigned long *overruns_r)
 }
 EXPORT_SYMBOL_GPL(xnthread_wait_period);
 
-/**
- * @fn int xnthread_set_slice(struct xnthread *thread, xnticks_t quantum)
- * @brief Set thread time-slicing information.
- *
- * Update the time-slicing information for a given thread. This
- * service enables or disables round-robin scheduling for the thread,
- * depending on the value of @a quantum. By default, times-slicing is
- * disabled for a new thread initialized by a call to xnthread_init().
- *
- * @param thread The descriptor address of the affected thread.
- *
- * @param quantum The time quantum assigned to the thread expressed in
- * nanoseconds. If @a quantum is different from XN_INFINITE, the
- * time-slice for the thread is set to that value and its current time
- * credit is refilled (i.e. the thread is given a full time-slice to
- * run next). Otherwise, if @a quantum equals XN_INFINITE,
- * time-slicing is stopped for that thread.
- *
- * @return 0 is returned upon success. Otherwise, -EINVAL is returned
- * if @a quantum is not XN_INFINITE and:
- *
- *   - the base scheduling class of the target thread does not support
- *   time-slicing,
- *
- *   - @a quantum is smaller than the master clock gravity for a user
- * thread, which denotes a spurious value.
- *
- * @coretags{task-unrestricted}
- */
 int xnthread_set_slice(struct xnthread *thread, xnticks_t quantum)
 {
 	struct xnsched *sched;
@@ -1438,31 +1050,6 @@ int xnthread_set_slice(struct xnthread *thread, xnticks_t quantum)
 }
 EXPORT_SYMBOL_GPL(xnthread_set_slice);
 
-/**
- * @fn void xnthread_cancel(struct xnthread *thread)
- * @brief Cancel a thread.
- *
- * Request cancellation of a thread. This service forces @a thread to
- * exit from any blocking call, then to switch to secondary mode.
- * @a thread will terminate as soon as it reaches a cancellation
- * point. Cancellation points are defined for the following
- * situations:
- *
- * - @a thread self-cancels by a call to xnthread_cancel().
- * - @a thread invokes a Linux syscall (user-space shadow only).
- * - @a thread receives a Linux signal (user-space shadow only).
- * - @a thread unblocks from a Xenomai syscall (user-space shadow only).
- * - @a thread attempts to block on a Xenomai syscall (user-space shadow only).
- * - @a thread explicitly calls xnthread_test_cancel().
- *
- * @param thread The descriptor address of the thread to terminate.
- *
- * @coretags{task-unrestricted, might-switch}
- *
- * @note In addition to the common actions taken upon cancellation, a
- * thread which belongs to the SCHED_WEAK class is sent a regular
- * SIGTERM signal.
- */
 void xnthread_cancel(struct xnthread *thread)
 {
 	spl_t s;
@@ -1559,39 +1146,6 @@ static void wait_for_rcu_grace_period(struct pid *pid)
 	}
 }
 
-/**
- * @fn void xnthread_join(struct xnthread *thread, bool uninterruptible)
- * @brief Join with a terminated thread.
- *
- * This service waits for @a thread to terminate after a call to
- * xnthread_cancel().  If that thread has already terminated or is
- * dormant at the time of the call, then xnthread_join() returns
- * immediately.
- *
- * xnthread_join() adapts to the calling context (primary or
- * secondary), switching to secondary mode if needed for the duration
- * of the wait. Upon return, the original runtime mode is restored,
- * unless a Linux signal is pending.
- *
- * @param thread The descriptor address of the thread to join with.
- *
- * @param uninterruptible Boolean telling whether the service should
- * wait for completion uninterruptible.
- *
- * @return 0 is returned on success. Otherwise, the following error
- * codes indicate the cause of the failure:
- *
- * - -EDEADLK is returned if the current thread attempts to join
- * itself.
- *
- * - -EINTR is returned if the current thread was unblocked while
- *   waiting for @a thread to terminate.
- *
- * - -EBUSY indicates that another thread is already waiting for @a
- *   thread to terminate.
- *
- * @coretags{task-unrestricted, might-switch}
- */
 int xnthread_join(struct xnthread *thread, bool uninterruptible)
 {
 	struct xnthread *curr = xnthread_current();
@@ -1699,24 +1253,6 @@ EXPORT_SYMBOL_GPL(xnthread_join);
 
 #ifdef CONFIG_SMP
 
-/**
- * @fn int xnthread_migrate(int cpu)
- * @brief Migrate the current thread.
- *
- * This call makes the current thread migrate to another (real-time)
- * CPU if its affinity allows it. This call is available from
- * primary mode only.
- *
- * @param cpu The destination CPU.
- *
- * @retval 0 if the thread could migrate ;
- * @retval -EPERM if the calling context is invalid, or the
- * scheduler is locked.
- * @retval -EINVAL if the current thread affinity forbids this
- * migration.
- *
- * @coretags{primary-only, might-switch}
- */
 int xnthread_migrate(int cpu)
 {
 	struct xnthread *curr;
@@ -1794,54 +1330,6 @@ void xnthread_migrate_passive(struct xnthread *thread, struct xnsched *sched)
 
 #endif	/* CONFIG_SMP */
 
-/**
- * @fn int xnthread_set_schedparam(struct xnthread *thread,struct xnsched_class *sched_class,const union xnsched_policy_param *sched_param)
- * @brief Change the base scheduling parameters of a thread.
- *
- * Changes the base scheduling policy and paramaters of a thread. If
- * the thread is currently blocked, waiting in priority-pending mode
- * (XNSYNCH_PRIO) for a synchronization object to be signaled, Steely
- * will attempt to reorder the object's wait queue so that it reflects
- * the new sleeper's priority, unless the XNSYNCH_DREORD flag has been
- * set for the pended object.
- *
- * @param thread The descriptor address of the affected thread. See
- * note.
- *
- * @param sched_class The new scheduling class the thread should be
- * assigned to.
- *
- * @param sched_param The scheduling parameters to set for the thread;
- * @a sched_param must be valid within the context of @a sched_class.
- *
- * It is absolutely required to use this service to change a thread
- * priority, in order to have all the needed housekeeping chores
- * correctly performed. i.e. Do *not* call xnsched_set_policy()
- * directly or worse, change the thread.cprio field by hand in any
- * case.
- *
- * @return 0 is returned on success. Otherwise, a negative error code
- * indicates the cause of a failure that happened in the scheduling
- * class implementation for @a sched_class. Invalid parameters passed
- * into @a sched_param are common causes of error.
- *
- * @sideeffect
- *
- * - This service does not call the rescheduling procedure but may
- * affect the state of the run queue for the previous and new
- * scheduling classes.
- *
- * - Assigning the same scheduling class and parameters to a running
- * or ready thread moves it to the end of the run queue, thus causing
- * a manual round-robin, except if a priority boost is undergoing.
- *
- * @coretags{task-unregistred}
- *
- * @note The changes only apply to the Xenomai scheduling parameters
- * for @a thread. There is no propagation/translation of such changes
- * to the Linux scheduler for the task mated to the Xenomai target
- * thread.
- */
 int xnthread_set_schedparam(struct xnthread *thread,
 			    struct xnsched_class *sched_class,
 			    const union xnsched_policy_param *sched_param)
@@ -1926,17 +1414,6 @@ void __xnthread_test_cancel(struct xnthread *curr)
 }
 EXPORT_SYMBOL_GPL(__xnthread_test_cancel);
 
-/**
- * @internal
- * @fn int xnthread_harden(void);
- * @brief Migrate a Linux task to the Xenomai domain.
- *
- * This service causes the transition of "current" from the Linux
- * domain to Xenomai. The shadow will resume in the Xenomai domain as
- * returning from schedule().
- *
- * @coretags{secondary-only, might-switch}
- */
 int xnthread_harden(void)
 {
 	struct task_struct *p = current;
@@ -2049,29 +1526,6 @@ void __xnthread_propagate_schedparam(struct xnthread *curr)
 	}
 }
 
-/**
- * @internal
- * @fn void xnthread_relax(int notify, int reason);
- * @brief Switch a shadow thread back to the Linux domain.
- *
- * This service yields the control of the running shadow back to
- * Linux. This is obtained by suspending the shadow and scheduling a
- * wake up call for the mated user task inside the Linux domain. The
- * Linux task will resume on return from xnthread_suspend() on behalf
- * of the root thread.
- *
- * @param notify A boolean flag indicating whether threads monitored
- * from secondary mode switches should be sent a SIGDEBUG signal. For
- * instance, some internal operations like task exit should not
- * trigger such signal.
- *
- * @param reason The reason to report along with the SIGDEBUG signal.
- *
- * @coretags{primary-only, might-switch}
- *
- * @note "current" is valid here since the shadow runs with the
- * properties of the Linux task.
- */
 void xnthread_relax(int notify, int reason)
 {
 	struct xnthread *thread = xnthread_current();
@@ -2457,47 +1911,6 @@ static inline void init_kthread_info(struct xnthread *thread)
 	p->process = NULL;
 }
 
-/**
- * @fn int xnthread_map(struct xnthread *thread, struct completion *done)
- * @internal
- * @brief Create a shadow thread context over the current kernel task.
- *
- * This call maps a Steely core thread to the current kthread.  The
- * priority and scheduling class of the underlying task are not
- * affected; it is assumed that the caller did set them appropriately
- * before issuing the shadow mapping request.
- *
- * This call immediately moves the calling kernel thread to the
- * Xenomai domain.
- *
- * @param thread The descriptor address of the new shadow thread to be
- * mapped to "current". This descriptor must have been previously
- * initialized by a call to xnthread_init().
- *
- * @param done A completion object to be signaled when @a thread is
- * fully mapped over the current Linux context, waiting for
- * xnthread_start().
- *
- * @return 0 is returned on success. Otherwise:
- *
- * - -ERESTARTSYS is returned if the current Linux task has received a
- * signal, thus preventing the final migration to the Xenomai domain
- * (i.e. in order to process the signal in the Linux domain). This
- * error should not be considered as fatal.
- *
- * - -EPERM is returned if the shadow thread has been killed before
- * the current task had a chance to return to the caller. In such a
- * case, the real-time mapping operation has failed globally, and no
- * Xenomai resource remains attached to it.
- *
- * - -EINVAL is returned if the thread control block bears the XNUSER
- * bit.
- *
- * - -EBUSY is returned if either the current Linux task or the
- * associated shadow thread is already involved in a shadow mapping.
- *
- * @coretags{secondary-only, might-switch}
- */
 int xnthread_map(struct xnthread *thread, struct completion *done)
 {
 	int ret;
@@ -2641,11 +2054,9 @@ int xnthread_killall(int grace, int mask)
 }
 EXPORT_SYMBOL_GPL(xnthread_killall);
 		     
-/* Xenomai's generic personality. */
+/* Steely's generic personality. */
 struct xnthread_personality steely_personality = {
 	.name = "core",
 	.magic = -1
 };
 EXPORT_SYMBOL_GPL(steely_personality);
-
-/** @} */

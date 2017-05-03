@@ -23,19 +23,19 @@
 #define XNFEAT_STRING_LEN 64
 
 struct steely_featinfo {
-	/** Real-time clock frequency */
+	/* Real-time clock frequency */
 	__u64 clock_freq;
-	/** Offset of nkvdso in the sem heap. */
+	/* Offset of nkvdso in the sem heap. */
 	__u32 vdso_offset;
-	/** ABI revision level. */
+	/* ABI revision level. */
 	__u32 feat_abirev;
-	/** Available feature set. */
+	/* Available feature set. */
 	__u32 feat_all;
-	/** Mandatory features (when requested). */
+	/* Mandatory features (when requested). */
 	__u32 feat_man;
-	/** Requested feature set. */
+	/* Requested feature set. */
 	__u32 feat_req;
-	/** Missing features. */
+	/* Missing features. */
 	__u32 feat_mis;
 	char feat_all_s[XNFEAT_STRING_LEN];
 	char feat_man_s[XNFEAT_STRING_LEN];

@@ -24,66 +24,6 @@
 #include <steely/assert.h>
 #include <steely/vfile.h>
 
-/**
- * @ingroup steely_core
- * @defgroup steely_core_vfile Virtual file services
- *
- * Virtual files provide a mean to export Xenomai object states to
- * user-space, based on common kernel interfaces.  This encapsulation
- * is aimed at:
- *
- * - supporting consistent collection of very large record-based
- * output, without encurring latency peaks for undergoing real-time
- * activities.
- *
- * - in the future, hiding discrepancies between linux kernel
- * releases, regarding the proper way to export kernel object states
- * to userland, either via the /proc interface or by any other mean.
- *
- * This virtual file implementation offers record-based read support
- * based on seq_files, single-buffer write support, directory and link
- * handling, all visible from the /proc namespace.
- *
- * The vfile support exposes four filesystem object types:
- *
- * - snapshot-driven file (struct xnvfile_snapshot). This is commonly
- * used to export real-time object states via the /proc filesystem. To
- * minimize the latency involved in protecting the vfile routines from
- * changes applied by real-time code on such objects, a snapshot of
- * the data to output is first taken under proper locking, before the
- * collected data is formatted and sent out in a lockless manner.
- *
- * Because a large number of records may have to be output, the data
- * collection phase is not strictly atomic as a whole, but only
- * protected at record level. The vfile implementation can be notified
- * of updates to the underlying data set, and restart the collection
- * from scratch until the snapshot is fully consistent.
- *
- * - regular sequential file (struct xnvfile_regular). This is
- * basically an encapsulated sequential file object as available from
- * the host kernel (i.e. seq_file), with a few additional features to
- * make it more handy in a Xenomai environment, like implicit locking
- * support and shortened declaration for simplest, single-record
- * output.
- *
- * - virtual link (struct xnvfile_link). This is a symbolic link
- * feature integrated with the vfile semantics. The link target is
- * computed dynamically at creation time from a user-given helper
- * routine.
- *
- * - virtual directory (struct xnvfile_directory). A directory object,
- * which can be used to create a hierarchy for ordering a set of vfile
- * objects.
- *
- *@{*/
-
-/**
- * @var struct xnvfile_directory steely_vfroot
- * @brief Xenomai vfile root directory
- *
- * This vdir maps the /proc/steely directory. It can be used to create
- * a hierarchy of Xenomai-related vfiles under this root.
- */
 struct xnvfile_directory steely_vfroot;
 EXPORT_SYMBOL_GPL(steely_vfroot);
 
@@ -345,53 +285,6 @@ static struct file_operations vfile_snapshot_fops = {
 	.release = vfile_snapshot_release,
 };
 
-/**
- * @fn int xnvfile_init_snapshot(const char *name, struct xnvfile_snapshot *vfile, struct xnvfile_directory *parent)
- * @brief Initialize a snapshot-driven vfile.
- *
- * @param name The name which should appear in the pseudo-filesystem,
- * identifying the vfile entry.
- *
- * @param vfile A pointer to a vfile descriptor to initialize
- * from. The following fields in this structure should be filled in
- * prior to call this routine:
- *
- * - .privsz is the size (in bytes) of the private data area to be
- * reserved in the @ref snapshot_iterator "vfile iterator". A NULL
- * value indicates that no private area should be reserved.
- *
- * - .datasz is the size (in bytes) of a single record to be collected
- * by the @ref snapshot_next "next() handler" from the @ref
- * snapshot_ops "operation descriptor".
- *
- * - .tag is a pointer to a mandatory vfile revision tag structure
- * (struct xnvfile_rev_tag). This tag will be monitored for changes by
- * the vfile core while collecting data to output, so that any update
- * detected will cause the current snapshot data to be dropped, and
- * the collection to restart from the beginning. To this end, any
- * change to the data which may be part of the collected records,
- * should also invoke xnvfile_touch() on the associated tag.
- *
- * - entry.lockops is a pointer to a @ref vfile_lockops "lock descriptor",
- * defining the lock and unlock operations for the vfile. This pointer
- * may be left to NULL, in which case the operations on the nucleus
- * lock (i.e. nklock) will be used internally around calls to data
- * collection handlers (see @ref snapshot_ops "operation descriptor").
- *
- * - .ops is a pointer to an @ref snapshot_ops "operation descriptor".
- *
- * @param parent A pointer to a virtual directory descriptor; the
- * vfile entry will be created into this directory. If NULL, the /proc
- * root directory will be used. /proc/steely is mapped on the
- * globally available @a steely_vfroot vdir.
- *
- * @return 0 is returned on success. Otherwise:
- *
- * - -ENOMEM is returned if the virtual file entry cannot be created
- * in the /proc hierarchy.
- *
- * @coretags{secondary-only}
- */
 int xnvfile_init_snapshot(const char *name,
 			  struct xnvfile_snapshot *vfile,
 			  struct xnvfile_directory *parent)
@@ -597,40 +490,6 @@ static struct file_operations vfile_regular_fops = {
 	.release = vfile_regular_release,
 };
 
-/**
- * @fn int xnvfile_init_regular(const char *name, struct xnvfile_regular *vfile, struct xnvfile_directory *parent)
- * @brief Initialize a regular vfile.
- *
- * @param name The name which should appear in the pseudo-filesystem,
- * identifying the vfile entry.
- *
- * @param vfile A pointer to a vfile descriptor to initialize
- * from. The following fields in this structure should be filled in
- * prior to call this routine:
- *
- * - .privsz is the size (in bytes) of the private data area to be
- * reserved in the @ref regular_iterator "vfile iterator". A NULL
- * value indicates that no private area should be reserved.
- *
- * - entry.lockops is a pointer to a @ref vfile_lockops "locking
- * descriptor", defining the lock and unlock operations for the
- * vfile. This pointer may be left to NULL, in which case no
- * locking will be applied.
- *
- * - .ops is a pointer to an @ref regular_ops "operation descriptor".
- *
- * @param parent A pointer to a virtual directory descriptor; the
- * vfile entry will be created into this directory. If NULL, the /proc
- * root directory will be used. /proc/steely is mapped on the globally
- * available @a steely_vfroot vdir.
- *
- * @return 0 is returned on success. Otherwise:
- *
- * - -ENOMEM is returned if the virtual file entry cannot be created
- * in the /proc hierarchy.
- *
- * @coretags{secondary-only}
- */
 int xnvfile_init_regular(const char *name,
 			 struct xnvfile_regular *vfile,
 			 struct xnvfile_directory *parent)
@@ -653,28 +512,6 @@ int xnvfile_init_regular(const char *name,
 }
 EXPORT_SYMBOL_GPL(xnvfile_init_regular);
 
-/**
- * @fn int xnvfile_init_dir(const char *name, struct xnvfile_directory *vdir, struct xnvfile_directory *parent)
- * @brief Initialize a virtual directory entry.
- *
- * @param name The name which should appear in the pseudo-filesystem,
- * identifying the vdir entry.
- *
- * @param vdir A pointer to the virtual directory descriptor to
- * initialize.
- *
- * @param parent A pointer to a virtual directory descriptor standing
- * for the parent directory of the new vdir.  If NULL, the /proc root
- * directory will be used. /proc/steely is mapped on the globally
- * available @a steely_vfroot vdir.
- *
- * @return 0 is returned on success. Otherwise:
- *
- * - -ENOMEM is returned if the virtual directory entry cannot be
- * created in the /proc hierarchy.
- *
- * @coretags{secondary-only}
- */
 int xnvfile_init_dir(const char *name,
 		     struct xnvfile_directory *vdir,
 		     struct xnvfile_directory *parent)
@@ -697,31 +534,6 @@ int xnvfile_init_dir(const char *name,
 }
 EXPORT_SYMBOL_GPL(xnvfile_init_dir);
 
-/**
- * @fn int xnvfile_init_link(const char *from, const char *to, struct xnvfile_link *vlink, struct xnvfile_directory *parent)
- * @brief Initialize a virtual link entry.
- *
- * @param from The name which should appear in the pseudo-filesystem,
- * identifying the vlink entry.
- *
- * @param to The target file name which should be referred to
- * symbolically by @a name.
- *
- * @param vlink A pointer to the virtual link descriptor to
- * initialize.
- *
- * @param parent A pointer to a virtual directory descriptor standing
- * for the parent directory of the new vlink. If NULL, the /proc root
- * directory will be used. /proc/steely is mapped on the globally
- * available @a steely_vfroot vdir.
- *
- * @return 0 is returned on success. Otherwise:
- *
- * - -ENOMEM is returned if the virtual link entry cannot be created
- * in the /proc hierarchy.
- *
- * @coretags{secondary-only}
- */
 int xnvfile_init_link(const char *from,
 		      const char *to,
 		      struct xnvfile_link *vlink,
@@ -745,48 +557,12 @@ int xnvfile_init_link(const char *from,
 }
 EXPORT_SYMBOL_GPL(xnvfile_init_link);
 
-/**
- * @fn void xnvfile_destroy(struct xnvfile *vfile)
- * @brief Removes a virtual file entry.
- *
- * @param vfile A pointer to the virtual file descriptor to
- * remove.
- *
- * @coretags{secondary-only}
- */
 void xnvfile_destroy(struct xnvfile *vfile)
 {
 	proc_remove(vfile->pde);
 }
 EXPORT_SYMBOL_GPL(xnvfile_destroy);
 
-/**
- * @fn ssize_t xnvfile_get_blob(struct xnvfile_input *input, void *data, size_t size)
- * @brief Read in a data bulk written to the vfile.
- *
- * When writing to a vfile, the associated store() handler from the
- * @ref snapshot_store "snapshot-driven vfile" or @ref regular_store
- * "regular vfile" is called, with a single argument describing the
- * input data. xnvfile_get_blob() retrieves this data as an untyped
- * binary blob, and copies it back to the caller's buffer.
- *
- * @param input A pointer to the input descriptor passed to the
- * store() handler.
- *
- * @param data The address of the destination buffer to copy the input
- * data to.
- *
- * @param size The maximum number of bytes to copy to the destination
- * buffer. If @a size is larger than the actual data size, the input
- * is truncated to @a size.
- *
- * @return The number of bytes read and copied to the destination
- * buffer upon success. Otherwise, a negative error code is returned:
- *
- * - -EFAULT indicates an invalid source buffer address.
- *
- * @coretags{secondary-only}
- */
 ssize_t xnvfile_get_blob(struct xnvfile_input *input,
 			 void *data, size_t size)
 {
@@ -802,35 +578,6 @@ ssize_t xnvfile_get_blob(struct xnvfile_input *input,
 }
 EXPORT_SYMBOL_GPL(xnvfile_get_blob);
 
-/**
- * @fn ssize_t xnvfile_get_string(struct xnvfile_input *input, char *s, size_t maxlen)
- * @brief Read in a C-string written to the vfile.
- *
- * When writing to a vfile, the associated store() handler from the
- * @ref snapshot_store "snapshot-driven vfile" or @ref regular_store
- * "regular vfile" is called, with a single argument describing the
- * input data. xnvfile_get_string() retrieves this data as a
- * null-terminated character string, and copies it back to the
- * caller's buffer.
- *
- * @param input A pointer to the input descriptor passed to the
- * store() handler.
- *
- * @param s The address of the destination string buffer to copy the
- * input data to.
- *
- * @param maxlen The maximum number of bytes to copy to the
- * destination buffer, including the ending null character. If @a
- * maxlen is larger than the actual string length, the input is
- * truncated to @a maxlen.
- *
- * @return The number of characters read upon success. Otherwise, a
- * negative error code is returned:
- *
- * - -EFAULT indicates an invalid source buffer address.
- *
- * @coretags{secondary-only}
- */
 ssize_t xnvfile_get_string(struct xnvfile_input *input,
 			   char *s, size_t maxlen)
 {
@@ -853,37 +600,6 @@ ssize_t xnvfile_get_string(struct xnvfile_input *input,
 }
 EXPORT_SYMBOL_GPL(xnvfile_get_string);
 
-/**
- * @fn ssize_t xnvfile_get_integer(struct xnvfile_input *input, long *valp)
- * @brief Evaluate the string written to the vfile as a long integer.
- *
- * When writing to a vfile, the associated store() handler from the
- * @ref snapshot_store "snapshot-driven vfile" or @ref regular_store
- * "regular vfile" is called, with a single argument describing the
- * input data. xnvfile_get_integer() retrieves and interprets this
- * data as a long integer, and copies the resulting value back to @a
- * valp.
- *
- * The long integer can be expressed in decimal, octal or hexadecimal
- * bases depending on the prefix found.
- *
- * @param input A pointer to the input descriptor passed to the
- * store() handler.
- *
- * @param valp The address of a long integer variable to receive the
- * value.
- *
- * @return The number of characters read while evaluating the input as
- * a long integer upon success. Otherwise, a negative error code is
- * returned:
- *
- * - -EINVAL indicates a parse error on the input stream; the written
- * text cannot be evaluated as a long integer.
- *
- * - -EFAULT indicates an invalid source buffer address.
- *
- * @coretags{secondary-only}
- */
 ssize_t xnvfile_get_integer(struct xnvfile_input *input, long *valp)
 {
 	char *end, buf[32];
@@ -975,5 +691,3 @@ void xnvfile_destroy_root(void)
 	steely_vfroot.entry.pde = NULL;
 	remove_proc_entry("steely", NULL);
 }
-
-/** @} */

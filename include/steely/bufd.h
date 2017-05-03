@@ -21,12 +21,6 @@
 
 #include <linux/types.h>
 
-/**
- * @addtogroup steely_core_bufd
- *
- * @{
- */
-
 struct mm_struct;
 
 struct xnbufd {
@@ -88,7 +82,5 @@ static inline void xnbufd_reset(struct xnbufd *bufd)
 {
 	bufd->b_off = 0;
 }
-
-/** @} */
 
 #endif /* !_STEELY_KERNEL_BUFD_H */

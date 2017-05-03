@@ -34,11 +34,6 @@
 #include "posix/process.h"
 #include "debug.h"
 
-/**
- * @ingroup steely_core
- * @defgroup steely_core_debug Debugging services
- * @{
- */
 struct xnvfile_directory steely_debug_vfroot;
 EXPORT_SYMBOL_GPL(steely_debug_vfroot);
 
@@ -642,5 +637,3 @@ void xndebug_cleanup(void)
 {
 	cleanup_trace_relax();
 }
-
-/** @} */

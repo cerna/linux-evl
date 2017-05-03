@@ -29,7 +29,7 @@ struct steely_process;
 struct steely_mutex {
 	unsigned int magic;
 	struct xnsynch synchbase;
-	/** steely_mutexq */
+	/* steely_mutexq */
 	struct list_head conds;
 	struct steely_mutexattr attr;
 	struct steely_resnode resnode;

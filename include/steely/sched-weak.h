@@ -23,11 +23,6 @@
 #error "please don't include steely/sched-weak.h directly"
 #endif
 
-/**
- * @addtogroup steely_core_sched
- * @{
- */
-
 #ifdef CONFIG_STEELY_SCHED_WEAK
 
 #define XNSCHED_WEAK_MIN_PRIO	0
@@ -53,7 +48,5 @@ static inline int xnsched_weak_init_thread(struct xnthread *thread)
 }
 
 #endif /* CONFIG_STEELY_SCHED_WEAK */
-
-/** @} */
 
 #endif /* !_STEELY_KERNEL_SCHED_WEAK_H */

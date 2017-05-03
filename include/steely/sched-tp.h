@@ -23,11 +23,6 @@
 #error "please don't include steely/sched-tp.h directly"
 #endif
 
-/**
- * @addtogroup steely_core_sched
- * @{
- */
-
 #ifdef CONFIG_STEELY_SCHED_TP
 
 #define XNSCHED_TP_MIN_PRIO	1
@@ -51,22 +46,22 @@ struct xnsched_tp_schedule {
 
 struct xnsched_tp {
 	struct xnsched_tpslot {
-		/** Per-partition runqueue. */
+		/* Per-partition runqueue. */
 		xnsched_queue_t runnable;
 	} partitions[CONFIG_STEELY_SCHED_TP_NRPART];
-	/** Idle slot for passive windows. */
+	/* Idle slot for passive windows. */
 	struct xnsched_tpslot idle;
-	/** Active partition slot */
+	/* Active partition slot */
 	struct xnsched_tpslot *tps;
-	/** Time frame timer */
+	/* Time frame timer */
 	struct xntimer tf_timer;
-	/** Global partition schedule */
+	/* Global partition schedule */
 	struct xnsched_tp_schedule *gps;
-	/** Window index of next partition */
+	/* Window index of next partition */
 	int wnext;
-	/** Start of next time frame */
+	/* Start of next time frame */
 	xnticks_t tf_start;
-	/** Assigned thread queue */
+	/* Assigned thread queue */
 	struct list_head threads;
 };
 
@@ -93,7 +88,5 @@ xnsched_tp_get_schedule(struct xnsched *sched);
 void xnsched_tp_put_schedule(struct xnsched_tp_schedule *gps);
 
 #endif /* CONFIG_STEELY_SCHED_TP */
-
-/** @} */
 
 #endif /* !_STEELY_KERNEL_SCHED_TP_H */

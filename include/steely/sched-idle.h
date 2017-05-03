@@ -23,11 +23,6 @@
 #error "please don't include steely/sched-idle.h directly"
 #endif
 
-/**
- * @addtogroup steely_core_sched
- * @{
- */
-
 /* Idle priority level - actually never used for indexing. */
 #define XNSCHED_IDLE_PRIO	-1
 
@@ -65,7 +60,5 @@ static inline int xnsched_idle_init_thread(struct xnthread *thread)
 {
 	return 0;
 }
-
-/** @} */
 
 #endif /* !_STEELY_KERNEL_SCHED_IDLE_H */

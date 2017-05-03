@@ -267,23 +267,6 @@ static struct proxy_tick_ops proxy_ops = {
 	.handle_event = core_clock_event_handler,
 };
 
-/**
- * @brief Switch clock events to high-precision mode on real-time CPUs.
- *
- * @return Zero is returned on success, otherwise:
- *
- * - -EAGAIN, cannot allocate interrupt from the virtual domain.  This
- * is likely a Steely issue.
- *
- * - -ENODEV, the high-precision clock source from the pipeline is not
- * available. This is an IRQ pipeline issue.
- *
- * - -EINVAL, the clock event devices currently used by the kernel are
- * unsuitable for high-precision timing (not adapted to pipelined
- * mode). This is an IRQ pipeline issue.
- *
- * @coretags{secondary-only}
- */
 int xnclock_core_takeover(void)
 {
 	struct timeval tv;
@@ -353,15 +336,6 @@ int xnclock_core_takeover(void)
 }
 EXPORT_SYMBOL_GPL(xnclock_core_takeover);
 
-/**
- * @fn void xnclock_core_release(void)
- * @brief Release clock devices to the kernel.
- *
- * Release the clock devices previously taken over by a call to
- * xnclock_core_takeover().
- *
- * @coretags{secondary-only}
- */
 void xnclock_core_release(void)
 {
 	tick_uninstall_proxy(&proxy_ops, &xnsched_realtime_cpus);

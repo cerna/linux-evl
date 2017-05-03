@@ -23,11 +23,6 @@
 #include <steely/vfile.h>
 #include <steely/coreclk.h>
 
-/**
- * @addtogroup steely_core_clock
- * @{
- */
-
 struct xnsched;
 struct xntimerdata;
 
@@ -38,13 +33,13 @@ struct xnclock_gravity {
 };
 
 struct xnclock {
-	/** (ns) */
+	/* (ns) */
 	xnticks_t wallclock_offset;
-	/** (ns) */
+	/* (ns) */
 	xnticks_t resolution;
-	/** (raw clock ticks). */
+	/* (raw clock ticks). */
 	struct xnclock_gravity gravity;
-	/** Clock name. */
+	/* Clock name. */
 	const char *name;
 	struct {
 #ifdef CONFIG_STEELY_EXTCLOCK
@@ -75,7 +70,7 @@ struct xnclock {
 	struct xntimerdata *timerdata;
 	int id;
 #ifdef CONFIG_SMP
-	/** Possible CPU affinity of clock beat. */
+	/* Possible CPU affinity of clock beat. */
 	struct cpumask affinity;
 #endif
 #ifdef CONFIG_STEELY_STATS
@@ -311,7 +306,5 @@ void xnclock_update_freq(unsigned long long freq);
 int xnclock_init(unsigned long long freq);
 
 void xnclock_cleanup(void);
-
-/** @} */
 
 #endif /* !_STEELY_KERNEL_CLOCK_H */

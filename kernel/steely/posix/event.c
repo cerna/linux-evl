@@ -35,9 +35,6 @@
  * awaited events must have occurred to wake up), or in a disjunctive
  * way (at least one of the awaited events must have occurred to wake
  * up).
- *
- * We expose this non-POSIX feature through the internal API, as a
- * fast IPC mechanism available to the Copperplate interface.
  */
 
 struct event_wait_context {

@@ -19,11 +19,6 @@
 #ifndef _STEELY_KERNEL_SCHEDPARAM_H
 #define _STEELY_KERNEL_SCHEDPARAM_H
 
-/**
- * @addtogroup steely_core_sched
- * @{
- */
-
 struct xnsched_idle_param {
 	int prio;
 };
@@ -71,7 +66,5 @@ union xnsched_policy_param {
 	struct xnsched_quota_param quota;
 #endif
 };
-
-/** @} */
 
 #endif /* !_STEELY_KERNEL_SCHEDPARAM_H */

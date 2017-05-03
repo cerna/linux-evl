@@ -24,21 +24,6 @@
 #include <steely/thread.h>
 #include <steely/assert.h>
 
-/**
- * @ingroup steely_core
- * @defgroup steely_core_registry Registry services
- *
- * The registry provides a mean to index object descriptors on unique
- * alphanumeric keys. When labeled this way, an object is globally
- * exported; it can be searched for, and its descriptor returned to
- * the caller for further use; the latter operation is called a
- * "binding". When no object has been registered under the given name
- * yet, the registry can be asked to set up a rendez-vous, blocking
- * the caller until the object is eventually registered.
- *
- *@{
- */
-
 struct xnobject *registry_obj_slots;
 EXPORT_SYMBOL_GPL(registry_obj_slots);
 
@@ -477,50 +462,6 @@ static inline int registry_wakeup_sleepers(const char *key)
 	return cnt;
 }
 
-/**
- * @fn int xnregistry_enter(const char *key,void *objaddr,xnhandle_t *phandle,struct xnpnode *pnode)
- * @brief Register a real-time object.
- *
- * This service allocates a new registry slot for an associated
- * object, and indexes it by an alphanumeric key for later retrieval.
- *
- * @param key A valid NULL-terminated string by which the object will
- * be indexed and later retrieved in the registry. Since it is assumed
- * that such key is stored into the registered object, it will *not*
- * be copied but only kept by reference in the registry. Pass an empty
- * or NULL string if the object shall only occupy a registry slot for
- * handle-based lookups. The slash character is not accepted in @a key
- * if @a pnode is non-NULL.
- *
- * @param objaddr An opaque pointer to the object to index by @a
- * key.
- *
- * @param phandle A pointer to a generic handle defined by the
- * registry which will uniquely identify the indexed object, until the
- * latter is unregistered using the xnregistry_remove() service.
- *
- * @param pnode A pointer to an optional /proc node class
- * descriptor. This structure provides the information needed to
- * export all objects from the given class through the /proc
- * filesystem, under the /proc/steely/registry entry. Passing NULL
- * indicates that no /proc support is available for the newly
- * registered object.
- *
- * @return 0 is returned upon success. Otherwise:
- *
- * - -EINVAL is returned if @a objaddr is NULL.
- *
- * - -EINVAL if @a pnode is non-NULL, and @a key points to a valid
- * string containing a '/' character.
- *
- * - -ENOMEM is returned if the system fails to get enough dynamic
- * memory from the global real-time heap in order to register the
- * object.
- *
- * - -EEXIST is returned if the @a key is already in use.
- *
- * @coretags{unrestricted, might-switch, atomic-entry}
- */
 int xnregistry_enter(const char *key, void *objaddr,
 		     xnhandle_t *phandle, struct xnpnode *pnode)
 {
@@ -584,61 +525,6 @@ unlock_and_exit:
 }
 EXPORT_SYMBOL_GPL(xnregistry_enter);
 
-/**
- * @fn int xnregistry_bind(const char *key,xnticks_t timeout,int timeout_mode,xnhandle_t *phandle)
- * @brief Bind to a real-time object.
- *
- * This service retrieves the registry handle of a given object
- * identified by its key. Unless otherwise specified, this service
- * will block the caller if the object is not registered yet, waiting
- * for such registration to occur.
- *
- * @param key A valid NULL-terminated string which identifies the
- * object to bind to.
- *
- * @param timeout The timeout which may be used to limit the time the
- * thread wait for the object to be registered. This value is a wait
- * time given as a count of nanoseconds. It can either be relative,
- * absolute monotonic (XN_ABSOLUTE), or absolute adjustable
- * (XN_REALTIME) depending on @a timeout_mode. Passing XN_INFINITE @b
- * and setting @a timeout_mode to XN_RELATIVE specifies an unbounded
- * wait. Passing XN_NONBLOCK causes the service to return immediately
- * without waiting if the object is not registered on entry. All other
- * values are used as a wait limit.
- *
- * @param timeout_mode The mode of the @a timeout parameter. It can
- * either be set to XN_RELATIVE, XN_ABSOLUTE, or XN_REALTIME (see also
- * xntimer_start()).
- *
- * @param phandle A pointer to a memory location which will be written
- * upon success with the generic handle defined by the registry for
- * the retrieved object. Contents of this memory is undefined upon
- * failure.
- *
- * @return 0 is returned upon success. Otherwise:
- *
- * - -EINVAL is returned if @a key is NULL.
- *
- * - -EINTR is returned if xnthread_unblock() has been called for the
- * waiting thread before the retrieval has completed.
- *
- * - -EWOULDBLOCK is returned if @a timeout is equal to XN_NONBLOCK
- * and the searched object is not registered on entry. As a special
- * exception, this error is also returned if this service should
- * block, but was called from a context which cannot sleep
- * (e.g. interrupt, non-realtime or scheduler locked).
- *
- * - -ETIMEDOUT is returned if the object cannot be retrieved within
- * the specified amount of time.
- *
- * @coretags{primary-only, might-switch}
- *
- * @note xnregistry_bind() only returns the index portion of a handle,
- * which might include other fixed bits to be complete
- * (e.g. XNSYNCH_PSHARED). The caller is responsible for completing
- * the handle returned with those bits if applicable, depending on the
- * context.
- */
 int xnregistry_bind(const char *key, xnticks_t timeout, int timeout_mode,
 		    xnhandle_t *phandle)
 {
@@ -692,23 +578,6 @@ unlock_and_exit:
 }
 EXPORT_SYMBOL_GPL(xnregistry_bind);
 
-/**
- * @fn int xnregistry_remove(xnhandle_t handle)
- * @brief Forcibly unregister a real-time object.
- *
- * This service forcibly removes an object from the registry. The
- * removal is performed regardless of the current object's locking
- * status.
- *
- * @param handle The generic handle of the object to remove.
- *
- * @return 0 is returned upon success. Otherwise:
- *
- * - -ESRCH is returned if @a handle does not reference a registered
- * object.
- *
- * @coretags{unrestricted}
- */
 int xnregistry_remove(xnhandle_t handle)
 {
 	struct xnobject *object;
@@ -755,11 +624,6 @@ unlock_and_exit:
 }
 EXPORT_SYMBOL_GPL(xnregistry_remove);
 
-/**
- * Turn a named object into an anonymous object
- *
- * @coretags{unrestricted}
- */
 int xnregistry_unlink(const char *key)
 {
 	struct xnobject *object;
@@ -899,26 +763,3 @@ void xnregistry_cleanup(void)
 
 	kfree(registry_obj_slots);
 }
-
-/**
- * @fn void *xnregistry_lookup(xnhandle_t handle, unsigned long *cstamp_r)
- * @brief Find a real-time object into the registry.
- *
- * This service retrieves an object from its handle into the registry
- * and returns the memory address of its descriptor. Optionally, it
- * also copies back the object's creation stamp which is unique across
- * object registration calls.
- *
- * @param handle The generic handle of the object to fetch.
- *
- * @param cstamp_r If not-NULL, the object's creation stamp will be
- * copied to this memory area.
- *
- * @return The memory address of the object's descriptor is returned
- * on success. Otherwise, NULL is returned if @a handle does not
- * reference a registered object.
- *
- * @coretags{unrestricted}
- */
-
-/** @} */

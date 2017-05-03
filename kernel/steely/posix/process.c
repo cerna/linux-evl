@@ -367,36 +367,6 @@ int steely_bind_core(int ufeatures)
 	return 0;
 }
 
-/**
- * @fn int steely_register_personality(struct xnthread_personality *personality)
- * @internal
- * @brief Register a new interface personality.
- *
- * - personality->ops.attach_process() is called when a user-space
- *   process binds to the personality, on behalf of one of its
- *   threads. The attach_process() handler may return:
- *
- *   . an opaque pointer, representing the context of the calling
- *   process for this personality;
- *
- *   . a NULL pointer, meaning that no per-process structure should be
- *   attached to this process for this personality;
- *
- *   . ERR_PTR(negative value) indicating an error, the binding
- *   process will then abort.
- *
- * - personality->ops.detach_process() is called on behalf of an
- *   exiting user-space process which has previously attached to the
- *   personality. This handler is passed a pointer to the per-process
- *   data received earlier from the ops->attach_process() handler.
- *
- * @return the personality (extension) identifier.
- *
- * @note steely_get_context() is NULL when ops.detach_process() is
- * invoked for the personality the caller detaches from.
- *
- * @coretags{secondary-only}
- */
 int steely_register_personality(struct xnthread_personality *personality)
 {
 	int xid;
@@ -420,11 +390,6 @@ out:
 }
 EXPORT_SYMBOL_GPL(steely_register_personality);
 
-/*
- * @brief Unregister an interface personality.
- *
- * @coretags{secondary-only}
- */
 int steely_unregister_personality(int xid)
 {
 	struct xnthread_personality *personality;
@@ -447,22 +412,6 @@ int steely_unregister_personality(int xid)
 }
 EXPORT_SYMBOL_GPL(steely_unregister_personality);
 
-/**
- * Stack a new personality over Steely for the current thread.
- *
- * This service registers the current thread as a member of the
- * additional personality identified by @a xid. If the current thread
- * is already assigned this personality, the call returns successfully
- * with no effect.
- *
- * @param xid the identifier of the additional personality.
- *
- * @return A handle to the previous personality. The caller should
- * save this handle for unstacking @a xid when applicable via a call
- * to steely_pop_personality().
- *
- * @coretags{secondary-only}
- */
 struct xnthread_personality *
 steely_push_personality(int xid)
 {
@@ -495,16 +444,6 @@ steely_push_personality(int xid)
 }
 EXPORT_SYMBOL_GPL(steely_push_personality);
 
-/**
- * Pop the topmost personality from the current thread.
- *
- * This service pops the topmost personality off the current thread.
- *
- * @param prev the previous personality which was returned by the
- * latest call to steely_push_personality() for the current thread.
- *
- * @coretags{secondary-only}
- */
 void steely_pop_personality(struct xnthread_personality *prev)
 {
 	struct dovetail_state *p = dovetail_current_state();
@@ -515,28 +454,6 @@ void steely_pop_personality(struct xnthread_personality *prev)
 }
 EXPORT_SYMBOL_GPL(steely_pop_personality);
 
-/**
- * Return the per-process data attached to the calling user process.
- *
- * This service returns the per-process data attached to the calling
- * user process for the personality whose xid is @a xid.
- *
- * The per-process data was obtained from the ->attach_process()
- * handler defined for the personality @a xid refers to.
- *
- * See steely_register_personality() documentation for information on
- * the way to attach a per-process data to a process.
- *
- * @param xid the personality identifier.
- *
- * @return the per-process data if the current context is a user-space
- * process; @return NULL otherwise. As a special case,
- * steely_get_context(0) returns the current Steely process
- * descriptor, which is strictly identical to calling
- * steely_current_process().
- *
- * @coretags{task-unrestricted}
- */
 void *steely_get_context(int xid)
 {
 	return lookup_context(xid);
@@ -630,35 +547,6 @@ void arch_dovetail_init_task(struct task_struct *tsk)
 	dovetail_init_task_state(p);
 }
 
-/**
- * @fn int steely_map_user(struct xnthread *thread, __u32 __user *u_winoff)
- * @internal
- * @brief Create a shadow thread context over the current user task.
- *
- * This call maps a Steely thread to the current user task.  The
- * priority and scheduling class of the underlying task are not
- * affected; it is assumed that the interface library did set them
- * appropriately before issuing the shadow mapping request.
- *
- * @param thread The descriptor address of the new shadow thread to be
- * mapped to current. This descriptor must have been previously
- * initialized by a call to xnthread_init().
- *
- * @param u_winoff will receive the offset of the per-thread
- * "u_window" structure in the global heap associated to @a
- * thread. This structure reflects thread state information visible
- * from userland through a shared memory window.
- *
- * @return 0 is returned on success. Otherwise:
- *
- * - -EINVAL is returned if the thread control block does not bear the
- * XNUSER bit.
- *
- * - -EBUSY is returned if either the current Linux task or the
- * associated shadow thread is already involved in a shadow mapping.
- *
- * @coretags{secondary-only}
- */
 int steely_map_user(struct xnthread *thread, __u32 __user *u_winoff)
 {
 	struct xnthread_user_window *u_window;

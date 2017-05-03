@@ -1,4 +1,4 @@
-/**
+/*
  *   Copyright &copy; 2012 Philippe Gerum.
  *
  *   Xenomai is free software; you can redistribute it and/or modify

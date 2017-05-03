@@ -28,8 +28,7 @@
  * conditions and the serialization support into a single object
  * performs better on low end hw caches and allows for specific
  * optimizations, compared to using separate general-purpose mutex and
- * condvars. This object is used by the Copperplate interface
- * internally when it runs over the Steely core.
+ * condvars.
  *
  * Threads can wait for some resource(s) to be granted (consumer
  * side), or wait for the available resource(s) to drain (producer
@@ -44,9 +43,6 @@
  * wait for the DRAINED condition to be satisfied, issuing GRANT
  * signals once more resources have been made available to the
  * consumer.
- *
- * Implementation-wise, the monitor logic is shared with the Steely
- * thread object.
  */
 STEELY_SYSCALL(monitor_init, current,
 	       (struct steely_monitor_shadow __user *u_mon,

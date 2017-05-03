@@ -21,11 +21,6 @@
 
 #include <asm/bitsperlong.h>
 
-/**
- * @addtogroup steely_core_map
- * @{
- */
-
 #define XNMAP_MAX_KEYS	(BITS_PER_LONG * BITS_PER_LONG)
 
 struct xnmap {
@@ -68,7 +63,5 @@ static inline void *xnmap_fetch(struct xnmap *map, int key)
 
 	return map->objarray[ofkey];
 }
-
-/** @} */
 
 #endif /* !_STEELY_KERNEL_MAP_H */

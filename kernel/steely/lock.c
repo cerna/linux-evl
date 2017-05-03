@@ -20,24 +20,6 @@
 #include <linux/module.h>
 #include <steely/lock.h>
 
-/**
- * @ingroup steely_core
- * @defgroup steely_core_lock Locking services
- *
- * The Xenomai core deals with concurrent activities from two distinct
- * kernels running side-by-side. When interrupts are involved, the
- * services from this section control the @b hard interrupt state
- * exclusively, for protecting against processor-local or SMP
- * concurrency.
- *
- * @note In a dual kernel configuration, <i>hard interrupts</i> are
- * gated by the CPU. When enabled, hard interrupts are immediately
- * delivered to the Xenomai core if they belong to a real-time source,
- * or deferred until enabled by a second-stage virtual interrupt mask,
- * if they belong to regular Linux devices/sources.
- *
- * @{
- */
 DEFINE_XNLOCK(nklock);
 #if defined(CONFIG_SMP) || STEELY_DEBUG(LOCKING)
 EXPORT_SYMBOL_GPL(nklock);
@@ -61,5 +43,3 @@ EXPORT_SYMBOL_GPL(___xnlock_put);
 DEFINE_PER_CPU(struct xnlockinfo, xnlock_stats);
 EXPORT_PER_CPU_SYMBOL_GPL(xnlock_stats);
 #endif
-
-/** @} */

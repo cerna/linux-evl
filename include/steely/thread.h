@@ -34,10 +34,6 @@
 #include <asm/steely/machine.h>
 #include <asm/steely/thread.h>
 
-/**
- * @addtogroup steely_core_thread
- * @{
- */
 #define XNTHREAD_BLOCK_BITS   (XNSUSP|XNPEND|XNDELAY|XNDORMANT|XNRELAX|XNHELD)
 #define XNTHREAD_MODE_BITS    (XNRRB|XNWARN|XNTRAPLB)
 
@@ -110,35 +106,35 @@ struct xnthread {
 #endif
 	struct cpumask affinity;	/* Processor affinity. */
 
-	/** Base priority (before PI/PP boost) */
+	/* Base priority (before PI/PP boost) */
 	int bprio;
 
-	/** Current (effective) priority */
+	/* Current (effective) priority */
 	int cprio;
 
-	/**
+	/*
 	 * Weighted priority (cprio + scheduling class weight).
 	 */
 	int wprio;
 
-	int lock_count;	/** Scheduler lock count. */
+	int lock_count;	/* Scheduler lock count. */
 
-	/**
+	/*
 	 * Thread holder in xnsched run queue. Ordered by
 	 * thread->cprio.
 	 */
 	struct list_head rlink;
 
-	/**
+	/*
 	 * Thread holder in xnsynch pendq. Prioritized by
 	 * thread->cprio + scheduling class weight.
 	 */
 	struct list_head plink;
 
-	/** Thread holder in global queue. */
+	/* Thread holder in global queue. */
 	struct list_head glink;
 
-	/**
+	/*
 	 * List of xnsynch owned by this thread which cause a priority
 	 * boost due to one of the following reasons:
 	 *
@@ -184,7 +180,7 @@ struct xnthread {
 	void (*entry)(void *cookie); /* Thread entry routine */
 	void *cookie;		/* Cookie to pass to the entry routine */
 
-	/**
+	/*
 	 * Thread data visible from userland through a window on the
 	 * global heap.
 	 */
@@ -363,51 +359,16 @@ void __xnthread_cleanup(struct xnthread *curr);
 
 void __xnthread_discard(struct xnthread *thread);
 
-/**
- * @fn struct xnthread *xnthread_current(void)
- * @brief Retrieve the current Steely core TCB.
- *
- * Returns the address of the current Steely core thread descriptor,
- * or NULL if running over a regular Linux task. This call is not
- * affected by the current runtime mode of the core thread.
- *
- * @note The returned value may differ from xnsched_current_thread()
- * called from the same context, since the latter returns the root
- * thread descriptor for the current CPU if the caller is running in
- * secondary mode.
- *
- * @coretags{unrestricted}
- */
 static inline struct xnthread *xnthread_current(void)
 {
 	return dovetail_current_state()->thread;
 }
 
-/**
- * @fn struct xnthread *xnthread_from_task(struct task_struct *p)
- * @brief Retrieve the Steely core TCB attached to a Linux task.
- *
- * Returns the address of the Steely core thread descriptor attached
- * to the Linux task @a p, or NULL if @a p is a regular Linux
- * task. This call is not affected by the current runtime mode of the
- * core thread.
- *
- * @coretags{unrestricted}
- */
 static inline struct xnthread *xnthread_from_task(struct task_struct *p)
 {
 	return dovetail_task_state(p)->thread;
 }
 
-/**
- * @fn void xnthread_test_cancel(void)
- * @brief Introduce a thread cancellation point.
- *
- * Terminates the current thread if a cancellation request is pending
- * for it, i.e. if xnthread_cancel() was called.
- *
- * @coretags{mode-unrestricted}
- */
 static inline void xnthread_test_cancel(void)
 {
 	struct xnthread *curr = xnthread_current();
@@ -570,7 +531,5 @@ static inline void xnthread_propagate_schedparam(struct xnthread *curr)
 }
 
 extern struct xnthread_personality steely_personality;
-
-/** @} */
 
 #endif /* !_STEELY_KERNEL_THREAD_H */

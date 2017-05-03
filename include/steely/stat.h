@@ -22,11 +22,6 @@
 
 #include <steely/clock.h>
 
-/*
- * @ingroup steely_core_thread
- * @defgroup steely_core_stat Thread runtime statistics
- * @{
- */
 #ifdef CONFIG_STEELY_STATS
 
 typedef struct xnstat_exectime {
@@ -146,7 +141,5 @@ typedef struct xnstat_counter {
 	xnstat_exectime_update(sched, date); \
 	xnstat_exectime_set_current(sched, new_account); \
 })
-
-/** @} */
 
 #endif /* !_STEELY_KERNEL_STAT_H */

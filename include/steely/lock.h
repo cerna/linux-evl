@@ -24,43 +24,16 @@
 #include <linux/percpu.h>
 #include <steely/assert.h>
 
-/**
- * @addtogroup steely_core_lock
- *
- * @{
- */
 typedef unsigned long spl_t;
 
-/**
- * Hard disable interrupts on the local processor, saving previous state.
- *
- * @param[out] x An unsigned long integer context variable
- */
 #define splhigh(x)  ((x) = head_irq_save() & 1)
 #ifdef CONFIG_SMP
-/**
- * Restore the saved hard interrupt state on the local processor.
- *
- * @param[in] x The context variable previously updated by splhigh()
- */
 #define splexit(x)  head_irq_restore(x & 1)
 #else /* !CONFIG_SMP */
 #define splexit(x)  head_irq_restore(x)
 #endif /* !CONFIG_SMP */
-/**
- * Hard disable interrupts on the local processor.
- */
 #define splmax()    head_irq_disable()
-/**
- * Hard enable interrupts on the local processor.
- */
 #define splnone()   head_irq_enable()
-/**
- * Test hard interrupt state on the local processor.
- *
- * @return Zero if the local processor currently accepts interrupts,
- * non-zero otherwise.
- */
 #define spltest()   head_irqs_disabled()
 
 #if STEELY_DEBUG(LOCKING)
@@ -265,7 +238,5 @@ static inline void __xnlock_put(struct xnlock *lock /*, */ XNLOCK_DBG_CONTEXT_AR
 #endif /* !(CONFIG_SMP || STEELY_DEBUG(LOCKING)) */
 
 DECLARE_EXTERN_XNLOCK(nklock);
-
-/** @} */
 
 #endif /* !_STEELY_KERNEL_LOCK_H */

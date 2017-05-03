@@ -25,25 +25,6 @@
 #include <uapi/steely/kernel/types.h>
 #include <uapi/steely/kernel/heap.h>
 
-/**
- * @addtogroup steely_core_heap
- * @{
- *
- * @par Implementation constraints
- *
- * - Minimum page size is 2 ** XNHEAP_MINLOG2 (must be large enough to
- * hold a pointer).
- *
- * - Maximum page size is 2 ** XNHEAP_MAXLOG2.
- *
- * - Requested block size is rounded up to XNHEAP_MINLOG2.
- *
- * - Requested block size larger than 2 times the XNHEAP_PAGESZ is
- * rounded up to the next page boundary and obtained from the free
- * page list. So we need a bucket for each power of two between
- * XNHEAP_MINLOG2 and XNHEAP_MAXLOG2 inclusive, plus one to honor
- * requests ranging from the maximum page size to twice this size.
- */
 #define XNHEAP_PAGESZ	  PAGE_SIZE
 #define XNHEAP_MINLOG2    3
 #define XNHEAP_MAXLOG2    22	/* Holds pagemap.bcount blocks */
@@ -57,36 +38,36 @@
 #define XNHEAP_PLIST   2
 
 struct xnpagemap {
-	/** PFREE, PCONT, PLIST or log2 */
+	/* PFREE, PCONT, PLIST or log2 */
 	u32 type : 8;
-	/** Number of active blocks */
+	/* Number of active blocks */
 	u32 bcount : 24;
 };
 
 struct xnheap {
-	/** SMP lock */
+	/* SMP lock */
 	DECLARE_XNLOCK(lock);
-	/** Base address of the page array */
+	/* Base address of the page array */
 	caddr_t membase;
-	/** Memory limit of page array */
+	/* Memory limit of page array */
 	caddr_t memlim;
-	/** Number of pages in the freelist */
+	/* Number of pages in the freelist */
 	int npages;
-	/** Head of the free page list */
+	/* Head of the free page list */
 	caddr_t freelist;
-	/** Address of the page map */
+	/* Address of the page map */
 	struct xnpagemap *pagemap;
-	/** Link to heapq */
+	/* Link to heapq */
 	struct list_head next;
-	/** log2 bucket list */
+	/* log2 bucket list */
 	struct xnbucket {
 		caddr_t freelist;
 		int fcount;
 	} buckets[XNHEAP_NBUCKETS];
 	char name[XNOBJECT_NAME_LEN];
-	/** Size of storage area */
+	/* Size of storage area */
 	u32 size;
-	/** Used/busy storage size */
+	/* Used/busy storage size */
 	u32 used;
 };
 
@@ -168,7 +149,5 @@ static inline char *xnstrdup(const char *s)
 
 	return strcpy(p, s);
 }
-
-/** @} */
 
 #endif /* !_STEELY_KERNEL_HEAP_H */
