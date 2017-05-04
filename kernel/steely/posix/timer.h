@@ -28,7 +28,7 @@
 struct steely_timer {
 	struct xntimer timerbase;
 	timer_t id;
-	int overruns;
+	unsigned long overruns;
 	clockid_t clockid;
 	pid_t target;
 	struct steely_sigpending sigp;

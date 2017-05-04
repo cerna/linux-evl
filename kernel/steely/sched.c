@@ -897,7 +897,7 @@ static struct xnvfile_directory sched_vfroot;
 
 struct vfile_schedlist_priv {
 	struct xnthread *curr;
-	xnticks_t start_time;
+	ktime_t start_time;
 };
 
 struct vfile_schedlist_data {
@@ -907,7 +907,7 @@ struct vfile_schedlist_data {
 	char sched_class[XNOBJECT_NAME_LEN];
 	char personality[XNOBJECT_NAME_LEN];
 	int cprio;
-	xnticks_t timeout;
+	ktime_t timeout;
 	int state;
 };
 
@@ -936,9 +936,9 @@ static int vfile_schedlist_next(struct xnvfile_snapshot_iterator *it,
 {
 	struct vfile_schedlist_priv *priv = xnvfile_iterator_priv(it);
 	struct vfile_schedlist_data *p = data;
-	xnticks_t timeout, period;
+	ktime_t timeout, period;
 	struct xnthread *thread;
-	xnticks_t base_time;
+	ktime_t base_time;
 
 	if (priv->curr == NULL)
 		return 0;	/* All done. */
@@ -1059,11 +1059,11 @@ struct vfile_schedstat_data {
 	unsigned long csw;
 	unsigned long xsc;
 	unsigned long pf;
-	xnticks_t exectime_period;
-	xnticks_t account_period;
-	xnticks_t exectime_total;
+	ktime_t exectime_period;
+	ktime_t account_period;
+	ktime_t exectime_total;
 	struct xnsched_class *sched_class;
-	xnticks_t period;
+	ktime_t period;
 	int cprio;
 };
 
@@ -1099,7 +1099,7 @@ static int vfile_schedstat_next(struct xnvfile_snapshot_iterator *it,
 	struct vfile_schedstat_data *p = data;
 	struct xnthread *thread;
 	struct xnsched *sched;
-	xnticks_t period;
+	ktime_t period;
 	int ret;
 
 	/*
@@ -1129,13 +1129,15 @@ static int vfile_schedstat_next(struct xnvfile_snapshot_iterator *it,
 	p->cprio = thread->cprio;
 	p->period = xnthread_get_period(thread);
 
-	period = sched->last_account_switch - thread->stat.lastperiod.start;
-	if (period == 0 && thread == sched->curr) {
-		p->exectime_period = 1;
-		p->account_period = 1;
+	period = ktime_sub(sched->last_account_switch,
+			   thread->stat.lastperiod.start);
+	if (ktime_to_ns(period) == 0 && thread == sched->curr) {
+		p->exectime_period = ktime_set(0, 1);
+		p->account_period = ktime_set(0, 1);
 	} else {
-		p->exectime_period = thread->stat.account.total -
-			thread->stat.lastperiod.total;
+		p->exectime_period =
+			ktime_sub(thread->stat.account.total,
+				  thread->stat.lastperiod.total);
 		p->account_period = period;
 	}
 	p->exectime_total = thread->stat.account.total;
@@ -1219,9 +1221,9 @@ static int vfile_schedacct_show(struct xnvfile_snapshot_iterator *it,
 
 	xnvfile_printf(it, "%u %d %lu %lu %lu %lu %.8x %Lu %Lu %Lu %s %s %d %Lu\n",
 		       p->cpu, p->pid, p->ssw, p->csw, p->xsc, p->pf, p->state,
-		       xnclock_ticks_to_ns(&nkclock, p->account_period),
-		       xnclock_ticks_to_ns(&nkclock, p->exectime_period),
-		       xnclock_ticks_to_ns(&nkclock, p->exectime_total),
+		       ktime_to_ns(p->account_period),
+		       ktime_to_ns(p->exectime_period),
+		       ktime_to_ns(p->exectime_total),
 		       p->name,
 		       p->sched_class->name,
 		       p->cprio,

@@ -107,7 +107,7 @@ ssize_t xnpipe_send(int minor,
 ssize_t xnpipe_mfixup(int minor, struct xnpipe_mh *mh, ssize_t size);
 
 ssize_t xnpipe_recv(int minor,
-		    struct xnpipe_mh **pmh, xnticks_t timeout);
+		    struct xnpipe_mh **pmh, ktime_t timeout);
 
 int xnpipe_flush(int minor, int mode);
 

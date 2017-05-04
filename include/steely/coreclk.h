@@ -19,8 +19,12 @@
 #ifndef _STEELY_KERNEL_CORECLK_H
 #define _STEELY_KERNEL_CORECLK_H
 
+#include <linux/ktime.h>
+#include <linux/timekeeping.h>
 #include <linux/dovetail.h>
 #include <uapi/steely/kernel/types.h>
+
+#define ONE_BILLION  1000000000
 
 struct xnsched;
 
@@ -36,23 +40,20 @@ void xnclock_core_local_shot(struct xnsched *sched);
 
 void xnclock_core_remote_shot(struct xnsched *sched);
 
-xnsticks_t xnclock_core_ns_to_ticks(xnsticks_t ns);
-
-xnsticks_t xnclock_core_ticks_to_ns(xnsticks_t ticks);
-
-xnsticks_t xnclock_core_ticks_to_ns_rounded(xnsticks_t ticks);
-
 unsigned long long xnclock_divrem_billion(unsigned long long value,
 					  unsigned long *rem);
 
-xnticks_t xnclock_core_read_monotonic(void);
-
-static inline xnticks_t xnclock_core_read_raw(void)
+static inline ktime_t xnclock_core_read_monotonic(void)
 {
-	return __ipipe_tsc_get();
+	return ktime_get_mono_fast_ns();
 }
 
-int xnclock_core_init(unsigned long long freq);
+static inline ktime_t xnclock_core_read_cycles(void)
+{
+	return ktime_get_raw_fast_ns(); /* FIXME */
+}
+
+int xnclock_core_init(void);
 
 void xnclock_core_cleanup(void);
 

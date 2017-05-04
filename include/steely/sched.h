@@ -91,7 +91,7 @@ struct xnsched {
 #endif
 #ifdef CONFIG_STEELY_STATS
 	/* Last account switch date (ticks). */
-	xnticks_t last_account_switch;
+	ktime_t last_account_switch;
 	/* Currently active account */
 	xnstat_exectime_t *current_account;
 #endif

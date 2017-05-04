@@ -119,7 +119,7 @@ int xnselect(struct xnselector *selector,
 	     fd_set *out_fds[XNSELECT_MAX_TYPES],
 	     fd_set *in_fds[XNSELECT_MAX_TYPES],
 	     int nfds,
-	     xnticks_t timeout, xntmode_t timeout_mode);
+	     ktime_t timeout, xntmode_t timeout_mode);
 
 void xnselector_destroy(struct xnselector *selector);
 

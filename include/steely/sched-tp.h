@@ -33,13 +33,13 @@
 extern struct xnsched_class xnsched_class_tp;
 
 struct xnsched_tp_window {
-	xnticks_t w_offset;
+	ktime_t w_offset;
 	int w_part;
 };
 
 struct xnsched_tp_schedule {
 	int pwin_nr;
-	xnticks_t tf_duration;
+	ktime_t tf_duration;
 	atomic_t refcount;
 	struct xnsched_tp_window pwins[0];
 };
@@ -60,7 +60,7 @@ struct xnsched_tp {
 	/* Window index of next partition */
 	int wnext;
 	/* Start of next time frame */
-	xnticks_t tf_start;
+	ktime_t tf_start;
 	/* Assigned thread queue */
 	struct list_head threads;
 };

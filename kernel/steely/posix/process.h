@@ -79,7 +79,7 @@ int steely_map_user(struct xnthread *thread, __u32 __user *u_winoff);
 
 void *steely_get_context(int xid);
 
-int steely_yield(xnticks_t min, xnticks_t max);
+int steely_yield(ktime_t min, ktime_t max);
 
 int steely_process_init(void);
 

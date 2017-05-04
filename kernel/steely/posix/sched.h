@@ -70,7 +70,7 @@ int steely_sched_getscheduler_ex(pid_t pid,
 struct xnsched_class *
 steely_sched_policy_param(union xnsched_policy_param *param,
 			  int u_policy, const struct sched_param_ex *param_ex,
-			  xnticks_t *tslice_r);
+			  ktime_t *tslice_r);
 
 STEELY_SYSCALL_DECL(sched_yield, (void));
 

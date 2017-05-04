@@ -728,7 +728,6 @@ DEFINE_EVENT(steely_clock_ident, steely_clock_deregister,
 #define steely_print_clock(__clk_id)					\
 	__print_symbolic(__clk_id,					\
 			 {CLOCK_MONOTONIC, "CLOCK_MONOTONIC"},		\
-			 {CLOCK_MONOTONIC_RAW, "CLOCK_MONOTONIC_RAW"},	\
 			 {CLOCK_REALTIME, "CLOCK_REALTIME"})
 
 TRACE_EVENT(steely_cond_init,

@@ -158,7 +158,7 @@ struct xnthread {
 
 	struct xntimer ptimer;		/* Periodic timer */
 
-	xnticks_t rrperiod;		/* Allotted round-robin period (ns) */
+	ktime_t rrperiod;		/* Allotted round-robin period (ns) */
 
   	struct xnthread_wait_context *wcontext;	/* Active wait context. */
 
@@ -401,10 +401,10 @@ char *xnthread_format_status(unsigned long status,
 int xnthread_set_clock(struct xnthread *thread,
 		       struct xnclock *newclock);
 
-xnticks_t xnthread_get_timeout(struct xnthread *thread,
-			       xnticks_t ns);
+ktime_t xnthread_get_timeout(struct xnthread *thread,
+			     ktime_t base);
 
-xnticks_t xnthread_get_period(struct xnthread *thread);
+ktime_t xnthread_get_period(struct xnthread *thread);
 
 void xnthread_prepare_wait(struct xnthread_wait_context *wc);
 
@@ -421,7 +421,7 @@ int xnthread_set_mode(int clrmask,
 
 void xnthread_suspend(struct xnthread *thread,
 		      int mask,
-		      xnticks_t timeout,
+		      ktime_t timeout,
 		      xntmode_t timeout_mode,
 		      struct xnsynch *wchan);
 
@@ -431,14 +431,14 @@ void xnthread_resume(struct xnthread *thread,
 int xnthread_unblock(struct xnthread *thread);
 
 int xnthread_set_periodic(struct xnthread *thread,
-			  xnticks_t idate,
+			  ktime_t idate,
 			  xntmode_t timeout_mode,
-			  xnticks_t period);
+			  ktime_t period);
 
 int xnthread_wait_period(unsigned long *overruns_r);
 
 int xnthread_set_slice(struct xnthread *thread,
-		       xnticks_t quantum);
+		       ktime_t quantum);
 
 void xnthread_cancel(struct xnthread *thread);
 

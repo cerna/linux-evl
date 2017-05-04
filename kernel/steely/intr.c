@@ -113,20 +113,20 @@ static inline void query_irqstats(struct xnintr *intr, int cpu,
 				  struct xnintr_iterator *iterator)
 {
 	struct xnirqstat *statp;
-	xnticks_t last_switch;
+	ktime_t last_switch;
 
 	statp = per_cpu_ptr(intr->stats, cpu);
 	iterator->hits = xnstat_counter_get(&statp->hits);
 	last_switch = xnsched_struct(cpu)->last_account_switch;
 	iterator->exectime_period = statp->account.total;
-	iterator->account_period = last_switch - statp->account.start;
-	statp->sum.total += iterator->exectime_period;
+	iterator->account_period = ktime_sub(last_switch, statp->account.start);
+	statp->sum.total = ktime_add(statp->sum.total, iterator->exectime_period);
 	iterator->exectime_total = statp->sum.total;
 	statp->account.total = 0;
 	statp->account.start = last_switch;
 }
 
-static void inc_irqstats(struct xnintr *intr, struct xnsched *sched, xnticks_t start)
+static void inc_irqstats(struct xnintr *intr, struct xnsched *sched, ktime_t start)
 {
 	struct xnirqstat *statp;
 
@@ -157,12 +157,15 @@ static inline void free_irqstats(struct xnintr *intr) {}
 
 static inline void clear_irqstats(struct xnintr *intr) {}
 
-static inline void query_irqstats(struct xnintr *intr, int cpu,
-				  struct xnintr_iterator *iterator) {}
+static inline
+void query_irqstats(struct xnintr *intr, int cpu,
+		    struct xnintr_iterator *iterator) {}
 
-static inline void inc_irqstats(struct xnintr *intr, struct xnsched *sched, xnticks_t start) {}
+static inline
+void inc_irqstats(struct xnintr *intr, struct xnsched *sched, ktime_t start) {}
 
-static inline void switch_irqstats(struct xnintr *intr, struct xnsched *sched) {}
+static inline
+void switch_irqstats(struct xnintr *intr, struct xnsched *sched) {}
 
 #endif /* !CONFIG_STEELY_STATS */
 
@@ -256,8 +259,8 @@ static irqreturn_t xnintr_vec_handler(int irq, void *dev_id)
 	struct xnintr_vector *vec = vectors + irq;
 	xnstat_exectime_t *prev;
 	struct xnintr *intr;
-	xnticks_t start;
 	int s = 0, ret;
+	ktime_t start;
 
 	prev  = xnstat_exectime_get_current(sched);
 	start = xnstat_exectime_now();
@@ -331,7 +334,7 @@ static irqreturn_t xnintr_edge_vec_handler(int irq, void *dev_id)
 	struct xnintr *intr, *end = NULL;
 	int s = 0, counter = 0, ret;
 	xnstat_exectime_t *prev;
-	xnticks_t start;
+	ktime_t start;
 
 	prev  = xnstat_exectime_get_current(sched);
 	start = xnstat_exectime_now();
@@ -530,7 +533,7 @@ static irqreturn_t xnintr_irq_handler(int irq, void *dev_id)
 	struct xnsched *sched = xnsched_current();
 	xnstat_exectime_t *prev;
 	struct xnintr *intr;
-	xnticks_t start;
+	ktime_t start;
 	int s = 0;
 
 	/*

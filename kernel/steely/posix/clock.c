@@ -55,20 +55,20 @@ DECLARE_BITMAP(steely_clock_extids, STEELY_MAX_EXTCLOCKS);
 
 int __steely_clock_getres(clockid_t clock_id, struct timespec *ts)
 {
-	xnticks_t ns;
+	ktime_t res;
 	int ret;
 
 	switch (clock_id) {
 	case CLOCK_REALTIME:
 	case CLOCK_MONOTONIC:
 	case CLOCK_MONOTONIC_RAW:
-		ns2ts(ts, 1);
+		*ts = ns_to_timespec(1);
 		break;
 	default:
-		ret = do_ext_clock(clock_id, get_resolution, ns);
+		ret = do_ext_clock(clock_id, get_resolution, res);
 		if (ret)
 			return ret;
-		ns2ts(ts, ns);
+		*ts = ktime_to_timespec(res);
 	}
 
 	trace_steely_clock_getres(clock_id, ts);
@@ -96,22 +96,21 @@ STEELY_SYSCALL(clock_getres, current,
 
 int __steely_clock_gettime(clockid_t clock_id, struct timespec *ts)
 {
-	xnticks_t ns;
+	ktime_t t;
 	int ret;
 
 	switch (clock_id) {
 	case CLOCK_REALTIME:
-		ns2ts(ts, xnclock_read_realtime(&nkclock));
+		*ts = ktime_to_timespec(xnclock_read_realtime(&nkclock));
 		break;
 	case CLOCK_MONOTONIC:
-	case CLOCK_MONOTONIC_RAW:
-		ns2ts(ts, xnclock_read_monotonic(&nkclock));
+		*ts = ktime_to_timespec(xnclock_read_monotonic(&nkclock));
 		break;
 	default:
-		ret = do_ext_clock(clock_id, read_monotonic, ns);
+		ret = do_ext_clock(clock_id, read_monotonic, t);
 		if (ret)
 			return ret;
-		ns2ts(ts, ns);
+		*ts = ktime_to_timespec(t);
 	}
 
 	trace_steely_clock_gettime(clock_id, ts);
@@ -140,7 +139,7 @@ STEELY_SYSCALL(clock_gettime, current,
 int __steely_clock_settime(clockid_t clock_id, const struct timespec *ts)
 {
 	int _ret, ret = 0;
-	xnticks_t now;
+	ktime_t now;
 	spl_t s;
 
 	if ((unsigned long)ts->tv_nsec >= ONE_BILLION)
@@ -150,7 +149,7 @@ int __steely_clock_settime(clockid_t clock_id, const struct timespec *ts)
 	case CLOCK_REALTIME:
 		xnlock_get_irqsave(&nklock, s);
 		now = xnclock_read_realtime(&nkclock);
-		xnclock_adjust(&nkclock, (xnsticks_t) (ts2ns(ts) - now));
+		xnclock_adjust(&nkclock, ktime_sub(timespec_to_ktime(*ts), now));
 		xnlock_put_irqrestore(&nklock, s);
 		break;
 	default:
@@ -181,14 +180,13 @@ int __steely_clock_nanosleep(clockid_t clock_id, int flags,
 {
 	struct restart_block *restart;
 	struct xnthread *cur;
-	xnsticks_t timeout, rem;
+	ktime_t timeout, rem;
 	int ret = 0;
 	spl_t s;
 
 	trace_steely_clock_nanosleep(clock_id, flags, rqt);
 
 	if (clock_id != CLOCK_MONOTONIC &&
-	    clock_id != CLOCK_MONOTONIC_RAW &&
 	    clock_id != CLOCK_REALTIME)
 		return -EOPNOTSUPP;
 
@@ -207,18 +205,21 @@ int __steely_clock_nanosleep(clockid_t clock_id, int flags,
 		xnthread_clear_localinfo(cur, XNSYSRST);
 		restart = &current->restart_block;
 		if (restart->fn != steely_restart_syscall_placeholder) {
-			if (rmt)
-				ns2ts(rmt, rem > 1 ? rem : 0);
+			if (rmt) {
+				xnlock_get_irqsave(&nklock, s);
+				rem = xntimer_get_timeout_stopped(&cur->rtimer);
+				xnlock_put_irqrestore(&nklock, s);
+				*rmt = ktime_to_timespec(ktime_to_ns(rem) > 1 ? rem : 0);
+			}
 			return -EINTR;
 		}
-
 		timeout = restart->nanosleep.expires;
 	} else
-		timeout = ts2ns(rqt);
+		timeout = timespec_to_ktime(*rqt);
 
 	xnlock_get_irqsave(&nklock, s);
 
-	xnthread_suspend(cur, XNDELAY, timeout + 1,
+	xnthread_suspend(cur, XNDELAY, ktime_add_ns(timeout, 1),
 			 clock_flag(flags, clock_id), NULL);
 
 	if (xnthread_test_info(cur, XNBREAK)) {
@@ -238,7 +239,7 @@ int __steely_clock_nanosleep(clockid_t clock_id, int flags,
 		if (flags == 0 && rmt) {
 			rem = xntimer_get_timeout_stopped(&cur->rtimer);
 			xnlock_put_irqrestore(&nklock, s);
-			ns2ts(rmt, rem > 1 ? rem : 0);
+			*rmt = ktime_to_timespec(ktime_to_ns(rem) > 1 ? rem : 0);
 		} else
 			xnlock_put_irqrestore(&nklock, s);
 
@@ -328,7 +329,6 @@ struct xnclock *steely_clock_find(clockid_t clock_id)
 	int nr;
 
 	if (clock_id == CLOCK_MONOTONIC ||
-	    clock_id == CLOCK_MONOTONIC_RAW ||
 	    clock_id == CLOCK_REALTIME)
 		return &nkclock;
 	

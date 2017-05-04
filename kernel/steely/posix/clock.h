@@ -24,44 +24,9 @@
 #include <uapi/steely/time.h>
 #include <steely/posix/syscall.h>
 
-#define ONE_BILLION             1000000000
-
 struct xnclock;
 
-static inline void ns2ts(struct timespec *ts, xnticks_t nsecs)
-{
-	ts->tv_sec = xnclock_divrem_billion(nsecs, &ts->tv_nsec);
-}
-
-static inline xnticks_t ts2ns(const struct timespec *ts)
-{
-	xnticks_t nsecs = ts->tv_nsec;
-
-	if (ts->tv_sec)
-		nsecs += (xnticks_t)ts->tv_sec * ONE_BILLION;
-
-	return nsecs;
-}
-
-static inline xnticks_t tv2ns(const struct timeval *tv)
-{
-	xnticks_t nsecs = tv->tv_usec * 1000;
-
-	if (tv->tv_sec)
-		nsecs += (xnticks_t)tv->tv_sec * ONE_BILLION;
-
-	return nsecs;
-}
-
-static inline void ticks2tv(struct timeval *tv, xnticks_t ticks)
-{
-	unsigned long nsecs;
-
-	tv->tv_sec = xnclock_divrem_billion(ticks, &nsecs);
-	tv->tv_usec = nsecs / 1000;
-}
-
-static inline xnticks_t clock_get_ticks(clockid_t clock_id)
+static inline ktime_t clock_get_ticks(clockid_t clock_id)
 {
 	return clock_id == CLOCK_REALTIME ?
 		xnclock_read_realtime(&nkclock) :

@@ -82,7 +82,7 @@ int rtdm_task_init(rtdm_task_t *task, const char *name,
 
 EXPORT_SYMBOL_GPL(rtdm_task_init);
 
-int __rtdm_task_sleep(xnticks_t timeout, xntmode_t mode)
+int __rtdm_task_sleep(ktime_t timeout, xntmode_t mode)
 {
 	struct xnthread *thread;
 
@@ -108,12 +108,11 @@ EXPORT_SYMBOL_GPL(rtdm_task_join);
 
 void rtdm_task_busy_sleep(nanosecs_rel_t delay)
 {
-	xnticks_t wakeup;
+	ktime_t wakeup;
 
-	wakeup = xnclock_read_raw(&nkclock) +
-		xnclock_ns_to_ticks(&nkclock, delay);
+	wakeup = ktime_add_ns(xnclock_read_monotonic(&nkclock), delay);
 
-	while ((xnsticks_t)(xnclock_read_raw(&nkclock) - wakeup) < 0)
+	while (ktime_before(xnclock_read_monotonic(&nkclock), wakeup))
 		cpu_relax();
 }
 

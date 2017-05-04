@@ -309,7 +309,8 @@ int __steely_sem_timedwait(struct steely_sem_shadow __user *u_sem,
 
 		ret = 0;
 		tmode = sem->flags & SEM_RAWCLOCK ? XN_ABSOLUTE : XN_REALTIME;
-		info = xnsynch_sleep_on(&sem->synchbase, ts2ns(&ts) + 1, tmode);
+		info = xnsynch_sleep_on(&sem->synchbase,
+				ktime_add_ns(timespec_to_ktime(ts), 1), tmode);
 		if (info & XNRMID)
 			ret = -EINVAL;
 		else if (info & (XNBREAK|XNTIMEO)) {

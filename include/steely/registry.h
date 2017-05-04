@@ -160,7 +160,7 @@ xnregistry_enter_anon(void *objaddr, xnhandle_t *phandle)
 }
 
 int xnregistry_bind(const char *key,
-		    xnticks_t timeout,
+		    ktime_t timeout,
 		    int timeout_mode,
 		    xnhandle_t *phandle);
 

@@ -204,7 +204,7 @@ int __steely_monitor_wait(struct steely_monitor_shadow __user *u_mon,
 {
 	struct steely_thread *curr = steely_current_thread();
 	struct steely_monitor_state *state;
-	xnticks_t timeout = XN_INFINITE;
+	ktime_t timeout = XN_INFINITE;
 	int ret = 0, opret = 0, info;
 	struct steely_monitor *mon;
 	struct xnsynch *synch;
@@ -215,7 +215,7 @@ int __steely_monitor_wait(struct steely_monitor_shadow __user *u_mon,
 	handle = steely_get_handle_from_user(&u_mon->handle);
 
 	if (ts)
-		timeout = ts2ns(ts) + 1;
+		timeout = ktime_add_ns(timespec_to_ktime(*ts), 1);
 
 	xnlock_get_irqsave(&nklock, s);
 

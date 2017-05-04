@@ -201,7 +201,7 @@ void steely_signal_flush(struct steely_thread *thread)
 	sigemptyset(&thread->sigpending);
 }
 
-static int signal_wait(sigset_t *set, xnticks_t timeout,
+static int signal_wait(sigset_t *set, ktime_t timeout,
 		       void __user *u_si,
 		       int (*put_siginfo)(void __user *u_si,
 					  const struct siginfo *si,
@@ -256,7 +256,7 @@ check:
 	}
 
 wait:
-	if (timeout == XN_NONBLOCK) {
+	if (timeout_nonblock(timeout)) {
 		ret = -EAGAIN;
 		goto fail;
 	}
@@ -399,14 +399,16 @@ int __steely_sigtimedwait(sigset_t *set,
 					     const struct siginfo *si,
 					     int overrun))
 {
-	xnticks_t ticks;
+	ktime_t ticks;
 
 	if ((unsigned long)timeout->tv_nsec >= ONE_BILLION)
 		return -EINVAL;
 
-	ticks = ts2ns(timeout);
-	if (ticks++ == 0)
+	ticks = timespec_to_ktime(*timeout);
+	if (ktime_to_ns(ticks) == 0)
 		ticks = XN_NONBLOCK;
+	else
+		ticks = ktime_add_ns(ticks, 1);
 
 	return signal_wait(set, ticks, u_si, put_siginfo);
 }

@@ -51,9 +51,9 @@ static inline void xnarch_get_latencies(struct xnclock_gravity *p)
 #else
 	ulat = 9500;	/* XXX sane? */
 #endif
-	p->user = xnclock_ns_to_ticks(&nkclock, ulat);
-	p->kernel = xnclock_ns_to_ticks(&nkclock, CONFIG_STEELY_TIMING_KSCHEDLAT);
-	p->irq = xnclock_ns_to_ticks(&nkclock, CONFIG_STEELY_TIMING_IRQLAT);
+	p->user = ulat;
+	p->kernel = CONFIG_STEELY_TIMING_KSCHEDLAT;
+	p->irq = CONFIG_STEELY_TIMING_IRQLAT;
 }
 
 #endif /* !_STEELY_ARM_ASM_CALIBRATION_H */

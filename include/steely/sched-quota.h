@@ -34,11 +34,11 @@ extern struct xnsched_class xnsched_class_quota;
 
 struct xnsched_quota_group {
 	struct xnsched *sched;
-	xnticks_t quota_ns;
-	xnticks_t quota_peak_ns;
-	xnticks_t run_start_ns;
-	xnticks_t run_budget_ns;
-	xnticks_t run_credit_ns;
+	ktime_t quota;
+	ktime_t quota_peak;
+	ktime_t run_start;
+	ktime_t run_budget;
+	ktime_t run_credit;
 	struct list_head members;
 	struct list_head expired;
 	struct list_head next;
@@ -50,7 +50,7 @@ struct xnsched_quota_group {
 };
 
 struct xnsched_quota {
-	xnticks_t period_ns;
+	ktime_t period;
 	struct xntimer refill_timer;
 	struct xntimer limit_timer;
 	struct list_head groups;

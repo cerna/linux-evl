@@ -263,14 +263,14 @@ out:
 void __steely_timer_getval(struct xntimer *__restrict__ timer,
 			   struct itimerspec *__restrict__ value)
 {
-	ns2ts(&value->it_interval, xntimer_interval(timer));
+	value->it_interval = ktime_to_timespec(xntimer_interval(timer));
 
 	if (!xntimer_running_p(timer)) {
 		value->it_value.tv_sec = 0;
 		value->it_value.tv_nsec = 0;
-	} else {
-		ns2ts(&value->it_value, xntimer_get_timeout(timer));
-	}
+	} else
+		value->it_value =
+			ktime_to_timespec(xntimer_get_timeout(timer));
 }
 
 static inline void
@@ -289,7 +289,7 @@ timer_gettimeout(struct steely_timer *__restrict__ timer,
 int __steely_timer_setval(struct xntimer *__restrict__ timer, int clock_flag,
 			  const struct itimerspec *__restrict__ value)
 {
-	xnticks_t start, period;
+	ktime_t start, period;
 
 	if (value->it_value.tv_nsec == 0 && value->it_value.tv_sec == 0) {
 		xntimer_stop(timer);
@@ -301,8 +301,8 @@ int __steely_timer_setval(struct xntimer *__restrict__ timer, int clock_flag,
 	     (value->it_value.tv_sec != 0 || value->it_value.tv_nsec != 0)))
 		return -EINVAL;
 
-	start = ts2ns(&value->it_value) + 1;
-	period = ts2ns(&value->it_interval);
+	start = ktime_add_ns(timespec_to_ktime(value->it_value), 1);
+	period = timespec_to_ktime(value->it_interval);
 
 	/*
 	 * Now start the timer. If the timeout data has already
@@ -542,7 +542,7 @@ fail:
 int steely_timer_deliver(timer_t timerid) /* nklocked, IRQs off. */
 {
 	struct steely_timer *timer;
-	xnticks_t now;
+	ktime_t now;
 
 	timer = steely_timer_by_id(steely_current_process(), timerid);
 	if (timer == NULL)
@@ -552,7 +552,7 @@ int steely_timer_deliver(timer_t timerid) /* nklocked, IRQs off. */
 	if (!xntimer_periodic_p(&timer->timerbase))
 		timer->overruns = 0;
 	else {
-		now = xnclock_read_raw(xntimer_clock(&timer->timerbase));
+		now = xnclock_read_monotonic(xntimer_clock(&timer->timerbase));
 		timer->overruns = xntimer_get_overruns(&timer->timerbase, now);
 		if ((unsigned int)timer->overruns > STEELY_DELAYMAX)
 			timer->overruns = STEELY_DELAYMAX;

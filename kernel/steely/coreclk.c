@@ -22,6 +22,7 @@
 #include <linux/tick.h>
 #include <linux/irqdomain.h>
 #include <linux/ktime.h>
+#include <linux/timekeeping.h>
 #include <linux/irq_pipeline.h>
 #include <linux/slab.h>
 #include <steely/sched.h>
@@ -35,9 +36,6 @@
 
 unsigned int nkclock_lock;
 
-/* Core clock source frequency. */
-static unsigned long long core_clock_freq;
-
 static inline xnstat_exectime_t *switch_stats(struct xnsched *sched);
 
 /*
@@ -46,8 +44,6 @@ static inline xnstat_exectime_t *switch_stats(struct xnsched *sched);
  * stage handler forwards tick events to our clock management core.
  */
 struct core_tick_device {
-	u32 mult;
-	u32 shift;
 	struct clock_event_device *real_device;
 };
 
@@ -57,13 +53,13 @@ static int proxy_set_next_ktime(ktime_t expires,
 				struct clock_event_device *proxy_ced)
 {
 	struct xnsched *sched;
-	int64_t delta;
+	ktime_t delta;
 	int ret;
 	spl_t s;
 
-	delta = ktime_to_ns(ktime_sub(expires, ktime_get()));
-	if (delta <= 0)
-		delta = 1;
+	delta = ktime_sub(expires, ktime_get());
+	if (ktime_to_ns(delta) <= 0)
+		delta = ktime_set(0, 1);
 
 	xnlock_get_irqsave(&nklock, s);
 	sched = xnsched_current();
@@ -73,47 +69,12 @@ static int proxy_set_next_ktime(ktime_t expires,
 	return ret ? -ETIME : 0;
 }
 
-static inline void calc_mult_shift(struct core_tick_device *ctd,
-				   struct clock_event_device *real_ced)
-{
-	u32 timer_freq;
-	u64 sec;
-	
-	timer_freq = (1000000000ULL * real_ced->mult) >> real_ced->shift;
-
-	/* Same logic as clockevents_config(). */
-
-	sec = real_ced->max_delta_ticks;
-	do_div(sec, timer_freq);
-	if (!sec)
-		sec = 1;
-	else if (sec > 600 && real_ced->max_delta_ticks > UINT_MAX)
-		sec = 600;
-
-	clocks_calc_mult_shift(&ctd->mult, &ctd->shift,
-			       core_clock_freq, timer_freq, sec);
-}
-
 static void proxy_device_register(struct clock_event_device *proxy_ced,
 				  struct clock_event_device *real_ced)
 {
 	struct core_tick_device *ctd = this_cpu_ptr(&clock_cpu_device);
 
 	ctd->real_device = real_ced;
-
-	/*
-	 * Calculate the scaling values for converting clock source
-	 * ticks we receive in xnclock_core_set_next_event() to timer
-	 * ticks we should pass to the real device's set_next_event()
-	 * handler.
-	 *
-	 * Hopefully, at some point we will get rid of this conversion
-	 * by having the Steely timers express timeouts in nanoseconds
-	 * internally.
-	 */
-	if ((real_ced->features & CLOCK_EVT_FEAT_KTIME) == 0)
-		calc_mult_shift(ctd, real_ced);
-	
 	proxy_ced->features |= CLOCK_EVT_FEAT_KTIME;
 	proxy_ced->set_next_ktime = proxy_set_next_ktime;
 	proxy_ced->set_next_event = NULL;
@@ -192,32 +153,6 @@ static void core_clock_event_handler(struct clock_event_device *real_ced)
 	core_clock_tick_handler(real_ced->irq);
 }
 
-static void xnclock_core_set_next_event(unsigned long cdelay) /* in clock ticks, hw IRQs off */
-{
-	struct core_tick_device *ctd = raw_cpu_ptr(&clock_cpu_device);
-	struct clock_event_device *real_ced = ctd->real_device;
-	unsigned long long tdelay;
-	ktime_t nsdelay;
-
-	if (real_ced->features & CLOCK_EVT_FEAT_KTIME) {
-		nsdelay = ns_to_ktime(xnclock_core_ticks_to_ns(cdelay));
-		real_ced->set_next_ktime(nsdelay, real_ced);
-		return;
-	}
-
-	/*
-	 * Caution: depending on the underlying device, the original
-	 * set_next_event() handler may want to track the in-flight
-	 * requests, so don't bypass it via manual IRQ injection
-	 * directly into the pipeline, ever.
-	 */
-	tdelay = ((unsigned long long)cdelay * ctd->mult) >> ctd->shift;
-	tdelay = min((unsigned long)tdelay, real_ced->max_delta_ticks);
-	tdelay = max((unsigned long)tdelay, real_ced->min_delta_ticks);
-	if (real_ced->set_next_event((unsigned long)tdelay, real_ced))
-		real_ced->set_next_event(real_ced->min_delta_ticks, real_ced);
-}
-
 #ifdef CONFIG_STEELY_STATS
 static inline xnstat_exectime_t *switch_stats(struct xnsched *sched)
 {
@@ -278,11 +213,6 @@ int xnclock_core_takeover(void)
 #endif
 	int ret;
 
-	if (core_clock_freq == 0) {
-		WARN(1, "high-resolution clock not configured");
-		return -ENODEV;
-	}
-
 	do_gettimeofday(&tv);
 	now = tv.tv_sec * 1000000000ULL + tv.tv_usec * 1000;
 	nkclock.wallclock_offset = now - xnclock_read_monotonic(&nkclock);
@@ -325,8 +255,8 @@ int xnclock_core_takeover(void)
 	xnlock_get_irqsave(&nklock, s);
 	for_each_realtime_cpu(cpu) {
 		sched = xnsched_struct(cpu);
-		xntimer_start(&sched->wdtimer, 1000000000UL,
-			      1000000000UL, XN_RELATIVE);
+		xntimer_start(&sched->wdtimer, ONE_BILLION,
+			      ONE_BILLION, XN_RELATIVE);
 		xnsched_reset_watchdog(sched);
 	}
 	xnlock_put_irqrestore(&nklock, s);
@@ -359,68 +289,16 @@ void xnclock_core_release(void)
 }
 EXPORT_SYMBOL_GPL(xnclock_core_release);
 
-#ifdef XNARCH_HAVE_LLMULSHFT
-
-static unsigned int tsc_scale, tsc_shift;
-
-#ifdef XNARCH_HAVE_NODIV_LLIMD
-
-static struct xnarch_u32frac tsc_frac;
-
-long long xnclock_core_ns_to_ticks(long long ns)
-{
-	return xnarch_nodiv_llimd(ns, tsc_frac.frac, tsc_frac.integ);
-}
-
-#else /* !XNARCH_HAVE_NODIV_LLIMD */
-
-long long xnclock_core_ns_to_ticks(long long ns)
-{
-	return xnarch_llimd(ns, 1 << tsc_shift, tsc_scale);
-}
-
-#endif /* !XNARCH_HAVE_NODIV_LLIMD */
-
-xnsticks_t xnclock_core_ticks_to_ns(xnsticks_t ticks)
-{
-	return xnarch_llmulshft(ticks, tsc_scale, tsc_shift);
-}
-
-xnsticks_t xnclock_core_ticks_to_ns_rounded(xnsticks_t ticks)
-{
-	unsigned int shift = tsc_shift - 1;
-	return (xnarch_llmulshft(ticks, tsc_scale, shift) + 1) / 2;
-}
-
-#else  /* !XNARCH_HAVE_LLMULSHFT */
-
-xnsticks_t xnclock_core_ticks_to_ns(xnsticks_t ticks)
-{
-	return xnarch_llimd(ticks, 1000000000, core_clock_freq);
-}
-
-xnsticks_t xnclock_core_ticks_to_ns_rounded(xnsticks_t ticks)
-{
-	return (xnarch_llimd(ticks, 1000000000, core_clock_freq/2) + 1) / 2;
-}
-
-xnsticks_t xnclock_core_ns_to_ticks(xnsticks_t ns)
-{
-	return xnarch_llimd(ns, core_clock_freq, 1000000000);
-}
-
-#endif /* !XNARCH_HAVE_LLMULSHFT */
-
-EXPORT_SYMBOL_GPL(xnclock_core_ticks_to_ns);
-EXPORT_SYMBOL_GPL(xnclock_core_ticks_to_ns_rounded);
-EXPORT_SYMBOL_GPL(xnclock_core_ns_to_ticks);
-
 void xnclock_core_local_shot(struct xnsched *sched)
 {
+	struct core_tick_device *ctd = raw_cpu_ptr(&clock_cpu_device);
+	struct clock_event_device *real_ced = ctd->real_device;
 	struct xntimerdata *tmd;
 	struct xntimer *timer;
-	xnsticks_t delay;
 	xntimerh_t *h;
+	int64_t delta;
+	u64 cycles;
+	ktime_t t;
 
 	/*
 	 * Do not reprogram locally when inside the tick handler -
@@ -468,15 +346,23 @@ void xnclock_core_local_shot(struct xnsched *sched)
 		}
 	}
 
-	delay = xntimerh_date(&timer->aplink) - xnclock_core_read_raw();
-	if (delay < 0)
-		delay = 0;
-	else if (delay > UINT_MAX)
-		delay = UINT_MAX;
-
-	trace_steely_clock_shot(delay);
-
-	xnclock_core_set_next_event(delay);
+	t = xntimerh_date(&timer->aplink);
+	
+	if (real_ced->features & CLOCK_EVT_FEAT_KTIME)
+		real_ced->set_next_ktime(t, real_ced);
+	else {
+		delta = ktime_to_ns(ktime_sub(t, xnclock_core_read_monotonic()));
+		if (delta <= 0)
+			delta = real_ced->min_delta_ns;
+		else {
+			delta = min(delta, (int64_t)real_ced->max_delta_ns);
+			delta = max(delta, (int64_t)real_ced->min_delta_ns);
+		}
+	
+		cycles = ((u64)delta * real_ced->mult) >> real_ced->shift;
+		if (real_ced->set_next_event(cycles, real_ced))
+			real_ced->set_next_event(real_ced->min_delta_ticks, real_ced);
+	}
 }
 
 bool dovetail_enter_idle(void)	/* root stage, hard_irqs_disabled() */
@@ -501,12 +387,6 @@ void xnclock_core_remote_shot(struct xnsched *sched)
 				 cpumask_of(xnsched_cpu(sched)));
 }
 #endif
-
-xnticks_t xnclock_core_read_monotonic(void)
-{
-	return xnclock_core_ticks_to_ns(xnclock_core_read_raw());
-}
-EXPORT_SYMBOL_GPL(xnclock_core_read_monotonic);
 
 static int set_core_clock_gravity(struct xnclock *clock,
 				  const struct xnclock_gravity *p)
@@ -561,15 +441,8 @@ struct xnclock nkclock = {
 };
 EXPORT_SYMBOL_GPL(nkclock);
 
-int __init xnclock_core_init(unsigned long long freq)
+int __init xnclock_core_init(void)
 {
-	core_clock_freq = freq;
-#ifdef XNARCH_HAVE_LLMULSHFT
-	xnarch_init_llmulshft(1000000000, freq, &tsc_scale, &tsc_shift);
-#ifdef XNARCH_HAVE_NODIV_LLIMD
-	xnarch_init_u32frac(&tsc_frac, 1 << tsc_shift, tsc_scale);
-#endif
-#endif
 	xnclock_reset_gravity(&nkclock);
 	xnclock_register(&nkclock, &xnsched_realtime_cpus);
 

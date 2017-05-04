@@ -33,7 +33,7 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/steely-posix.h>
 
-xnticks_t steely_time_slice = CONFIG_STEELY_RR_QUANTUM * 1000;
+ktime_t steely_time_slice = CONFIG_STEELY_RR_QUANTUM * 1000;
 
 #define PTHREAD_HSLOTS (1 << 8)	/* Must be a power of 2 */
 
@@ -246,7 +246,7 @@ int __steely_thread_setschedparam_ex(struct steely_thread *thread, int policy,
 	struct xnthread *base_thread = &thread->threadbase;
 	struct xnsched_class *sched_class;
 	union xnsched_policy_param param;
-	xnticks_t tslice;
+	ktime_t tslice;
 	int ret = 0;
 	spl_t s;
 
@@ -313,7 +313,8 @@ int __steely_thread_getschedparam_ex(struct steely_thread *thread,
 
 	if (base_class == &xnsched_class_rt) {
 		if (xnthread_test_state(base_thread, XNRRB)) {
-			ns2ts(&param_ex->sched_rr_quantum, base_thread->rrperiod);
+			param_ex->sched_rr_quantum =
+				ktime_to_timespec(base_thread->rrperiod);
 			*policy_r = SCHED_RR;
 		}
 		goto out;
@@ -329,8 +330,10 @@ int __steely_thread_getschedparam_ex(struct steely_thread *thread,
 #ifdef CONFIG_STEELY_SCHED_SPORADIC
 	if (base_class == &xnsched_class_sporadic) {
 		param_ex->sched_ss_low_priority = base_thread->pss->param.low_prio;
-		ns2ts(&param_ex->sched_ss_repl_period, base_thread->pss->param.repl_period);
-		ns2ts(&param_ex->sched_ss_init_budget, base_thread->pss->param.init_budget);
+		param_ex->sched_ss_repl_period =
+			ktime_to_timespec(base_thread->pss->param.repl_period);
+		param_ex->sched_ss_init_budget =
+			ktime_to_timespec(base_thread->pss->param.init_budget);
 		param_ex->sched_ss_max_repl = base_thread->pss->param.max_repl;
 		goto out;
 	}
@@ -364,7 +367,7 @@ static int pthread_create(struct steely_thread **thread_p,
 	union xnsched_policy_param param;
 	struct xnthread_init_attr iattr;
 	struct steely_thread *thread;
-	xnticks_t tslice;
+	ktime_t tslice;
 	int ret, n;
 	spl_t s;
 
@@ -788,7 +791,7 @@ STEELY_SYSCALL(thread_getstat, current,
 	struct steely_threadstat stat;
 	struct steely_thread *p;
 	struct xnthread *thread;
-	xnticks_t xtime;
+	ktime_t xtime;
 	spl_t s;
 
 	trace_steely_pthread_stat(pid);
@@ -813,9 +816,9 @@ STEELY_SYSCALL(thread_getstat, current,
 	stat.cprio = xnthread_current_priority(thread);
 	xtime = xnstat_exectime_get_total(&thread->stat.account);
 	if (thread->sched->curr == thread)
-		xtime += xnstat_exectime_now() -
-			xnstat_exectime_get_last_switch(thread->sched);
-	stat.xtime = xnclock_ticks_to_ns(&nkclock, xtime);
+		xtime = ktime_add(xtime, ktime_sub(xnstat_exectime_now(),
+			   xnstat_exectime_get_last_switch(thread->sched)));
+	stat.xtime = xtime;
 	stat.msw = xnstat_counter_get(&thread->stat.ssw);
 	stat.csw = xnstat_counter_get(&thread->stat.csw);
 	stat.xsc = xnstat_counter_get(&thread->stat.xsc);

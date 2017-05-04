@@ -213,6 +213,6 @@ int steely_thread_extended_p(const struct steely_thread *thread,
 
 #endif /* !CONFIG_STEELY_EXTENSION */
 
-extern xnticks_t steely_time_slice;
+extern ktime_t steely_time_slice;
 
 #endif /* !_STEELY_POSIX_THREAD_H */

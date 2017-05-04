@@ -25,6 +25,7 @@
 #include <steely/clock.h>
 #include <steely/trace.h>
 #include <steely/arith.h>
+#include <asm/div64.h>
 #include <trace/events/steely-core.h>
 
 bool xntimer_is_heading(struct xntimer *timer)
@@ -61,13 +62,12 @@ static void program_timer(struct xntimer *timer, xntimerq_t *q)
 }
 
 int xntimer_start(struct xntimer *timer,
-		  xnticks_t value, xnticks_t interval,
+		  ktime_t value, ktime_t interval,
 		  xntmode_t mode)
 {
 	struct xnclock *clock = xntimer_clock(timer);
 	xntimerq_t *q = xntimer_percpu_queue(timer);
-	xnticks_t date, now, delay, period;
-	unsigned long gravity;
+	ktime_t date, now, lateness, gravity;
 	int ret = 0;
 
 	trace_steely_timer_start(timer, value, interval, mode);
@@ -75,32 +75,33 @@ int xntimer_start(struct xntimer *timer,
 	if ((timer->status & XNTIMER_DEQUEUED) == 0)
 		xntimer_dequeue(timer, q);
 
-	now = xnclock_read_raw(clock);
+	now = xnclock_read_monotonic(clock);
 
 	timer->status &= ~(XNTIMER_REALTIME | XNTIMER_FIRED | XNTIMER_PERIODIC);
 	switch (mode) {
 	case XN_RELATIVE:
-		if ((xnsticks_t)value < 0)
+		if (ktime_to_ns(value) < 0)
 			return -ETIMEDOUT;
-		date = xnclock_ns_to_ticks(clock, value) + now;
+		date = ktime_add(value,  now);
 		break;
 	case XN_REALTIME:
 		timer->status |= XNTIMER_REALTIME;
-		value -= xnclock_get_offset(clock);
+		value = ktime_sub(value, xnclock_get_offset(clock));
 		/* fall through */
 	default: /* XN_ABSOLUTE || XN_REALTIME */
-		date = xnclock_ns_to_ticks(clock, value);
-		if ((xnsticks_t)(date - now) <= 0) {
-			if (interval == XN_INFINITE)
+		date = value;
+		if (date <= now) {
+			if (timeout_infinite(interval))
 				return -ETIMEDOUT;
 			/*
 			 * We are late on arrival for the first
 			 * delivery, wait for the next shot on the
 			 * periodic time line.
 			 */
-			delay = now - date;
-			period = xnclock_ns_to_ticks(clock, interval);
-			date += period * (xnarch_div64(delay, period) + 1);
+			lateness = ktime_sub(now, date);
+			date = ktime_add_ns(date,
+				    ktime_to_ns(interval) *
+				    (ktime_divns(lateness, ktime_to_ns(interval)) + 1));
 		}
 		break;
 	}
@@ -114,18 +115,16 @@ int xntimer_start(struct xntimer *timer,
 	 * user thread.
 	 */
 	gravity = xntimer_gravity(timer);
-	xntimerh_date(&timer->aplink) = date - gravity;
+	xntimerh_date(&timer->aplink) = ktime_sub(date, gravity);
 	if (now >= xntimerh_date(&timer->aplink))
-		xntimerh_date(&timer->aplink) += gravity / 2;
+		xntimer_forward(timer, gravity / 2);
 
-	timer->interval_ns = XN_INFINITE;
 	timer->interval = XN_INFINITE;
-	if (interval != XN_INFINITE) {
-		timer->interval_ns = interval;
-		timer->interval = xnclock_ns_to_ticks(clock, interval);
-		timer->periodic_ticks = 0;
+	if (!timeout_infinite(interval)) {
+		timer->interval = interval;
 		timer->start_date = date;
 		timer->pexpect_ticks = 0;
+		timer->periodic_ticks = 0;
 		timer->status |= XNTIMER_PERIODIC;
 	}
 
@@ -169,27 +168,27 @@ void __xntimer_stop(struct xntimer *timer)
 }
 EXPORT_SYMBOL_GPL(__xntimer_stop);
 
-xnticks_t xntimer_get_date(struct xntimer *timer)
+ktime_t xntimer_get_date(struct xntimer *timer)
 {
 	if (!xntimer_running_p(timer))
 		return XN_INFINITE;
 
-	return xnclock_ticks_to_ns(xntimer_clock(timer), xntimer_expiry(timer));
+	return xntimer_expiry(timer);
 }
 EXPORT_SYMBOL_GPL(xntimer_get_date);
 
-xnticks_t __xntimer_get_timeout(struct xntimer *timer)
+ktime_t __xntimer_get_timeout(struct xntimer *timer)
 {
 	struct xnclock *clock;
-	xnticks_t expiry, now;
+	ktime_t expiry, now;
 
 	clock = xntimer_clock(timer);
-	now = xnclock_read_raw(clock);
+	now = xnclock_read_monotonic(clock);
 	expiry = xntimer_expiry(timer);
-	if (expiry < now)
-		return 1;  /* Will elapse shortly. */
+	if (expiry <= now)
+		return ktime_set(0, 1);  /* Will elapse shortly. */
 
-	return xnclock_ticks_to_ns(clock, expiry - now);
+	return ktime_sub(expiry, now);
 }
 EXPORT_SYMBOL_GPL(__xntimer_get_timeout);
 
@@ -210,7 +209,7 @@ void __xntimer_init(struct xntimer *timer,
 	xntimer_set_priority(timer, XNTIMER_STDPRIO);
 	timer->status = (XNTIMER_DEQUEUED|(flags & XNTIMER_INIT_MASK));
 	timer->handler = handler;
-	timer->interval_ns = 0;
+	timer->interval = XN_INFINITE;
 	/*
 	 * If the CPU the caller is affine to does not receive timer
 	 * events, or no affinity was specified (i.e. sched == NULL),
@@ -392,18 +391,15 @@ EXPORT_SYMBOL_GPL(xntimer_set_sched);
 
 #endif /* CONFIG_SMP */
 
-unsigned long long xntimer_get_overruns(struct xntimer *timer, xnticks_t now)
+unsigned long xntimer_get_overruns(struct xntimer *timer, ktime_t now)
 {
-	xnticks_t period = timer->interval;
-	unsigned long long overruns = 0;
-	xnsticks_t delta;
+	unsigned long overruns = 0;
+	ktime_t delta;
 	xntimerq_t *q;
 
-	delta = now - xntimer_pexpect(timer);
-	if (unlikely(delta >= (xnsticks_t) period)) {
-		period = timer->interval_ns;
-		delta = xnclock_ticks_to_ns(xntimer_clock(timer), delta);
-		overruns = xnarch_div64(delta, period);
+	delta = ktime_sub(now, xntimer_pexpect(timer));
+	if (unlikely(delta >= timer->interval)) {
+		overruns = ktime_divns(delta, ktime_to_ns(timer->interval));
 		timer->pexpect_ticks += overruns;
 		if (xntimer_running_p(timer)) {
 			STEELY_BUG_ON(STEELY, (timer->status &
@@ -425,35 +421,39 @@ unsigned long long xntimer_get_overruns(struct xntimer *timer, xnticks_t now)
 }
 EXPORT_SYMBOL_GPL(xntimer_get_overruns);
 
-char *xntimer_format_time(xnticks_t ns, char *buf, size_t bufsz)
+char *xntimer_format_time(ktime_t t, char *buf, size_t bufsz)
 {
-	unsigned long ms, us, rem;
 	int len = (int)bufsz;
+	unsigned int ms, us;
+	unsigned long sec;
 	char *p = buf;
-	xnticks_t sec;
+	uint32_t rem;
+	uint64_t ns;
 
+	ns = ktime_to_ns(t);
 	if (ns == 0 && bufsz > 1) {
 		strcpy(buf, "-");
 		return buf;
 	}
 
-	sec = xnclock_divrem_billion(ns, &rem);
+	rem = do_div(ns, ONE_BILLION);
+	sec = (unsigned long)ns;
 	us = rem / 1000;
 	ms = us / 1000;
 	us %= 1000;
 
 	if (sec) {
-		p += ksformat(p, bufsz, "%Lus", sec);
+		p += ksformat(p, bufsz, "%lus", sec);
 		len = bufsz - (p - buf);
 	}
 
 	if (len > 0 && (ms || (sec && us))) {
-		p += ksformat(p, bufsz - (p - buf), "%lums", ms);
+		p += ksformat(p, bufsz - (p - buf), "%ums", ms);
 		len = bufsz - (p - buf);
 	}
 
 	if (len > 0 && us)
-		p += ksformat(p, bufsz - (p - buf), "%luus", us);
+		p += ksformat(p, bufsz - (p - buf), "%uus", us);
 
 	return buf;
 }

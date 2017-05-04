@@ -18,10 +18,6 @@
 #ifndef _STEELY_UAPI_TIME_H
 #define _STEELY_UAPI_TIME_H
 
-#ifndef CLOCK_MONOTONIC_RAW
-#define CLOCK_MONOTONIC_RAW  4
-#endif
-
 /*
  * Additional clock ids we manage are supposed not to collide with any
  * of the POSIX and Linux kernel definitions so that no ambiguities

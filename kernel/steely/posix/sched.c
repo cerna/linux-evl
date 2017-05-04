@@ -25,11 +25,11 @@
 struct xnsched_class *
 steely_sched_policy_param(union xnsched_policy_param *param,
 			  int u_policy, const struct sched_param_ex *param_ex,
-			  xnticks_t *tslice_r)
+			  ktime_t *tslice_r)
 {
 	struct xnsched_class *sched_class;
 	int prio, policy;
-	xnticks_t tslice;
+	ktime_t tslice;
 
 	prio = param_ex->sched_priority;
 	tslice = XN_INFINITE;
@@ -72,8 +72,8 @@ steely_sched_policy_param(union xnsched_policy_param *param,
 		break;
 	case SCHED_RR:
 		/* if unspecified, use current one. */
-		tslice = ts2ns(&param_ex->sched_rr_quantum);
-		if (tslice == XN_INFINITE && tslice_r)
+		tslice = timespec_to_ktime(param_ex->sched_rr_quantum);
+		if (timeout_infinite(tslice) && tslice_r)
 			tslice = *tslice_r;
 		/* falldown wanted */
 	case SCHED_FIFO:
@@ -91,8 +91,8 @@ steely_sched_policy_param(union xnsched_policy_param *param,
 		param->pss.normal_prio = param_ex->sched_priority;
 		param->pss.low_prio = param_ex->sched_ss_low_priority;
 		param->pss.current_prio = param->pss.normal_prio;
-		param->pss.init_budget = ts2ns(&param_ex->sched_ss_init_budget);
-		param->pss.repl_period = ts2ns(&param_ex->sched_ss_repl_period);
+		param->pss.init_budget = timespec_to_ktime(param_ex->sched_ss_init_budget);
+		param->pss.repl_period = timespec_to_ktime(param_ex->sched_ss_repl_period);
 		param->pss.max_repl = param_ex->sched_ss_max_repl;
 		sched_class = &xnsched_class_sporadic;
 		break;
@@ -231,7 +231,7 @@ STEELY_SYSCALL(sched_yield, primary, (void))
 static inline
 int set_tp_config(int cpu, union sched_config *config, size_t len)
 {
-	xnticks_t offset, duration, next_offset;
+	ktime_t offset, duration, next_offset;
 	struct xnsched_tp_schedule *gps, *ogps;
 	struct xnsched_tp_window *w;
 	struct sched_tp_window *p;
@@ -279,12 +279,12 @@ int set_tp_config(int cpu, union sched_config *config, size_t len)
 		 * be defined using windows assigned to the pseudo
 		 * partition #-1.
 		 */
-		offset = ts2ns(&p->offset);
+		offset = timespec_to_ktime(p->offset);
 		if (offset != next_offset)
 			goto cleanup_and_fail;
 
-		duration = ts2ns(&p->duration);
-		if (duration <= 0)
+		duration = timespec_to_ktime(p->duration);
+		if (ktime_to_ns(duration) <= 0)
 			goto cleanup_and_fail;
 
 		if (p->ptid < -1 ||
@@ -293,7 +293,7 @@ int set_tp_config(int cpu, union sched_config *config, size_t len)
 
 		w->w_offset = next_offset;
 		w->w_part = p->ptid;
-		next_offset += duration;
+		next_offset = ktime_add(next_offset, duration);
 	}
 
 	atomic_set(&gps->refcount, 1);
@@ -356,11 +356,13 @@ ssize_t get_tp_config(int cpu, void __user *u_config, size_t len,
 	config->tp.nr_windows = gps->pwin_nr;
 	for (n = 0, pp = p = config->tp.windows, pw = w = gps->pwins;
 	     n < gps->pwin_nr; pp = p, p++, pw = w, w++, n++) {
-		ns2ts(&p->offset, w->w_offset);
-		ns2ts(&pp->duration, w->w_offset - pw->w_offset);
+		p->offset = ktime_to_timespec(w->w_offset);
+		pp->duration = ktime_to_timespec(ktime_sub(w->w_offset,
+				   pw->w_offset));
 		p->ptid = w->w_part;
 	}
-	ns2ts(&pp->duration, gps->tf_duration - pw->w_offset);
+	pp->duration = ktime_to_timespec(ktime_sub(gps->tf_duration,
+				   pw->w_offset));
 	ret = put_config(SCHED_TP, u_config, len, config, elen);
 	xnfree(config);
 out:

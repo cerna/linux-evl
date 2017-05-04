@@ -27,32 +27,26 @@ struct xnsched;
 struct xntimerdata;
 
 struct xnclock_gravity {
-	unsigned long irq;
-	unsigned long kernel;
-	unsigned long user;
+	ktime_t irq;
+	ktime_t kernel;
+	ktime_t user;
 };
 
 struct xnclock {
 	/* (ns) */
 	xnticks_t wallclock_offset;
 	/* (ns) */
-	xnticks_t resolution;
-	/* (raw clock ticks). */
+	ktime_t resolution;
+	/* Anticipation values for timer shots. */
 	struct xnclock_gravity gravity;
 	/* Clock name. */
 	const char *name;
 	struct {
 #ifdef CONFIG_STEELY_EXTCLOCK
-		xnticks_t (*read_raw)(struct xnclock *clock);
-		xnticks_t (*read_monotonic)(struct xnclock *clock);
+		u64 (*read_cycles)(struct xnclock *clock);
+		ktime_t (*read_monotonic)(struct xnclock *clock);
 		int (*set_time)(struct xnclock *clock,
 				const struct timespec *ts);
-		xnsticks_t (*ns_to_ticks)(struct xnclock *clock,
-					  xnsticks_t ns);
-		xnsticks_t (*ticks_to_ns)(struct xnclock *clock,
-					  xnsticks_t ticks);
-		xnsticks_t (*ticks_to_ns_rounded)(struct xnclock *clock,
-						  xnsticks_t ticks);
 		void (*program_local_shot)(struct xnclock *clock,
 					   struct xnsched *sched);
 		void (*program_remote_shot)(struct xnclock *clock,
@@ -92,7 +86,7 @@ void xnclock_deregister(struct xnclock *clock);
 void xnclock_tick(struct xnclock *clock);
 
 void xnclock_adjust(struct xnclock *clock,
-		    xnsticks_t delta);
+		    ktime_t delta);
 
 void xnclock_stop_timers(struct xnclock *clock);
 
@@ -123,42 +117,15 @@ static inline void xnclock_remote_shot(struct xnclock *clock,
 #endif
 }
 
-static inline xnticks_t xnclock_read_raw(struct xnclock *clock)
+static inline u64 xnclock_read_cycles(struct xnclock *clock)
 {
 	if (likely(clock == &nkclock))
-		return xnclock_core_read_raw();
+		return xnclock_core_read_cycles();
 
-	return clock->ops.read_raw(clock);
+	return clock->ops.read_cycles(clock);
 }
 
-static inline xnsticks_t xnclock_ns_to_ticks(struct xnclock *clock,
-					     xnsticks_t ns)
-{
-	if (likely(clock == &nkclock))
-		return xnclock_core_ns_to_ticks(ns);
-
-	return clock->ops.ns_to_ticks(clock, ns);
-}
-
-static inline xnsticks_t xnclock_ticks_to_ns(struct xnclock *clock,
-					     xnsticks_t ticks)
-{
-	if (likely(clock == &nkclock))
-		return xnclock_core_ticks_to_ns(ticks);
-
-	return clock->ops.ticks_to_ns(clock, ticks);
-}
-
-static inline xnsticks_t xnclock_ticks_to_ns_rounded(struct xnclock *clock,
-						     xnsticks_t ticks)
-{
-	if (likely(clock == &nkclock))
-		return xnclock_core_ticks_to_ns_rounded(ticks);
-
-	return clock->ops.ticks_to_ns_rounded(clock, ticks);
-}
-
-static inline xnticks_t xnclock_read_monotonic(struct xnclock *clock)
+static inline ktime_t xnclock_read_monotonic(struct xnclock *clock)
 {
 	if (likely(clock == &nkclock))
 		return xnclock_core_read_monotonic();
@@ -191,30 +158,12 @@ static inline void xnclock_remote_shot(struct xnclock *clock,
 #endif
 }
 
-static inline xnticks_t xnclock_read_raw(struct xnclock *clock)
+static inline ktime_t xnclock_read_cycles(struct xnclock *clock)
 {
-	return xnclock_core_read_raw();
+	return xnclock_core_read_cycles();
 }
 
-static inline xnsticks_t xnclock_ns_to_ticks(struct xnclock *clock,
-					     xnsticks_t ns)
-{
-	return xnclock_core_ns_to_ticks(ns);
-}
-
-static inline xnsticks_t xnclock_ticks_to_ns(struct xnclock *clock,
-					     xnsticks_t ticks)
-{
-	return xnclock_core_ticks_to_ns(ticks);
-}
-
-static inline xnsticks_t xnclock_ticks_to_ns_rounded(struct xnclock *clock,
-						     xnsticks_t ticks)
-{
-	return xnclock_core_ticks_to_ns_rounded(ticks);
-}
-
-static inline xnticks_t xnclock_read_monotonic(struct xnclock *clock)
+static inline ktime_t xnclock_read_monotonic(struct xnclock *clock)
 {
 	return xnclock_core_read_monotonic();
 }
@@ -244,15 +193,15 @@ static inline xnticks_t xnclock_get_offset(struct xnclock *clock)
 	return clock->wallclock_offset;
 }
 
-static inline xnticks_t xnclock_get_resolution(struct xnclock *clock)
+static inline ktime_t xnclock_get_resolution(struct xnclock *clock)
 {
-	return clock->resolution; /* ns */
+	return clock->resolution;
 }
 
 static inline void xnclock_set_resolution(struct xnclock *clock,
-					  xnticks_t resolution)
+					  ktime_t resolution)
 {
-	clock->resolution = resolution; /* ns */
+	clock->resolution = resolution;
 }
 
 static inline int xnclock_set_gravity(struct xnclock *clock,
@@ -272,16 +221,15 @@ static inline void xnclock_reset_gravity(struct xnclock *clock)
 
 #define xnclock_get_gravity(__clock, __type)  ((__clock)->gravity.__type)
 
-static inline xnticks_t xnclock_read_realtime(struct xnclock *clock)
+static inline ktime_t xnclock_read_realtime(struct xnclock *clock)
 {
 	/*
 	 * Return an adjusted value of the monotonic time with the
-	 * translated system wallclock offset.
+	 * translated system wallclock offset. FIXME.
 	 */
-	return xnclock_read_monotonic(clock) + xnclock_get_offset(clock);
+	return ktime_add_ns(xnclock_read_monotonic(clock),
+			    xnclock_get_offset(clock));
 }
-
-xnticks_t xnclock_get_host_time(void);
 
 #ifdef CONFIG_STEELY_VFILE
 
@@ -303,7 +251,7 @@ static inline void xnclock_cleanup_proc(void) { }
 
 void xnclock_update_freq(unsigned long long freq);
 
-int xnclock_init(unsigned long long freq);
+int xnclock_init(void);
 
 void xnclock_cleanup(void);
 

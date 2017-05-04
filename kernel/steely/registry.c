@@ -525,7 +525,7 @@ unlock_and_exit:
 }
 EXPORT_SYMBOL_GPL(xnregistry_enter);
 
-int xnregistry_bind(const char *key, xnticks_t timeout, int timeout_mode,
+int xnregistry_bind(const char *key, ktime_t timeout, int timeout_mode,
 		    xnhandle_t *phandle)
 {
 	struct registry_wait_context rwc;
@@ -538,10 +538,9 @@ int xnregistry_bind(const char *key, xnticks_t timeout, int timeout_mode,
 
 	xnlock_get_irqsave(&nklock, s);
 
-	if (timeout_mode == XN_RELATIVE &&
-	    timeout != XN_INFINITE && timeout != XN_NONBLOCK) {
-		timeout_mode = XN_REALTIME;
-		timeout += xnclock_read_monotonic(&nkclock);
+	if (timeout_mode == XN_RELATIVE && timeout_valid(timeout)) {
+		timeout_mode = XN_ABSOLUTE;
+		timeout = ktime_add(timeout, xnclock_read_monotonic(&nkclock));
 	}
 
 	for (;;) {
@@ -551,7 +550,7 @@ int xnregistry_bind(const char *key, xnticks_t timeout, int timeout_mode,
 			goto unlock_and_exit;
 		}
 
-		if ((timeout_mode == XN_RELATIVE && timeout == XN_NONBLOCK) ||
+		if ((timeout_mode == XN_RELATIVE && timeout_nonblock(timeout)) ||
 		    xnsched_unblockable_p()) {
 			ret = -EWOULDBLOCK;
 			goto unlock_and_exit;

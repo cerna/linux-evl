@@ -33,13 +33,13 @@
 extern struct xnsched_class xnsched_class_sporadic;
 
 struct xnsched_sporadic_repl {
-	xnticks_t date;
-	xnticks_t amount;
+	ktime_t date;
+	ktime_t amount;
 };
 
 struct xnsched_sporadic_data {
-	xnticks_t resume_date;
-	xnticks_t budget;
+	ktime_t resume_date;
+	ktime_t budget;
 	int repl_in;
 	int repl_out;
 	int repl_pending;

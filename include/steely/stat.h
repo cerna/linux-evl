@@ -25,18 +25,15 @@
 #ifdef CONFIG_STEELY_STATS
 
 typedef struct xnstat_exectime {
-
-	xnticks_t start;   /* Start of execution time accumulation */
-
-	xnticks_t total; /* Accumulated execution time */
-
+	ktime_t start;   /* Start of execution time accumulation */
+	ktime_t total; /* Accumulated execution time */
 } xnstat_exectime_t;
 
 #define xnstat_percpu_data	raw_cpu_ptr(nktimer.stats)
 
 /* Return current date which can be passed to other xnstat services for
    immediate or lazy accounting. */
-#define xnstat_exectime_now() xnclock_core_read_raw()
+#define xnstat_exectime_now() xnclock_core_read_monotonic()
 
 /* Accumulate exectime of the current account until the given date. */
 #define xnstat_exectime_update(sched, date) \
@@ -64,7 +61,7 @@ do { \
    switch date and set the new account). */
 #define xnstat_exectime_finalize(sched, new_account) \
 do { \
-	(sched)->last_account_switch = xnclock_core_read_raw(); \
+	(sched)->last_account_switch = xnclock_core_read_monotonic(); \
 	(sched)->current_account = (new_account); \
 } while (0)
 
@@ -80,7 +77,7 @@ do { \
 #define xnstat_exectime_reset_stats(stat) \
 do { \
 	(stat)->total = 0; \
-	(stat)->start = xnclock_core_read_raw(); \
+	(stat)->start = xnclock_core_read_monotonic(); \
 } while (0)
 
 

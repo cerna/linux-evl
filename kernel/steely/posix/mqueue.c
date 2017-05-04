@@ -473,7 +473,7 @@ mq_timedsend_inner(struct steely_mqd *mqd,
 	struct steely_mq *mq;
 	struct timespec ts;
 	xntmode_t tmode;
-	xnticks_t to;
+	ktime_t to;
 	spl_t s;
 	int ret;
 
@@ -495,7 +495,7 @@ redo:
 			return ERR_PTR(ret);
 		if ((unsigned long)ts.tv_nsec >= ONE_BILLION)
 			return ERR_PTR(-EINVAL);
-		to = ts2ns(&ts) + 1;
+		to = ktime_add_ns(timespec_to_ktime(ts), 1);
 		tmode = XN_REALTIME;
 		fetch_timeout = NULL;
 		goto redo;
@@ -602,7 +602,7 @@ mq_timedrcv_inner(struct steely_mqd *mqd,
 	struct steely_mq *mq;
 	struct timespec ts;
 	xntmode_t tmode;
-	xnticks_t to;
+	ktime_t to;
 	spl_t s;
 	int ret;
 
@@ -624,7 +624,7 @@ redo:
 			return ERR_PTR(ret);
 		if (ts.tv_nsec >= ONE_BILLION)
 			return ERR_PTR(-EINVAL);
-		to = ts2ns(&ts) + 1;
+		to = ktime_add_ns(timespec_to_ktime(ts), 1);
 		tmode = XN_REALTIME;
 		fetch_timeout = NULL;
 		goto redo;

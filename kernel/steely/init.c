@@ -165,7 +165,7 @@ static int __init mach_setup(void)
 	if (ret)
 		goto fail_escalate_request;
 
-	ret = xnclock_init(clocksource_get_frequency());
+	ret = xnclock_init();
 	if (ret)
 		goto fail_clock;
 

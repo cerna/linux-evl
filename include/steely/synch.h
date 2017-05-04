@@ -144,7 +144,7 @@ static inline void xnsynch_register_cleanup(struct xnsynch *synch,
 }
 
 int __must_check xnsynch_sleep_on(struct xnsynch *synch,
-				  xnticks_t timeout,
+				  ktime_t timeout,
 				  xntmode_t timeout_mode);
 
 struct xnthread *xnsynch_wakeup_one_sleeper(struct xnsynch *synch);
@@ -155,7 +155,7 @@ void xnsynch_wakeup_this_sleeper(struct xnsynch *synch,
 				 struct xnthread *sleeper);
 
 int __must_check xnsynch_acquire(struct xnsynch *synch,
-				 xnticks_t timeout,
+				 ktime_t timeout,
 				 xntmode_t timeout_mode);
 
 int __must_check xnsynch_try_acquire(struct xnsynch *synch);

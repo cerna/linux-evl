@@ -126,7 +126,7 @@ struct vfile_sched_rt_data {
 	int cpu;
 	pid_t pid;
 	char name[XNOBJECT_NAME_LEN];
-	xnticks_t period;
+	ktime_t period;
 	int cprio;
 };
 

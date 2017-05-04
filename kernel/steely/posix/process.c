@@ -460,20 +460,20 @@ void *steely_get_context(int xid)
 }
 EXPORT_SYMBOL_GPL(steely_get_context);
 
-int steely_yield(xnticks_t min, xnticks_t max)
+int steely_yield(ktime_t min, ktime_t max)
 {
-	xnticks_t start;
+	ktime_t start;
 	int ret;
 
 	start = xnclock_read_monotonic(&nkclock);
-	max += start;
-	min += start;
+	max = ktime_add(max, start);
+	min = ktime_add(min, start);
 
 	do {
 		ret = xnsynch_sleep_on(&yield_sync, max, XN_ABSOLUTE);
 		if (ret & XNBREAK)
 			return -EINTR;
-	} while (ret == 0 && xnclock_read_monotonic(&nkclock) < min);
+	} while (ret == 0 && ktime_before(xnclock_read_monotonic(&nkclock), min));
 
 	return 0;
 }

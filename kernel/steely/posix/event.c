@@ -104,7 +104,7 @@ int __steely_event_wait(struct steely_event_shadow __user *u_event,
 			int mode, const struct timespec *ts)
 {
 	unsigned int rbits = 0, testval;
-	xnticks_t timeout = XN_INFINITE;
+	ktime_t timeout = XN_INFINITE;
 	struct steely_event_state *state;
 	xntmode_t tmode = XN_RELATIVE;
 	struct event_wait_context ewc;
@@ -116,9 +116,9 @@ int __steely_event_wait(struct steely_event_shadow __user *u_event,
 	handle = steely_get_handle_from_user(&u_event->handle);
 
 	if (ts) {
-		timeout = ts2ns(ts);
-		if (timeout) {
-			timeout++;
+		timeout = timespec_to_ktime(*ts);
+		if (ktime_to_ns(timeout) > 0) {
+			timeout = ktime_add_ns(timeout, 1);
 			tmode = XN_ABSOLUTE;
 		} else
 			timeout = XN_NONBLOCK;
@@ -151,7 +151,7 @@ int __steely_event_wait(struct steely_event_shadow __user *u_event,
 	if (rbits && rbits == testval)
 		goto done;
 
-	if (timeout == XN_NONBLOCK) {
+	if (timeout_nonblock(timeout)) {
 		ret = -EWOULDBLOCK;
 		goto done;
 	}

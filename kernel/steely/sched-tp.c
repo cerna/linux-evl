@@ -25,7 +25,7 @@ static void tp_schedule_next(struct xnsched_tp *tp)
 	struct xnsched_tp_window *w;
 	struct xnsched *sched;
 	int p_next, ret;
-	xnticks_t t;
+	ktime_t t;
 
 	for (;;) {
 		/*
@@ -44,7 +44,7 @@ static void tp_schedule_next(struct xnsched_tp *tp)
 		/* Schedule tick to advance to the next window. */
 		tp->wnext = (tp->wnext + 1) % tp->gps->pwin_nr;
 		w = &tp->gps->pwins[tp->wnext];
-		t = tp->tf_start + w->w_offset;
+		t = ktime_add(tp->tf_start, w->w_offset);
 
 		ret = xntimer_start(&tp->tf_timer, t, XN_INFINITE, XN_ABSOLUTE);
 		if (ret != -ETIMEDOUT)
@@ -56,8 +56,8 @@ static void tp_schedule_next(struct xnsched_tp *tp)
 		 * time frame immediately.
 		 */
 		for (;;) {
-			t = tp->tf_start + tp->gps->tf_duration;
-			if (xnclock_read_monotonic(&nkclock) > t) {
+			t = ktime_add(tp->tf_start, tp->gps->tf_duration);
+			if (ktime_after(xnclock_read_monotonic(&nkclock), t)) {
 				tp->tf_start = t;
 				tp->wnext = 0;
 			} else
@@ -77,7 +77,7 @@ static void tp_tick_handler(struct xntimer *timer)
 	 * are processing the last window.
 	 */
 	if (tp->wnext + 1 == tp->gps->pwin_nr)
-		tp->tf_start += tp->gps->tf_duration;
+		tp->tf_start = ktime_add(tp->tf_start, tp->gps->tf_duration);
 
 	tp_schedule_next(tp);
 }
@@ -258,7 +258,7 @@ xnsched_tp_set_schedule(struct xnsched *sched,
 	struct xnthread *thread, *tmp;
 
 	STEELY_BUG_ON(STEELY, gps != NULL &&
-		   (gps->pwin_nr <= 0 || gps->pwins[0].w_offset != 0));
+	      (gps->pwin_nr <= 0 || ktime_to_ns(gps->pwins[0].w_offset) != 0));
 
 	xnsched_tp_stop_schedule(sched);
 

@@ -22,7 +22,7 @@
 
 #define MAX_REPLENISH CONFIG_STEELY_SCHED_SPORADIC_MAXREPL
 
-static void sporadic_post_recharge(struct xnthread *thread, xnticks_t budget);
+static void sporadic_post_recharge(struct xnthread *thread, ktime_t budget);
 
 #if STEELY_DEBUG(STEELY)
 
@@ -54,10 +54,11 @@ static inline void sporadic_note_valid_drop(struct xnsched *sched)
 
 #endif /* !STEELY_DEBUG(STEELY) */
 
-static inline xnticks_t sporadic_diff_time(xnticks_t start, xnticks_t end)
+static inline ktime_t sporadic_diff_time(ktime_t start, ktime_t end)
 {
-	xnsticks_t d = (xnsticks_t)(end - start);
-	return unlikely(d < 0) ? -d : d;
+	ktime_t d = ktime_sub(end, start);
+	
+	return d < 0 ? -d : d;
 }
 
 static void sporadic_drop_handler(struct xntimer *timer)
@@ -95,7 +96,7 @@ static void sporadic_drop_handler(struct xntimer *timer)
 
 static void sporadic_schedule_drop(struct xnthread *thread)
 {
-	xnticks_t now = xnclock_read_monotonic(&nkclock);
+	ktime_t now = xnclock_read_monotonic(&nkclock);
 	struct xnsched_sporadic_data *pss = thread->pss;
 	int ret;
 
@@ -106,7 +107,7 @@ static void sporadic_schedule_drop(struct xnthread *thread)
 	 * the thread is running, trading cycles at firing time
 	 * against cycles when arming the timer.
 	 */
-	ret = xntimer_start(&pss->drop_timer, now + pss->budget,
+	ret = xntimer_start(&pss->drop_timer, ktime_add(now, pss->budget),
 			    XN_INFINITE, XN_ABSOLUTE);
 	if (ret == -ETIMEDOUT) {
 		sporadic_note_late_drop(thread->sched);
@@ -120,7 +121,7 @@ static void sporadic_replenish_handler(struct xntimer *timer)
 	struct xnsched_sporadic_data *pss;
 	union xnsched_policy_param p;
 	struct xnthread *thread;
-	xnticks_t now;
+	ktime_t now;
 	int r, ret;
 
 	pss = container_of(timer, struct xnsched_sporadic_data, repl_timer);
@@ -132,9 +133,9 @@ retry:
 
 	do {
 		r = pss->repl_out;
-		if ((xnsticks_t)(now - pss->repl_data[r].date) <= 0)
+		if (now <= pss->repl_data[r].date)
 			break;
-		pss->budget += pss->repl_data[r].amount;
+		pss->budget = ktime_add(pss->budget, pss->repl_data[r].amount);
 		if (pss->budget > pss->param.init_budget)
 			pss->budget = pss->param.init_budget;
 		pss->repl_out = (r + 1) % MAX_REPLENISH;
@@ -148,7 +149,7 @@ retry:
 			goto retry; /* This plugs a tiny race. */
 	}
 
-	if (pss->budget == 0)
+	if (ktime_to_ns(pss->budget) == 0)
 		return;
 
 	if (xnthread_test_state(thread, XNHELD))
@@ -168,7 +169,7 @@ retry:
 		sporadic_schedule_drop(thread);
 }
 
-static void sporadic_post_recharge(struct xnthread *thread, xnticks_t budget)
+static void sporadic_post_recharge(struct xnthread *thread, ktime_t budget)
 {
 	struct xnsched_sporadic_data *pss = thread->pss;
 	int r, ret;
@@ -180,10 +181,10 @@ static void sporadic_post_recharge(struct xnthread *thread, xnticks_t budget)
 		budget = pss->budget;
 		pss->budget = 0;
 	} else
-		pss->budget -= budget;
+		pss->budget = ktime_sub(pss->budget, budget);
 
 	r = pss->repl_in;
-	pss->repl_data[r].date = pss->resume_date + pss->param.repl_period;
+	pss->repl_data[r].date = ktime_add(pss->resume_date, pss->param.repl_period);
 	pss->repl_data[r].amount = budget;
 	pss->repl_in = (r + 1) % MAX_REPLENISH;
 
@@ -203,9 +204,9 @@ static void sporadic_post_recharge(struct xnthread *thread, xnticks_t budget)
 static void sporadic_suspend_activity(struct xnthread *thread)
 {
 	struct xnsched_sporadic_data *pss = thread->pss;
-	xnticks_t budget, now;
+	ktime_t budget, now;
 
-	if (pss->budget > 0) {
+	if (ktime_to_ns(pss->budget) > 0) {
 		xntimer_stop(&pss->drop_timer);
 		now = xnclock_read_monotonic(&nkclock);
 		budget = sporadic_diff_time(now, pss->resume_date);
@@ -215,7 +216,7 @@ static void sporadic_suspend_activity(struct xnthread *thread)
 
 static inline void sporadic_resume_activity(struct xnthread *thread)
 {
-	if (thread->pss->budget > 0)
+	if (ktime_to_ns(thread->pss->budget) > 0)
 		sporadic_schedule_drop(thread);
 }
 
@@ -302,7 +303,7 @@ static int xnsched_sporadic_declare(struct xnthread *thread,
 	    p->pss.normal_prio > XNSCHED_SPORADIC_MAX_PRIO)
 		return -EINVAL;
 
-	if (p->pss.init_budget == 0)
+	if (ktime_to_ns(p->pss.init_budget) == 0)
 		return -EINVAL;
 
 	if (p->pss.current_prio != p->pss.normal_prio)
@@ -403,9 +404,9 @@ struct vfile_sched_sporadic_data {
 	int current_prio;
 	int low_prio;
 	int normal_prio;
-	xnticks_t period;
-	xnticks_t timeout;
-	xnticks_t budget;
+	ktime_t period;
+	ktime_t timeout;
+	ktime_t budget;
 };
 
 static struct xnvfile_snapshot_ops vfile_sched_sporadic_ops;

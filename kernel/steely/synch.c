@@ -78,7 +78,7 @@ int xnsynch_destroy(struct xnsynch *synch)
 }
 EXPORT_SYMBOL_GPL(xnsynch_destroy);
 
-int xnsynch_sleep_on(struct xnsynch *synch, xnticks_t timeout,
+int xnsynch_sleep_on(struct xnsynch *synch, ktime_t timeout,
 		     xntmode_t timeout_mode)
 {
 	struct xnthread *thread;
@@ -431,7 +431,7 @@ int xnsynch_try_acquire(struct xnsynch *synch)
 }
 EXPORT_SYMBOL_GPL(xnsynch_try_acquire);
 
-int xnsynch_acquire(struct xnsynch *synch, xnticks_t timeout,
+int xnsynch_acquire(struct xnsynch *synch, ktime_t timeout,
 		    xntmode_t timeout_mode)
 {
 	struct xnthread *curr, *owner;
@@ -566,12 +566,12 @@ block:
 		 * to run, waiting for the CPU: we need to wait again
 		 * for the resource.
 		 */
-		if (timeout_mode != XN_RELATIVE || timeout == XN_INFINITE) {
+		if (timeout_mode != XN_RELATIVE || timeout_infinite(timeout)) {
 			xnlock_put_irqrestore(&nklock, s);
 			goto redo;
 		}
 		timeout = xntimer_get_timeout_stopped(&curr->rtimer);
-		if (timeout > 1) { /* Otherwise, it's too late. */
+		if (ktime_to_ns(timeout) > 1) { /* Otherwise, it's too late. */
 			xnlock_put_irqrestore(&nklock, s);
 			goto redo;
 		}

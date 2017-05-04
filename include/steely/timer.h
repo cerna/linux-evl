@@ -26,8 +26,32 @@
 #include <steely/assert.h>
 #include <steely/ancillaries.h>
 
-#define XN_INFINITE   ((xnticks_t)0)
-#define XN_NONBLOCK   ((xnticks_t)-1)
+/*
+ * Basic assumption throughout the code: ktime_t is a 64bit signed
+ * scalar type holding an internal time unit, which means that:
+ *
+ * - we may compare two ktime_t values using basic relational operators
+ * - we may check for nullness by comparing to 0 directly
+ * - we must use ktime_to_ns()/ns_to_ktime() helpers for converting
+ *   to/from nanoseconds.
+ */
+#define XN_INFINITE   0
+#define XN_NONBLOCK   ((s64)((u64)1 << 63))
+
+static inline bool timeout_infinite(ktime_t kt)
+{
+	return ktime_to_ns(kt) == 0;
+}
+
+static inline bool timeout_nonblock(ktime_t kt)
+{
+	return ktime_to_ns(kt) < 0;
+}
+
+static inline bool timeout_valid(ktime_t kt)
+{
+	return ktime_to_ns(kt) > 0;
+}
 
 /* Timer modes */
 typedef enum xntmode {
@@ -68,7 +92,7 @@ typedef enum xntmode {
 
 struct xntlholder {
 	struct list_head link;
-	xnticks_t key;
+	ktime_t key;
 	int prio;
 };
 
@@ -115,7 +139,7 @@ static inline void xntlist_insert(struct list_head *q, struct xntlholder *holder
 	 * flexibility...
 	 */
 	list_for_each_entry_reverse(p, q, link) {
-		if ((xnsticks_t) (holder->key - p->key) > 0 ||
+		if (ktime_after(holder->key, p->key) ||
 		    (holder->key == p->key && holder->prio <= p->prio))
 		  break;
 	}
@@ -134,7 +158,7 @@ static inline void xntlist_insert(struct list_head *q, struct xntlholder *holder
 #include <linux/rbtree.h>
 
 typedef struct {
-	unsigned long long date;
+	ktime_t date;
 	unsigned prio;
 	struct rb_node link;
 } xntimerh_t;
@@ -236,15 +260,13 @@ struct xntimer {
 	/* Timer status. */
 	unsigned long status;
 	/* Periodic interval (clock ticks, 0 == one shot). */
-	xnticks_t interval;
-	/* Periodic interval (nanoseconds, 0 == one shot). */
-	xnticks_t interval_ns;
-	/* Count of timer ticks in periodic mode. */
-	xnticks_t periodic_ticks;
+	ktime_t interval;
 	/* First tick date in periodic mode. */
-	xnticks_t start_date;
-	/* Date of next periodic release point (timer ticks). */
-	xnticks_t pexpect_ticks;
+	ktime_t start_date;
+	/* Position of next periodic release point. */
+	u64 pexpect_ticks;
+	/* Count of timer ticks in periodic mode. */
+	u64 periodic_ticks;
 	/* Sched structure to which the timer is attached. */
 	struct xnsched *sched;
 	/* Timeout handler. */
@@ -321,17 +343,15 @@ static inline unsigned long xntimer_gravity(struct xntimer *timer)
 
 static inline void xntimer_update_date(struct xntimer *timer)
 {
-	xntimerh_date(&timer->aplink) = timer->start_date
-		+ xnclock_ns_to_ticks(xntimer_clock(timer),
-			timer->periodic_ticks * timer->interval_ns)
-		- xntimer_gravity(timer);
+	xntimerh_date(&timer->aplink) = ktime_add_ns(timer->start_date,
+			     (timer->periodic_ticks * ktime_to_ns(timer->interval))
+			     - xntimer_gravity(timer));
 }
 
-static inline xnticks_t xntimer_pexpect(struct xntimer *timer)
+static inline ktime_t xntimer_pexpect(struct xntimer *timer)
 {
-	return timer->start_date +
-		xnclock_ns_to_ticks(xntimer_clock(timer),
-				timer->pexpect_ticks * timer->interval_ns);
+	return ktime_add_ns(timer->start_date,
+			    timer->pexpect_ticks * ktime_to_ns(timer->interval));
 }
 
 static inline void xntimer_set_priority(struct xntimer *timer,
@@ -425,29 +445,41 @@ bool __xntimer_deactivate(struct xntimer *timer);
 
 void xntimer_destroy(struct xntimer *timer);
 
-static inline xnticks_t xntimer_interval(struct xntimer *timer)
+static inline ktime_t xntimer_interval(struct xntimer *timer)
 {
-	return timer->interval_ns;
+	return timer->interval;
 }
 
-static inline xnticks_t xntimer_expiry(struct xntimer *timer)
+static inline ktime_t xntimer_expiry(struct xntimer *timer)
 {
-	/* Real expiry date in ticks without anticipation (no gravity) */
-	return xntimerh_date(&timer->aplink) + xntimer_gravity(timer);
+	/* Ideal expiry date without anticipation (no gravity) */
+	return ktime_sub(xntimerh_date(&timer->aplink), xntimer_gravity(timer));
+}
+
+static inline void xntimer_forward(struct xntimer *timer, ktime_t delta)
+{
+	xntimerh_date(&timer->aplink) =
+		ktime_add(xntimerh_date(&timer->aplink), delta);
+}
+
+static inline void xntimer_backward(struct xntimer *timer, ktime_t delta)
+{
+	xntimerh_date(&timer->aplink) =
+		ktime_sub(xntimerh_date(&timer->aplink), delta);
 }
 
 int xntimer_start(struct xntimer *timer,
-		xnticks_t value,
-		xnticks_t interval,
+		ktime_t value,
+		ktime_t interval,
 		xntmode_t mode);
 
 void __xntimer_stop(struct xntimer *timer);
 
-xnticks_t xntimer_get_date(struct xntimer *timer);
+ktime_t xntimer_get_date(struct xntimer *timer);
 
-xnticks_t __xntimer_get_timeout(struct xntimer *timer);
+ktime_t __xntimer_get_timeout(struct xntimer *timer);
 
-xnticks_t xntimer_get_interval(struct xntimer *timer);
+ktime_t xntimer_get_interval(struct xntimer *timer);
 
 bool xntimer_is_heading(struct xntimer *timer);
 
@@ -457,7 +489,7 @@ static inline void xntimer_stop(struct xntimer *timer)
 		__xntimer_stop(timer);
 }
 
-static inline xnticks_t xntimer_get_timeout(struct xntimer *timer)
+static inline ktime_t xntimer_get_timeout(struct xntimer *timer)
 {
 	if (!xntimer_running_p(timer))
 		return XN_INFINITE;
@@ -465,7 +497,7 @@ static inline xnticks_t xntimer_get_timeout(struct xntimer *timer)
 	return __xntimer_get_timeout(timer);
 }
 
-static inline xnticks_t xntimer_get_timeout_stopped(struct xntimer *timer)
+static inline ktime_t xntimer_get_timeout_stopped(struct xntimer *timer)
 {
 	return __xntimer_get_timeout(timer);
 }
@@ -485,7 +517,7 @@ static inline void xntimer_dequeue(struct xntimer *timer,
 	timer->status |= XNTIMER_DEQUEUED;
 }
 
-unsigned long long xntimer_get_overruns(struct xntimer *timer, xnticks_t now);
+unsigned long xntimer_get_overruns(struct xntimer *timer, ktime_t now);
 
 #ifdef CONFIG_SMP
 
@@ -515,7 +547,6 @@ static inline bool xntimer_set_sched(struct xntimer *timer,
 
 #endif /* CONFIG_SMP */
 
-char *xntimer_format_time(xnticks_t ns,
-			  char *buf, size_t bufsz);
+char *xntimer_format_time(ktime_t t, char *buf, size_t bufsz);
 
 #endif /* !_STEELY_KERNEL_TIMER_H */

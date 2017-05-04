@@ -78,9 +78,12 @@ int __steely_mutex_acquire_unchecked(struct xnthread *cur,
 	if (ts) {
 		if (ts->tv_nsec >= ONE_BILLION)
 			return -EINVAL;
-		ret = xnsynch_acquire(&mutex->synchbase, ts2ns(ts) + 1, XN_REALTIME);
+		ret = xnsynch_acquire(&mutex->synchbase,
+				      ktime_add_ns(timespec_to_ktime(*ts), 1),
+				      XN_REALTIME);
 	} else
-		ret = xnsynch_acquire(&mutex->synchbase, XN_INFINITE, XN_RELATIVE);
+		ret = xnsynch_acquire(&mutex->synchbase,
+				      XN_INFINITE, XN_RELATIVE);
 
 	if (ret) {
 		if (ret & XNBREAK)

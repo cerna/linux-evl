@@ -523,7 +523,7 @@ ssize_t xnpipe_mfixup(int minor, struct xnpipe_mh *mh, ssize_t size)
 }
 EXPORT_SYMBOL_GPL(xnpipe_mfixup);
 
-ssize_t xnpipe_recv(int minor, struct xnpipe_mh **pmh, xnticks_t timeout)
+ssize_t xnpipe_recv(int minor, struct xnpipe_mh **pmh, ktime_t timeout)
 {
 	struct xnpipe_state *state;
 	struct xnpipe_mh *mh;
@@ -552,16 +552,16 @@ ssize_t xnpipe_recv(int minor, struct xnpipe_mh **pmh, xnticks_t timeout)
 	 * absolute time value based on the monotonic clock.
 	 */
 	mode = XN_RELATIVE;
-	if (timeout != XN_NONBLOCK && timeout != XN_INFINITE) {
+	if (timeout_valid(timeout)) {
 		mode = XN_ABSOLUTE;
-		timeout += xnclock_read_monotonic(&nkclock);
+		timeout = ktime_add(timeout, xnclock_read_monotonic(&nkclock));
 	}
 
 	for (;;) {
 		if (!list_empty(&state->inq))
 			break;
 
-		if (timeout == XN_NONBLOCK) {
+		if (timeout_nonblock(timeout)) {
 			ret = -EWOULDBLOCK;
 			goto unlock_and_exit;
 		}

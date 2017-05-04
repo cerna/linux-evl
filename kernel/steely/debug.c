@@ -534,17 +534,17 @@ static inline void init_thread_relax_trace(struct xnthread *thread)
 
 #if STEELY_DEBUG(LOCKING)
 
-void xnlock_dbg_prepare_acquire(unsigned long long *start)
+void xnlock_dbg_prepare_acquire(ktime_t *start)
 {
-	*start = xnclock_read_raw(&nkclock);
+	*start = xnclock_read_monotonic(&nkclock);
 }
 EXPORT_SYMBOL_GPL(xnlock_dbg_prepare_acquire);
 
-void xnlock_dbg_acquired(struct xnlock *lock, int cpu, unsigned long long *start,
+void xnlock_dbg_acquired(struct xnlock *lock, int cpu, ktime_t *start,
 			 const char *file, int line, const char *function)
 {
 	lock->lock_date = *start;
-	lock->spin_time = xnclock_read_raw(&nkclock) - *start;
+	lock->spin_time = ktime_sub(xnclock_read_monotonic(&nkclock), *start);
 	lock->file = file;
 	lock->function = function;
 	lock->line = line;
@@ -555,11 +555,11 @@ EXPORT_SYMBOL_GPL(xnlock_dbg_acquired);
 int xnlock_dbg_release(struct xnlock *lock,
 		       const char *file, int line, const char *function)
 {
-	unsigned long long lock_time;
 	struct xnlockinfo *stats;
+	ktime_t lock_time;
 	int cpu;
 
-	lock_time = xnclock_read_raw(&nkclock) - lock->lock_date;
+	lock_time = ktime_sub(xnclock_read_monotonic(&nkclock), lock->lock_date);
 	cpu = raw_smp_processor_id();
 	stats = &per_cpu(xnlock_stats, cpu);
 

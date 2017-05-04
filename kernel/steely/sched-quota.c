@@ -87,15 +87,15 @@ static inline int group_is_active(struct xnsched_quota_group *tg)
 static inline void replenish_budget(struct xnsched_quota *qs,
 				    struct xnsched_quota_group *tg)
 {
-	xnticks_t budget_ns, credit_ns;
+	ktime_t budget, credit;
 
-	if (tg->quota_ns == tg->quota_peak_ns) {
+	if (tg->quota == tg->quota_peak) {
 		/*
 		 * Fast path: we don't accumulate runtime credit.
 		 * This includes groups with no runtime limit
 		 * (i.e. quota off: quota >= period && quota == peak).
 		 */
-		tg->run_budget_ns = tg->quota_ns;
+		tg->run_budget = tg->quota;
 		return;
 	}
 
@@ -118,30 +118,33 @@ static inline void replenish_budget(struct xnsched_quota *qs,
 	 */
 	if (!group_is_active(tg)) {
 		/* Drop accumulated credit. */
-		tg->run_credit_ns = 0;
-		tg->run_budget_ns = tg->quota_ns;
+		tg->run_credit = 0;
+		tg->run_budget = tg->quota;
 		return;
 	}
 
-	budget_ns = tg->run_budget_ns + tg->quota_ns;
-	if (budget_ns > tg->quota_peak_ns) {
+	budget = ktime_add(tg->run_budget, tg->quota);
+	if (budget > tg->quota_peak) {
 		/* Too much budget, spread it over intervals. */
-		tg->run_credit_ns += budget_ns - tg->quota_peak_ns;
-		tg->run_budget_ns = tg->quota_peak_ns;
-	} else if (tg->run_credit_ns) {
-		credit_ns = tg->quota_peak_ns - budget_ns;
+		tg->run_credit =
+			ktime_add(tg->run_credit,
+				  ktime_sub(budget, tg->quota_peak));
+		tg->run_budget = tg->quota_peak;
+	} else if (tg->run_credit) {
+		credit = ktime_sub(tg->quota_peak, budget);
 		/* Consume the accumulated credit. */
-		if (tg->run_credit_ns >= credit_ns)
-			tg->run_credit_ns -= credit_ns;
+		if (tg->run_credit >= credit)
+			tg->run_credit =
+				ktime_sub(tg->run_credit, credit);
 		else {
-			credit_ns = tg->run_credit_ns;
-			tg->run_credit_ns = 0;
+			credit = tg->run_credit;
+			tg->run_credit = 0;
 		}
 		/* Allot extended budget, limited to peak quota. */
-		tg->run_budget_ns = budget_ns + credit_ns;
+		tg->run_budget = ktime_add(budget, credit);
 	} else
 		/* No credit, budget was below peak quota. */
-		tg->run_budget_ns = budget_ns;
+		tg->run_budget = budget;
 }
 
 static void quota_refill_handler(struct xntimer *timer)
@@ -159,7 +162,7 @@ static void quota_refill_handler(struct xntimer *timer)
 		/* Allot a new runtime budget for the group. */
 		replenish_budget(qs, tg);
 
-		if (tg->run_budget_ns == 0 || list_empty(&tg->expired))
+		if (tg->run_budget == 0 || list_empty(&tg->expired))
 			continue;
 		/*
 		 * For each group living on this CPU, move all expired
@@ -212,7 +215,7 @@ static void xnsched_quota_init(struct xnsched *sched)
 	char limiter_name[XNOBJECT_NAME_LEN], refiller_name[XNOBJECT_NAME_LEN];
 	struct xnsched_quota *qs = &sched->quota;
 
-	qs->period_ns = CONFIG_STEELY_SCHED_QUOTA_PERIOD * 1000ULL;
+	qs->period = CONFIG_STEELY_SCHED_QUOTA_PERIOD * 1000ULL;
 	INIT_LIST_HEAD(&qs->groups);
 
 #ifdef CONFIG_SMP
@@ -348,7 +351,7 @@ static void xnsched_quota_kick(struct xnthread *thread)
 	 * relaxes, even if the group it belongs to lacks runtime
 	 * budget.
 	 */
-	if (tg->run_budget_ns == 0 && !list_empty(&thread->quota_expired)) {
+	if (tg->run_budget == 0 && !list_empty(&thread->quota_expired)) {
 		list_del_init(&thread->quota_expired);
 		xnsched_addq_tail(&sched->rt.runnable, thread);
 	}
@@ -356,7 +359,7 @@ static void xnsched_quota_kick(struct xnthread *thread)
 
 static inline int thread_is_runnable(struct xnthread *thread)
 {
-	return thread->quota->run_budget_ns > 0 ||
+	return thread->quota->run_budget > 0 ||
 		xnthread_test_info(thread, XNKICKED);
 }
 
@@ -404,7 +407,7 @@ static struct xnthread *xnsched_quota_pick(struct xnsched *sched)
 	struct xnthread *next, *curr = sched->curr;
 	struct xnsched_quota *qs = &sched->quota;
 	struct xnsched_quota_group *otg, *tg;
-	xnticks_t now, elapsed;
+	ktime_t now, elapsed;
 	int ret;
 
 	now = xnclock_read_monotonic(&nkclock);
@@ -415,11 +418,11 @@ static struct xnthread *xnsched_quota_pick(struct xnsched *sched)
 	 * Charge the time consumed by the outgoing thread to the
 	 * group it belongs to.
 	 */
-	elapsed = now - otg->run_start_ns;
-	if (elapsed < otg->run_budget_ns)
-		otg->run_budget_ns -= elapsed;
+	elapsed = ktime_sub(now, otg->run_start);
+	if (elapsed < otg->run_budget)
+		otg->run_budget = ktime_sub(otg->run_budget, elapsed);
 	else
-		otg->run_budget_ns = 0;
+		otg->run_budget = 0;
 pick:
 	next = xnsched_getq(&sched->rt.runnable);
 	if (next == NULL) {
@@ -435,7 +438,7 @@ pick:
 	if (tg == NULL)
 		return next;
 
-	tg->run_start_ns = now;
+	tg->run_start = now;
 
 	/*
 	 * Don't consider budget if kicked, we have to allow this
@@ -446,7 +449,7 @@ pick:
 		goto out;
 	}
 
-	if (tg->run_budget_ns == 0) {
+	if (ktime_to_ns(tg->run_budget) == 0) {
 		/* Flush expired group members as we go. */
 		list_add_tail(&next->quota_expired, &tg->expired);
 		goto pick;
@@ -457,11 +460,12 @@ pick:
 		goto out;
 
 	/* Arm limit timer for the new running group. */
-	ret = xntimer_start(&qs->limit_timer, now + tg->run_budget_ns,
+	ret = xntimer_start(&qs->limit_timer,
+			    ktime_add(now, tg->run_budget),
 			    XN_INFINITE, XN_ABSOLUTE);
 	if (ret) {
 		/* Budget exhausted: deactivate this group. */
-		tg->run_budget_ns = 0;
+		tg->run_budget = 0;
 		list_add_tail(&next->quota_expired, &tg->expired);
 		goto pick;
 	}
@@ -499,12 +503,12 @@ int xnsched_quota_create_group(struct xnsched_quota_group *tg,
 	__set_bit(tgid, group_map);
 	tg->tgid = tgid;
 	tg->sched = sched;
-	tg->run_budget_ns = qs->period_ns;
-	tg->run_credit_ns = 0;
+	tg->run_budget = qs->period;
+	tg->run_credit = 0;
 	tg->quota_percent = 100;
 	tg->quota_peak_percent = 100;
-	tg->quota_ns = qs->period_ns;
-	tg->quota_peak_ns = qs->period_ns;
+	tg->quota = qs->period;
+	tg->quota_peak = qs->period;
 	tg->nr_active = 0;
 	tg->nr_threads = 0;
 	INIT_LIST_HEAD(&tg->members);
@@ -512,7 +516,7 @@ int xnsched_quota_create_group(struct xnsched_quota_group *tg,
 
 	if (list_empty(&qs->groups))
 		xntimer_start(&qs->refill_timer,
-			      qs->period_ns, qs->period_ns, XN_RELATIVE);
+			      qs->period, qs->period, XN_RELATIVE);
 
 	list_add(&tg->next, &qs->groups);
 	*quota_sum_r = quota_sum_all(qs);
@@ -562,23 +566,23 @@ void xnsched_quota_set_limit(struct xnsched_quota_group *tg,
 
 	if (quota_percent < 0 || quota_percent > 100) { /* Quota off. */
 		quota_percent = 100;
-		tg->quota_ns = qs->period_ns;
+		tg->quota = qs->period;
 	} else
-		tg->quota_ns = xnarch_div64(qs->period_ns * quota_percent, 100);
+		tg->quota = xnarch_div64(qs->period * quota_percent, 100);
 
 	if (quota_peak_percent < quota_percent)
 		quota_peak_percent = quota_percent;
 
 	if (quota_peak_percent < 0 || quota_peak_percent > 100) {
 		quota_peak_percent = 100;
-		tg->quota_peak_ns = qs->period_ns;
+		tg->quota_peak = qs->period;
 	} else
-		tg->quota_peak_ns = xnarch_div64(qs->period_ns * quota_peak_percent, 100);
+		tg->quota_peak = xnarch_div64(qs->period * quota_peak_percent, 100);
 
 	tg->quota_percent = quota_percent;
 	tg->quota_peak_percent = quota_peak_percent;
-	tg->run_budget_ns = tg->quota_ns;
-	tg->run_credit_ns = 0;	/* Drop accumulated credit. */
+	tg->run_budget = tg->quota;
+	tg->run_credit = 0;	/* Drop accumulated credit. */
 
 	*quota_sum_r = quota_sum_all(qs);
 
@@ -633,7 +637,7 @@ struct vfile_sched_quota_data {
 	pid_t pid;
 	int prio;
 	int tgid;
-	xnticks_t budget;
+	ktime_t budget;
 	char name[XNOBJECT_NAME_LEN];
 };
 
@@ -683,7 +687,7 @@ static int vfile_sched_quota_next(struct xnvfile_snapshot_iterator *it,
 	memcpy(p->name, thread->name, sizeof(p->name));
 	p->tgid = thread->quota->tgid;
 	p->prio = thread->cprio;
-	p->budget = thread->quota->run_budget_ns;
+	p->budget = thread->quota->run_budget;
 
 	return 1;
 }

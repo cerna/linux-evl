@@ -33,23 +33,22 @@
 #include <trace/events/steely-core.h>
 
 static void adjust_timer(struct xntimer *timer, xntimerq_t *q,
-			 xnsticks_t delta)
+			 ktime_t delta)
 {
 	struct xnclock *clock = xntimer_clock(timer);
-	xnticks_t period, div;
-	xnsticks_t diff;
+	ktime_t period, diff;
+	s64 div;
 
-	xntimerh_date(&timer->aplink) -= delta;
+	xntimer_backward(timer, delta);
 
 	if (xntimer_periodic_p(timer) == 0)
 		goto enqueue;
 
-	timer->start_date -= delta;
+	timer->start_date = ktime_sub(timer->start_date, delta);
 	period = xntimer_interval(timer);
-	diff = xnclock_ticks_to_ns(clock,
-		xnclock_read_raw(clock) - xntimer_expiry(timer));
+	diff = ktime_sub(xnclock_read_monotonic(clock), xntimer_expiry(timer));
 
-	if ((xnsticks_t)(diff - period) >= 0) {
+	if (diff >= period) {
 		/*
 		 * Timer should tick several times before now, instead
 		 * of calling timer->handler several times, we change
@@ -57,12 +56,12 @@ static void adjust_timer(struct xntimer *timer, xntimerq_t *q,
 		 * that timer will tick only once and the lost ticks
 		 * will be counted as overruns.
 		 */
-		div = xnarch_div64(diff, period);
+		div = ktime_divns(diff, ktime_to_ns(period));
 		timer->periodic_ticks += div;
 		xntimer_update_date(timer);
-	} else if (delta < 0
+	} else if (ktime_to_ns(delta) < 0
 		   && (timer->status & XNTIMER_FIRED)
-		   && (xnsticks_t) (diff + period) <= 0) {
+		   && ktime_to_ns(ktime_add(diff, period)) <= 0) {
 		/*
 		 * Timer is periodic and NOT waiting for its first
 		 * shot, so we make it tick sooner than its original
@@ -70,7 +69,7 @@ static void adjust_timer(struct xntimer *timer, xntimerq_t *q,
 		 * time to a sooner date, real-time periodic timers do
 		 * not tick until the original date has passed.
 		 */
-		div = xnarch_div64(-diff, period);
+		div = ktime_divns(-diff, ktime_to_ns(period));
 		timer->periodic_ticks -= div;
 		timer->pexpect_ticks -= div;
 		xntimer_update_date(timer);
@@ -80,7 +79,7 @@ enqueue:
 	xntimer_enqueue(timer, q);
 }
 
-static void adjust_clock_timers(struct xnclock *clock, xnsticks_t delta)
+void xnclock_adjust(struct xnclock *clock, ktime_t delta)
 {
 	struct xntimer *timer, *tmp;
 	struct list_head adjq;
@@ -90,8 +89,10 @@ static void adjust_clock_timers(struct xnclock *clock, xnsticks_t delta)
 	xntimerh_t *h;
 	xntimerq_t *q;
 
+	nkclock.wallclock_offset += ktime_to_ns(delta);
+	nkvdso->wallclock_offset = nkclock.wallclock_offset;
+
 	INIT_LIST_HEAD(&adjq);
-	delta = xnclock_ns_to_ticks(clock, delta);
 
 	for_each_online_cpu(cpu) {
 		sched = xnsched_struct(cpu);
@@ -118,16 +119,6 @@ static void adjust_clock_timers(struct xnclock *clock, xnsticks_t delta)
 		else
 			xnclock_program_shot(clock, sched);
 	}
-}
-
-void xnclock_adjust(struct xnclock *clock, xnsticks_t delta)
-{
-	xnticks_t now;
-
-	nkclock.wallclock_offset += delta;
-	nkvdso->wallclock_offset = nkclock.wallclock_offset;
-	now = xnclock_read_monotonic(clock) + nkclock.wallclock_offset;
-	adjust_clock_timers(clock, delta);
 }
 EXPORT_SYMBOL_GPL(xnclock_adjust);
 
@@ -173,8 +164,8 @@ struct vfile_clock_data {
 	int cpu;
 	unsigned int scheduled;
 	unsigned int fired;
-	xnticks_t timeout;
-	xnticks_t interval;
+	ktime_t timeout;
+	ktime_t interval;
 	unsigned long status;
 	char name[XNOBJECT_NAME_LEN];
 };
@@ -305,20 +296,20 @@ static struct xnvfile_directory clock_vfroot;
 static int clock_show(struct xnvfile_regular_iterator *it, void *data)
 {
 	struct xnclock *clock = xnvfile_priv(it->vfile);
-	xnticks_t now = xnclock_read_raw(clock);
+	u64 cycles = xnclock_read_cycles(clock);
 
 	if (clock->id >= 0)	/* External clock, print id. */
 		xnvfile_printf(it, "%7s: %d\n", "id", __STEELY_CLOCK_EXT(clock->id));
 		
 	xnvfile_printf(it, "%7s: irq=%Ld kernel=%Ld user=%Ld\n", "gravity",
-		       xnclock_ticks_to_ns(clock, xnclock_get_gravity(clock, irq)),
-		       xnclock_ticks_to_ns(clock, xnclock_get_gravity(clock, kernel)),
-		       xnclock_ticks_to_ns(clock, xnclock_get_gravity(clock, user)));
+		       ktime_to_ns(xnclock_get_gravity(clock, irq)),
+		       ktime_to_ns(xnclock_get_gravity(clock, kernel)),
+		       ktime_to_ns(xnclock_get_gravity(clock, user)));
 
 	xnclock_print_status(clock, it);
 
-	xnvfile_printf(it, "%7s: %Lu (%.4Lx %.4x)\n", "ticks",
-		       now, now >> 32, (u32)(now & -1U));
+	xnvfile_printf(it, "%7s: %Lu (%.8x %.8x)\n", "cycles",
+		       cycles, (u32)(cycles >> 32), (u32)(cycles & -1U));
 
 	return 0;
 }
@@ -328,8 +319,8 @@ static ssize_t clock_store(struct xnvfile_input *input)
 	char buf[128], *args = buf, *p;
 	struct xnclock_gravity gravity;
 	struct xnvfile_regular *vfile;
-	unsigned long ns, ticks;
 	struct xnclock *clock;
+	unsigned long ns;
 	ssize_t nbytes;
 	int ret;
 
@@ -345,17 +336,16 @@ static ssize_t clock_store(struct xnvfile_input *input)
 		if (*p == '\0')
 			continue;
 		ns = simple_strtol(p, &p, 10);
-		ticks = xnclock_ns_to_ticks(clock, ns);
 		switch (*p) {
 		case 'i':
-			gravity.irq = ticks;
+			gravity.irq = ns;
 			break;
 		case 'k':
-			gravity.kernel = ticks;
+			gravity.kernel = ns;
 			break;
 		case 'u':
 		case '\0':
-			gravity.user = ticks;
+			gravity.user = ns;
 			break;
 		default:
 			return -EINVAL;
@@ -480,9 +470,8 @@ void xnclock_tick(struct xnclock *clock)
 	struct xnsched *sched = xnsched_current();
 	struct xntimer *timer;
 	xntimerq_t *timerq;
-	xnsticks_t delta;
-	xnticks_t now;
 	xntimerh_t *h;
+	ktime_t now;
 
 	atomic_only();
 
@@ -506,11 +495,10 @@ void xnclock_tick(struct xnclock *clock)
 	 */
 	sched->status |= XNINTCK;
 
-	now = xnclock_read_raw(clock);
+	now = xnclock_read_monotonic(clock);
 	while ((h = xntimerq_head(timerq)) != NULL) {
 		timer = container_of(h, struct xntimer, aplink);
-		delta = (xnsticks_t)(xntimerh_date(&timer->aplink) - now);
-		if (delta > 0)
+		if (now < xntimerh_date(&timer->aplink))
 			break;
 
 		trace_steely_timer_expire(timer);
@@ -527,8 +515,7 @@ void xnclock_tick(struct xnclock *clock)
 		if (unlikely(timer == &sched->htimer)) {
 			sched->lflags |= XNHTICK;
 			sched->lflags &= ~XNHDEFER;
-			if (timer->status & XNTIMER_PERIODIC)
-				goto advance;
+			/* Proxy tick is always oneshot. */
 			continue;
 		}
 
@@ -548,14 +535,12 @@ void xnclock_tick(struct xnclock *clock)
 			 * wait for 250 ms for the user to continue
 			 * program execution.
 			 */
-			xntimerh_date(&timer->aplink) +=
-				xnclock_ns_to_ticks(xntimer_clock(timer),
-						250000000);
+			xntimer_forward(timer, ms_to_ktime(250));
 			goto requeue;
 		}
 	fire:
 		timer->handler(timer);
-		now = xnclock_read_raw(clock);
+		now = xnclock_read_monotonic(clock);
 		timer->status |= XNTIMER_FIRED;
 		/*
 		 * Only requeue periodic timers which have not been
@@ -656,12 +641,9 @@ unsigned long long xnclock_divrem_billion(unsigned long long value,
 
 EXPORT_SYMBOL_GPL(xnclock_divrem_billion);
 
-int __init xnclock_init(unsigned long long freq)
+int __init xnclock_init(void)
 {
-#ifdef XNARCH_HAVE_NODIV_LLIMD
-	xnarch_init_u32frac(&bln_frac, 1, 1000000000);
-#endif
-	xnclock_core_init(freq);
+	xnclock_core_init();
 
 	return 0;
 }

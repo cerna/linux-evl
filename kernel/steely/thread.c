@@ -342,10 +342,10 @@ int xnthread_set_clock(struct xnthread *thread, struct xnclock *newclock)
 }
 EXPORT_SYMBOL_GPL(xnthread_set_clock);
 
-xnticks_t xnthread_get_timeout(struct xnthread *thread, xnticks_t ns)
+ktime_t xnthread_get_timeout(struct xnthread *thread, ktime_t base)
 {
 	struct xntimer *timer;
-	xnticks_t timeout;
+	ktime_t timeout;
 
 	if (!xnthread_test_state(thread,XNDELAY))
 		return 0LL;
@@ -355,19 +355,19 @@ xnticks_t xnthread_get_timeout(struct xnthread *thread, xnticks_t ns)
 	else if (xntimer_running_p(&thread->ptimer))
 		timer = &thread->ptimer;
 	else
-		return 0LL;
+		return 0;
 
 	timeout = xntimer_get_date(timer);
-	if (timeout <= ns)
-		return 1;
+	if (timeout <= base)
+		return ktime_set(0, 1);
 
-	return timeout - ns;
+	return ktime_sub(timeout, base);
 }
 EXPORT_SYMBOL_GPL(xnthread_get_timeout);
 
-xnticks_t xnthread_get_period(struct xnthread *thread)
+ktime_t xnthread_get_period(struct xnthread *thread)
 {
-	xnticks_t period = 0;
+	ktime_t period = 0;
 	/*
 	 * The current thread period might be:
 	 * - the value of the timer interval for periodic threads (ns/ticks)
@@ -594,7 +594,7 @@ int xnthread_set_mode(int clrmask, int setmask)
 EXPORT_SYMBOL_GPL(xnthread_set_mode);
 
 void xnthread_suspend(struct xnthread *thread, int mask,
-		      xnticks_t timeout, xntmode_t timeout_mode,
+		      ktime_t timeout, xntmode_t timeout_mode,
 		      struct xnsynch *wchan)
 {
 	unsigned long oldstate;
@@ -639,7 +639,7 @@ void xnthread_suspend(struct xnthread *thread, int mask,
 	/*
 	 * Don't start the timer for a thread delayed indefinitely.
 	 */
-	if (timeout != XN_INFINITE || timeout_mode != XN_RELATIVE) {
+	if (!timeout_infinite(timeout) || timeout_mode != XN_RELATIVE) {
 		xntimer_set_sched(&thread->rtimer, thread->sched);
 		if (xntimer_start(&thread->rtimer, timeout, XN_INFINITE,
 				  timeout_mode)) {
@@ -906,9 +906,10 @@ int xnthread_unblock(struct xnthread *thread)
 }
 EXPORT_SYMBOL_GPL(xnthread_unblock);
 
-int xnthread_set_periodic(struct xnthread *thread, xnticks_t idate,
-			  xntmode_t timeout_mode, xnticks_t period)
+int xnthread_set_periodic(struct xnthread *thread, ktime_t idate,
+			  xntmode_t timeout_mode, ktime_t period)
 {
+	struct xnclock *clock;
 	int ret = 0, cpu;
 	spl_t s;
 
@@ -932,8 +933,7 @@ int xnthread_set_periodic(struct xnthread *thread, xnticks_t idate,
 	 * gravity for kernel thread timers. This can't work, caller
 	 * must have messed up arguments.
 	 */
-	if (period < xnclock_ticks_to_ns(&nkclock,
-			 xnclock_get_gravity(&nkclock, kernel))) {
+	if (period < xnclock_get_gravity(&nkclock, kernel)) {
 		ret = -EINVAL;
 		goto unlock_and_exit;
 	}
@@ -945,15 +945,15 @@ int xnthread_set_periodic(struct xnthread *thread, xnticks_t idate,
 	 * from the clock device backing the timer, among the dynamic
 	 * set of real-time CPUs currently enabled.
 	 */
-	cpu = xnclock_get_default_cpu(xntimer_clock(&thread->ptimer),
-				      xnsched_cpu(thread->sched));
+	clock = xntimer_clock(&thread->ptimer);
+	cpu = xnclock_get_default_cpu(clock, xnsched_cpu(thread->sched));
 	xntimer_set_sched(&thread->ptimer, xnsched_struct(cpu));
 
-	if (idate == XN_INFINITE)
+	if (timeout_infinite(idate))
 		xntimer_start(&thread->ptimer, period, period, XN_RELATIVE);
 	else {
 		if (timeout_mode == XN_REALTIME)
-			idate -= xnclock_get_offset(xntimer_clock(&thread->ptimer));
+			idate = ktime_sub(idate, xnclock_get_offset(clock));
 		else if (timeout_mode != XN_ABSOLUTE) {
 			ret = -EINVAL;
 			goto unlock_and_exit;
@@ -974,7 +974,7 @@ int xnthread_wait_period(unsigned long *overruns_r)
 	unsigned long overruns = 0;
 	struct xnthread *thread;
 	struct xnclock *clock;
-	xnticks_t now;
+	ktime_t now;
 	int ret = 0;
 	spl_t s;
 
@@ -990,15 +990,14 @@ int xnthread_wait_period(unsigned long *overruns_r)
 	trace_steely_thread_wait_period(thread);
 
 	clock = xntimer_clock(&thread->ptimer);
-	now = xnclock_read_raw(clock);
-	if (likely((xnsticks_t)(now - xntimer_pexpect(&thread->ptimer)) < 0)) {
+	now = xnclock_read_monotonic(clock);
+	if (likely(now < xntimer_pexpect(&thread->ptimer))) {
 		xnthread_suspend(thread, XNDELAY, XN_INFINITE, XN_RELATIVE, NULL);
 		if (unlikely(xnthread_test_info(thread, XNBREAK))) {
 			ret = -EINTR;
 			goto out;
 		}
-
-		now = xnclock_read_raw(clock);
+		now = xnclock_read_monotonic(clock);
 	}
 
 	overruns = xntimer_get_overruns(&thread->ptimer, now);
@@ -1016,7 +1015,7 @@ int xnthread_wait_period(unsigned long *overruns_r)
 }
 EXPORT_SYMBOL_GPL(xnthread_wait_period);
 
-int xnthread_set_slice(struct xnthread *thread, xnticks_t quantum)
+int xnthread_set_slice(struct xnthread *thread, ktime_t quantum)
 {
 	struct xnsched *sched;
 	spl_t s;
@@ -1029,7 +1028,7 @@ int xnthread_set_slice(struct xnthread *thread, xnticks_t quantum)
 	sched = thread->sched;
 	thread->rrperiod = quantum;
 
-	if (quantum != XN_INFINITE) {
+	if (!timeout_infinite(quantum)) {
 		if (thread->base_class->sched_tick == NULL) {
 			xnlock_put_irqrestore(&nklock, s);
 			return -EINVAL;

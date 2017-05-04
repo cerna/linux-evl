@@ -87,7 +87,7 @@ void steely_signal_free(struct steely_sigpending *sigp);
 void steely_signal_flush(struct steely_thread *thread);
 
 int steely_signal_wait(sigset_t *set, struct siginfo *si,
-		       xnticks_t timeout, xntmode_t tmode);
+		       ktime_t timeout, xntmode_t tmode);
 
 int __steely_kill(struct steely_thread *thread,
 		  int sig, int group);

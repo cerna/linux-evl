@@ -22,6 +22,7 @@
 
 #include <linux/irq_pipeline.h>
 #include <linux/percpu.h>
+#include <linux/ktime.h>
 #include <steely/assert.h>
 
 typedef unsigned long spl_t;
@@ -45,13 +46,13 @@ struct xnlock {
 	const char *function;
 	unsigned int line;
 	int cpu;
-	unsigned long long spin_time;
-	unsigned long long lock_date;
+	ktime_t spin_time;
+	ktime_t lock_date;
 };
 
 struct xnlockinfo {
-	unsigned long long spin_time;
-	unsigned long long lock_time;
+	ktime_t spin_time;
+	ktime_t lock_time;
 	const char *file;
 	const char *function;
 	unsigned int line;
@@ -73,10 +74,10 @@ struct xnlockinfo {
 	, const char *file, int line, const char *function
 #define XNLOCK_DBG_PASS_CONTEXT		, file, line, function
 
-void xnlock_dbg_prepare_acquire(unsigned long long *start);
+void xnlock_dbg_prepare_acquire(ktime_t *start);
 void xnlock_dbg_prepare_spin(unsigned int *spin_limit);
 void xnlock_dbg_acquired(struct xnlock *lock, int cpu,
-			 unsigned long long *start,
+			 ktime_t *start,
 			 const char *file, int line,
 			 const char *function);
 int xnlock_dbg_release(struct xnlock *lock,
@@ -103,7 +104,7 @@ struct xnlock {
 #define XNLOCK_DBG_PASS_CONTEXT
 
 static inline
-void xnlock_dbg_prepare_acquire(unsigned long long *start)
+void xnlock_dbg_prepare_acquire(ktime_t *start)
 {
 }
 
@@ -114,7 +115,7 @@ void xnlock_dbg_prepare_spin(unsigned int *spin_limit)
 
 static inline void
 xnlock_dbg_acquired(struct xnlock *lock, int cpu,
-		    unsigned long long *start)
+		    ktime_t *start)
 {
 }
 
@@ -149,7 +150,7 @@ static inline void xnlock_init (struct xnlock *lock)
 static inline int ____xnlock_get(struct xnlock *lock /*, */ XNLOCK_DBG_CONTEXT_ARGS)
 {
 	int cpu = raw_smp_processor_id();
-	unsigned long long start;
+	ktime_t start;
 
 	if (lock->owner == cpu)
 		return 2;

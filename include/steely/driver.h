@@ -632,7 +632,7 @@ typedef void (*rtdm_task_proc_t)(void *arg);
 int rtdm_task_init(rtdm_task_t *task, const char *name,
 		   rtdm_task_proc_t task_proc, void *arg,
 		   int priority, nanosecs_rel_t period);
-int __rtdm_task_sleep(xnticks_t timeout, xntmode_t mode);
+int __rtdm_task_sleep(ktime_t timeout, xntmode_t mode);
 void rtdm_task_busy_sleep(nanosecs_rel_t delay);
 
 static inline void rtdm_task_destroy(rtdm_task_t *task)

@@ -91,11 +91,11 @@ struct xnintr_iterator {
 	/* Current hit counter. */
 	unsigned long hits;
 	/* Used CPU time in current accounting period. */
-	xnticks_t exectime_period;
+	ktime_t exectime_period;
 	/* Length of accounting period. */
-	xnticks_t account_period;
+	ktime_t account_period;
 	/* Overall CPU time consumed. */
-	xnticks_t exectime_total;
+	ktime_t exectime_total;
 	/* System-wide xnintr list revision (internal use). */
 	int list_rev;
 	/* Currently visited xnintr object (internal use). */

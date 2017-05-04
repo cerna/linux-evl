@@ -234,14 +234,14 @@ TRACE_EVENT(steely_thread_init,
 );
 
 TRACE_EVENT(steely_thread_suspend,
-	TP_PROTO(struct xnthread *thread, unsigned long mask, xnticks_t timeout,
+	TP_PROTO(struct xnthread *thread, unsigned long mask, ktime_t timeout,
 		 xntmode_t timeout_mode, struct xnsynch *wchan),
 	TP_ARGS(thread, mask, timeout, timeout_mode, wchan),
 
 	TP_STRUCT__entry(
 		__field(struct xnthread *, thread)
 		__field(unsigned long, mask)
-		__field(xnticks_t, timeout)
+		__field(ktime_t, timeout)
 		__field(xntmode_t, timeout_mode)
 		__field(struct xnsynch *, wchan)
 	),
@@ -256,7 +256,8 @@ TRACE_EVENT(steely_thread_suspend,
 
 	TP_printk("thread=%p mask=0x%lx timeout=%Lu timeout_mode=%d wchan=%p",
 		  __entry->thread, __entry->mask,
-		  __entry->timeout, __entry->timeout_mode, __entry->wchan)
+		  ktime_to_ns(__entry->timeout), __entry->timeout_mode,
+		  __entry->wchan)
 );
 
 TRACE_EVENT(steely_thread_resume,
@@ -535,7 +536,7 @@ DEFINE_EVENT(timer_event, steely_timer_expire,
 			 { XN_REALTIME, "rt" })
 
 TRACE_EVENT(steely_timer_start,
-	TP_PROTO(struct xntimer *timer, xnticks_t value, xnticks_t interval,
+	TP_PROTO(struct xntimer *timer, ktime_t value, ktime_t interval,
 		 xntmode_t mode),
 	TP_ARGS(timer, value, interval, mode),
 
@@ -544,8 +545,8 @@ TRACE_EVENT(steely_timer_start,
 #ifdef CONFIG_STEELY_STATS
 		__string(name, timer->name)
 #endif
-		__field(xnticks_t, value)
-		__field(xnticks_t, interval)
+		__field(ktime_t, value)
+		__field(ktime_t, interval)
 		__field(xntmode_t, mode)
 	),
 
@@ -566,32 +567,9 @@ TRACE_EVENT(steely_timer_start,
 #else
 		  "(anon)",
 #endif
-		  __entry->value, __entry->interval,
+		  ktime_to_ns(__entry->value),
+		  ktime_to_ns(__entry->interval),
 		  steely_print_timer_mode(__entry->mode))
-);
-
-u64 ftrace_now(int cpu);
-unsigned long long ns2usecs(u64 nsec);
-
-TRACE_EVENT(steely_clock_shot,
-	TP_PROTO(unsigned long delay),
-	TP_ARGS(delay),
-
-	TP_STRUCT__entry(
-		__field(unsigned long, sec)
-		__field(unsigned long, usec)
-	),
-
-	TP_fast_assign(
-		u64 now = ftrace_now(raw_smp_processor_id());
-		u64 t = ns2usecs(now + xnclock_ticks_to_ns(&nkclock, delay));
-		__entry->usec = do_div(t, USEC_PER_SEC);
-		__entry->sec = (unsigned long)t;
-	),
-
-	TP_printk("wakeup_time=%5lu.%06lu",
-		  __entry->sec,
-		  __entry->usec)
 );
 
 #ifdef CONFIG_SMP

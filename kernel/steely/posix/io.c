@@ -187,7 +187,7 @@ STEELY_SYSCALL(select, primary,
 	fd_set *out_fds[XNSELECT_MAX_TYPES] = {NULL, NULL, NULL};
 	fd_set in_fds_storage[XNSELECT_MAX_TYPES],
 		out_fds_storage[XNSELECT_MAX_TYPES];
-	xnticks_t timeout = XN_INFINITE;
+	ktime_t timeout = XN_INFINITE;
 	struct restart_block *restart;
 	xntmode_t mode = XN_RELATIVE;
 	struct xnselector *selector;
@@ -217,7 +217,8 @@ STEELY_SYSCALL(select, primary,
 			if (tv.tv_usec > 1000000)
 				return -EINVAL;
 
-			timeout = clock_get_ticks(CLOCK_MONOTONIC) + tv2ns(&tv);
+			timeout = ktime_add(clock_get_ticks(CLOCK_MONOTONIC),
+					    timeval_to_ktime(tv));
 		}
 
 		mode = XN_ABSOLUTE;
@@ -280,9 +281,9 @@ STEELY_SYSCALL(select, primary,
 
 out:
 	if (u_tv && (err > 0 || err == -EINTR)) {
-		xnsticks_t diff = timeout - clock_get_ticks(CLOCK_MONOTONIC);
-		if (diff > 0)
-			ticks2tv(&tv, diff);
+		ktime_t delta = ktime_sub(timeout, clock_get_ticks(CLOCK_MONOTONIC));
+		if (ktime_to_ns(delta) > 0)
+			tv = ktime_to_timeval(delta);
 		else
 			tv.tv_sec = tv.tv_usec = 0;
 

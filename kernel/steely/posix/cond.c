@@ -125,7 +125,7 @@ static inline int pthread_cond_destroy(struct steely_cond_shadow *cnd)
 static inline int steely_cond_timedwait_prologue(struct xnthread *cur,
 						 struct steely_cond *cond,
 						 struct steely_mutex *mutex,
-						 xnticks_t abs_to)
+						 ktime_t abs_to)
 {
 	int err, ret;
 	spl_t s;
@@ -167,7 +167,7 @@ static inline int steely_cond_timedwait_prologue(struct xnthread *cur,
 	}
 
 	/* Wait for another thread to signal the condition. */
-	if (abs_to != XN_INFINITE)
+	if (!timeout_infinite(abs_to))
 		ret = xnsynch_sleep_on(&cond->synchbase, abs_to,
 				       clock_flag(TIMER_ABSTIME, cond->attr.clock));
 	else
@@ -310,7 +310,7 @@ int __steely_cond_wait_prologue(struct steely_cond_shadow __user *u_cnd,
 		if (err == 0) {
 			trace_steely_cond_timedwait(u_cnd, u_mx, &ts);
 			err = steely_cond_timedwait_prologue(cur, cond, mx,
-							     ts2ns(&ts) + 1);
+				     ktime_add_ns(timespec_to_ktime(ts), 1));
 		}
 	} else {
 		trace_steely_cond_wait(u_cnd, u_mx);

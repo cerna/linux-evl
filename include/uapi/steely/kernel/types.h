@@ -21,10 +21,6 @@
 #include <linux/types.h>
 #include <uapi/steely/kernel/limits.h>
 
-typedef __u64 xnticks_t;
-
-typedef __s64 xnsticks_t;
-
 typedef __u32 xnhandle_t;
 
 #define XN_NO_HANDLE		((xnhandle_t)0)
