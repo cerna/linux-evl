@@ -539,10 +539,9 @@ void print_core_clock_status(struct xnclock *clock,
 	wd_status = "+watchdog";
 #endif /* CONFIG_STEELY_WATCHDOG */
 
-	xnvfile_printf(it, "%7s: timer=%s, clock=%s\n",
-		       "devices",
-		       ctd->real_device ? ctd->real_device->name : "(inactive)",
-		       steely_pipeline.clock_data.hrclock_name);
+	xnvfile_printf(it, "timer device: %s\n",
+		       ctd->real_device ?
+		       ctd->real_device->name : "(inactive)");
 	xnvfile_printf(it, "%7s: %s%s\n", "status", tm_status, wd_status);
 }
 

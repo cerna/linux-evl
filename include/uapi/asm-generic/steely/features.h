@@ -23,8 +23,6 @@
 #define XNFEAT_STRING_LEN 64
 
 struct steely_featinfo {
-	/* Real-time clock frequency */
-	__u64 clock_freq;
 	/* Offset of nkvdso in the sem heap. */
 	__u32 vdso_offset;
 	/* ABI revision level. */

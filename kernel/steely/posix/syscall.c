@@ -347,7 +347,6 @@ static STEELY_SYSCALL(bind, lostage,
 	f->feat_abirev = STEELY_ABI_REV;
 	collect_arch_features(f);
 
-	f->clock_freq = steely_pipeline.clock_freq;
 	f->vdso_offset = steely_umm_offset(&steely_ppd_get(1)->umm, nkvdso);
 
 	if (steely_copy_to_user(u_breq, &breq, sizeof(breq)))

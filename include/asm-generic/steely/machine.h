@@ -44,8 +44,6 @@ DECLARE_PER_CPU(struct steely_machine_cpudata, steely_machine_cpudata);
 
 struct steely_pipeline {
 	struct irq_stage stage;
-	struct dovetail_hrclock_data clock_data;
-	unsigned long clock_freq;
 	unsigned int escalate_virq;
 #ifdef CONFIG_SMP
 	struct cpumask supported_cpus;

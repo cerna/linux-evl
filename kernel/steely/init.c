@@ -34,9 +34,6 @@
 #include "posix/internal.h"
 #include "procfs.h"
 
-static unsigned long clockfreq_arg;
-module_param_named(clockfreq, clockfreq_arg, ulong, 0444);
-
 #ifdef CONFIG_SMP
 static unsigned long supported_cpus_arg = -1;
 module_param_named(supported_cpus, supported_cpus_arg, ulong, 0444);
@@ -138,6 +135,8 @@ static void sys_shutdown(void)
 	xnheap_vfree(membase);
 }
 
+u64 clocksource_get_frequency(void);
+
 static int __init mach_setup(void)
 {
 	int ret, sirq;
@@ -151,18 +150,6 @@ static int __init mach_setup(void)
 	}
 
 	irq_push_stage(&steely_pipeline.stage, "Steely");
-	dovetail_get_hrclock(&steely_pipeline.clock_data);
-
-	if (clockfreq_arg == 0)
-		clockfreq_arg = steely_pipeline.clock_data.hrclock_freq;
-
-	if (clockfreq_arg == 0) {
-		printk(STEELY_ERR "null clock frequency? Aborting.\n");
-		ret = -ENODEV;
-		goto fail;
-	}
-
-	steely_pipeline.clock_freq = clockfreq_arg;
 
 	sirq = irq_create_direct_mapping(synthetic_irq_domain);
 	if (sirq == 0) {
@@ -178,7 +165,7 @@ static int __init mach_setup(void)
 	if (ret)
 		goto fail_escalate_request;
 
-	ret = xnclock_init(steely_pipeline.clock_freq);
+	ret = xnclock_init(clocksource_get_frequency());
 	if (ret)
 		goto fail_clock;
 
