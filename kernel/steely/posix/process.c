@@ -807,56 +807,6 @@ void dovetail_migration_hook(struct task_struct *p) /* hw IRQs off */
 	xnsched_run();
 }
 
-#ifdef CONFIG_STEELY_HOSTRT
-
-static IPIPE_DEFINE_SPINLOCK(__hostrtlock);
-
-static void handle_hostrt_event(struct ipipe_hostrt_data *hostrt)
-{
-	unsigned long flags;
-	urwstate_t tmp;
-
-	/*
-	 * The locking strategy is twofold:
-	 * - The spinlock protects against concurrent updates from within the
-	 *   Linux kernel and against preemption by Steely
-	 * - The unsynced R/W block is for lockless read-only access.
-	 */
-	raw_spin_lock_irqsave(&__hostrtlock, flags);
-
-	unsynced_write_block(&tmp, &nkvdso->hostrt_data.lock) {
-		nkvdso->hostrt_data.live = 1;
-		nkvdso->hostrt_data.cycle_last = hostrt->cycle_last;
-		nkvdso->hostrt_data.mask = hostrt->mask;
-		nkvdso->hostrt_data.mult = hostrt->mult;
-		nkvdso->hostrt_data.shift = hostrt->shift;
-		nkvdso->hostrt_data.wall_sec = hostrt->wall_time_sec;
-		nkvdso->hostrt_data.wall_nsec = hostrt->wall_time_nsec;
-		nkvdso->hostrt_data.wtom_sec = hostrt->wall_to_monotonic.tv_sec;
-		nkvdso->hostrt_data.wtom_nsec = hostrt->wall_to_monotonic.tv_nsec;
-	}
-
-	raw_spin_unlock_irqrestore(&__hostrtlock, flags);
-}
-
-static inline void init_hostrt(void)
-{
-	unsynced_rw_init(&nkvdso->hostrt_data.lock);
-	nkvdso->hostrt_data.live = 0;
-}
-
-#else /* !CONFIG_STEELY_HOSTRT */
-
-struct ipipe_hostrt_data;
-
-static inline void handle_hostrt_event(struct ipipe_hostrt_data *hostrt)
-{
-}
-
-static inline void init_hostrt(void) { }
-
-#endif /* !CONFIG_STEELY_HOSTRT */
-
 /* called with nklock held */
 static void register_debugged_thread(struct xnthread *thread)
 {
@@ -1113,9 +1063,6 @@ void dovetail_kevent_hook(int kevent, void *data)
 	case KEVENT_CLEANUP:
 		handle_cleanup_event(data);
 		break;
-	case KEVENT_HOSTRT:
-		handle_hostrt_event(data);
-		break;
 	case KEVENT_SETAFFINITY:
 		handle_setaffinity_event(data);
 		break;
@@ -1350,7 +1297,6 @@ __init int steely_interface_init(void)
 	if (ret)
 		goto fail_siginit;
 
-	init_hostrt();
 	dovetail_host_events(&root_irq_stage,
 			     DOVETAIL_SYSCALLS|DOVETAIL_KEVENTS);
 	dovetail_host_events(&steely_pipeline.stage,

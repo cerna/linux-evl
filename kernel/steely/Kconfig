@@ -200,10 +200,6 @@ config STEELY_TIMER_RBTREE
 
 endchoice
 
-config STEELY_HOSTRT
-       depends on DOVETAIL_HAVE_HOSTRT
-       def_bool y
-
 config STEELY_PIPE
 	bool
 

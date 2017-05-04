@@ -26,20 +26,11 @@
 #include <uapi/steely/kernel/vdso.h>
 
 /*
- * Define the available feature set here. We have a single feature
- * defined for now.
+ * Define the available feature set here. We have no feature defined
+ * for now.
  */
-#ifdef CONFIG_STEELY_HOSTRT
-#define XNVDSO_FEATURES XNVDSO_FEAT_HOST_REALTIME
-#else
 #define XNVDSO_FEATURES 0
-#endif /* CONFIG_STEELY_HOSTRT */
 
 extern struct xnvdso *nkvdso;
-
-static inline struct xnvdso_hostrt_data *get_hostrt_data(void)
-{
-	return &nkvdso->hostrt_data;
-}
 
 #endif /* _STEELY_KERNEL_VDSO_H */

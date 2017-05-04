@@ -28,15 +28,13 @@
  * arise when porting applications in both directions.
  *
  * 0  .. 31   regular POSIX/linux clock ids.
- * 32 .. 63   statically reserved Steely clocks
+ * 32 .. 63   statically reserved Steely clocks (none yet)
  * 64 .. 127  dynamically registered Steely clocks (external)
  *
  * CAUTION: clock ids must fit within a 7bit value, see
  * include/uapi/steely/thread.h (e.g. steely_condattr).
  */
 #define __STEELY_CLOCK_STATIC(nr)	((clockid_t)(nr + 32))
-
-#define CLOCK_HOST_REALTIME  __STEELY_CLOCK_STATIC(0)
 
 #define STEELY_MAX_EXTCLOCKS  64
 
