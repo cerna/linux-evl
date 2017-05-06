@@ -40,9 +40,6 @@ void xnclock_core_local_shot(struct xnsched *sched);
 
 void xnclock_core_remote_shot(struct xnsched *sched);
 
-unsigned long long xnclock_divrem_billion(unsigned long long value,
-					  unsigned long *rem);
-
 static inline ktime_t xnclock_core_read_monotonic(void)
 {
 	return ktime_get_mono_fast_ns();

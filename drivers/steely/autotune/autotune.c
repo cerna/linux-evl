@@ -21,7 +21,6 @@
 #include <linux/slab.h>
 #include <linux/kernel.h>
 #include <linux/sort.h>
-#include <steely/arith.h>
 #include <steely/driver.h>
 #include <rtdm/autotune.h>
 

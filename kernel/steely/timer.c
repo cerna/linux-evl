@@ -24,7 +24,6 @@
 #include <steely/intr.h>
 #include <steely/clock.h>
 #include <steely/trace.h>
-#include <steely/arith.h>
 #include <asm/div64.h>
 #include <trace/events/steely-core.h>
 

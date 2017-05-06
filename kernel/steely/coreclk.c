@@ -30,7 +30,6 @@
 #include <steely/intr.h>
 #include <steely/clock.h>
 #include <steely/coreclk.h>
-#include <steely/arith.h>
 #include <asm/steely/calibration.h>
 #include <trace/events/steely-core.h>
 

@@ -20,12 +20,12 @@
 #include <linux/signal.h>
 #include <linux/wait.h>
 #include <linux/sched.h>
+#include <asm/div64.h>
 #include <steely/sched.h>
 #include <steely/thread.h>
 #include <steely/timer.h>
 #include <steely/intr.h>
 #include <steely/heap.h>
-#include <steely/arith.h>
 #include <steely/coreclk.h>
 #include <uapi/steely/signal.h>
 #define CREATE_TRACE_POINTS
@@ -1180,7 +1180,7 @@ static int vfile_schedstat_show(struct xnvfile_snapshot_iterator *it,
 				void *data)
 {
 	struct vfile_schedstat_data *p = data;
-	int usage = 0;
+	u64 usage = 0;
 
 	if (p == NULL)
 		xnvfile_printf(it,
@@ -1194,15 +1194,15 @@ static int vfile_schedstat_show(struct xnvfile_snapshot_iterator *it,
 				p->exectime_period >>= 16;
 				p->account_period >>= 16;
 			}
-			usage = xnarch_ulldiv(p->exectime_period * 1000LL +
-					      (p->account_period >> 1),
-					      p->account_period, NULL);
+			usage = p->exectime_period * 1000LL +
+				(p->account_period >> 1);
+			do_div(usage, ktime_to_ns(p->account_period));
 		}
 		xnvfile_printf(it,
 			       "%3u  %-6d %-10lu %-10lu %-10lu %-4lu  %.8x  %3u.%u"
 			       "  %s%s%s\n",
 			       p->cpu, p->pid, p->ssw, p->csw, p->xsc, p->pf, p->state,
-			       usage / 10, usage % 10,
+			       (u32)usage / 10, (u32)usage % 10,
 			       (p->state & XNUSER) ? "" : "[",
 			       p->name,
 			       (p->state & XNUSER) ? "" : "]");

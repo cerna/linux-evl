@@ -28,9 +28,6 @@
 
 #define STEELY_FEAT_MAN (__xn_feat_generic_man_mask)
 
-#define XNARCH_HAVE_LLMULSHFT    1
-#define XNARCH_HAVE_NODIV_LLIMD  1
-
 struct steely_featinfo_archdep { /* no arch-specific feature */ };
 
 #include <uapi/asm-generic/steely/features.h>

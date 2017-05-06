@@ -23,7 +23,6 @@
 #include <steely/ppd.h>
 #include <steely/assert.h>
 #include <steely/list.h>
-#include <steely/arith.h>
 #include <asm/steely/syscall.h>
 #include "process.h"
 #include "extension.h"

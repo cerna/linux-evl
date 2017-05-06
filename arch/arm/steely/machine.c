@@ -19,7 +19,6 @@
  */
 
 #include <linux/mm.h>
-#include <steely/arith.h>
 #include <asm/cacheflush.h>
 #include <asm/steely/machine.h>
 

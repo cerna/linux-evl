@@ -69,20 +69,12 @@ static inline void *rtipc_fd_to_state(struct rtdm_fd *fd)
 
 static inline nanosecs_rel_t rtipc_timeval_to_ns(const struct timeval *tv)
 {
-	nanosecs_rel_t ns = tv->tv_usec * 1000;
-
-	if (tv->tv_sec)
-		ns += (nanosecs_rel_t)tv->tv_sec * 1000000000UL;
-
-	return ns;
+	return ktime_to_ns(timeval_to_ktime(*tv));
 }
 
 static inline void rtipc_ns_to_timeval(struct timeval *tv, nanosecs_rel_t ns)
 {
-	unsigned long nsecs;
-
-	tv->tv_sec = xnclock_divrem_billion(ns, &nsecs);
-	tv->tv_usec = nsecs / 1000;
+	*tv = ktime_to_timeval(ns_to_ktime(ns));
 }
 
 int rtipc_get_iovec(struct rtdm_fd *fd, struct iovec **iov,

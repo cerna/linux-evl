@@ -28,7 +28,6 @@
 #include <steely/clock.h>
 #include <steely/coreclk.h>
 #include <steely/vdso.h>
-#include <steely/arith.h>
 #include <uapi/steely/time.h>
 #include <trace/events/steely-core.h>
 
@@ -608,38 +607,6 @@ void xnclock_stop_timers(struct xnclock *clock)
 
 	xnlock_put_irqrestore(&nklock, s);
 }
-
-#ifdef XNARCH_HAVE_NODIV_LLIMD
-
-static struct xnarch_u32frac bln_frac;
-
-unsigned long long xnclock_divrem_billion(unsigned long long value,
-					  unsigned long *rem)
-{
-	unsigned long long q;
-	unsigned r;
-
-	q = xnarch_nodiv_ullimd(value, bln_frac.frac, bln_frac.integ);
-	r = value - q * 1000000000;
-	if (r >= 1000000000) {
-		++q;
-		r -= 1000000000;
-	}
-	*rem = r;
-	return q;
-}
-
-#else /* !XNARCH_HAVE_NODIV_LLIMD */
-
-unsigned long long xnclock_divrem_billion(unsigned long long value,
-					  unsigned long *rem)
-{
-	return xnarch_ulldiv(value, 1000000000, rem);
-}
-
-#endif /* !XNARCH_HAVE_NODIV_LLIMD */
-
-EXPORT_SYMBOL_GPL(xnclock_divrem_billion);
 
 int __init xnclock_init(void)
 {

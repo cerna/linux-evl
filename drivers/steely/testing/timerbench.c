@@ -19,10 +19,10 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/semaphore.h>
-#include <steely/arith.h>
 #include <rtdm/testing.h>
 #include <steely/driver.h>
 #include <steely/compat.h>
+#include <asm/div64.h>
 
 MODULE_DESCRIPTION("Timer latency test helper");
 MODULE_AUTHOR("Jan Kiszka <jan.kiszka@web.de>");
@@ -66,7 +66,19 @@ static inline void add_histogram(struct rt_tmbench_context *ctx,
 
 static inline long long slldiv(long long s, unsigned d)
 {
-	return s >= 0 ? xnarch_ulldiv(s, d, NULL) : -xnarch_ulldiv(-s, d, NULL);
+	u64 n = (u64)n;
+	
+	if (n == 0)
+		return 0;
+	if (n > 0)
+		do_div(n, d);
+	else {
+		n = -n;
+		do_div(n, d);
+		n = -n;
+	}
+
+	return n;
 }
 
 static void eval_inner_loop(struct rt_tmbench_context *ctx, __s32 dt)

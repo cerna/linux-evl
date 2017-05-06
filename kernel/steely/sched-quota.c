@@ -17,8 +17,8 @@
  * 02111-1307, USA.
  */
 #include <linux/bitmap.h>
+#include <asm/div64.h>
 #include <steely/sched.h>
-#include <steely/arith.h>
 #include <uapi/steely/sched.h>
 
 /*
@@ -561,14 +561,18 @@ void xnsched_quota_set_limit(struct xnsched_quota_group *tg,
 			     int *quota_sum_r)
 {
 	struct xnsched_quota *qs = &tg->sched->quota;
+	u64 n;
 
 	atomic_only();
 
 	if (quota_percent < 0 || quota_percent > 100) { /* Quota off. */
 		quota_percent = 100;
 		tg->quota = qs->period;
-	} else
-		tg->quota = xnarch_div64(qs->period * quota_percent, 100);
+	} else {
+		n = qs->period * quota_percent;
+		do_div(n, 100);
+		tg->quota = n;
+	}
 
 	if (quota_peak_percent < quota_percent)
 		quota_peak_percent = quota_percent;
@@ -576,8 +580,11 @@ void xnsched_quota_set_limit(struct xnsched_quota_group *tg,
 	if (quota_peak_percent < 0 || quota_peak_percent > 100) {
 		quota_peak_percent = 100;
 		tg->quota_peak = qs->period;
-	} else
-		tg->quota_peak = xnarch_div64(qs->period * quota_peak_percent, 100);
+	} else {
+		n = qs->period * quota_peak_percent;
+		do_div(n, 100);
+		tg->quota_peak = n;
+	}
 
 	tg->quota_percent = quota_percent;
 	tg->quota_peak_percent = quota_peak_percent;
