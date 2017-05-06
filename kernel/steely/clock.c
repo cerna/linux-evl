@@ -88,9 +88,6 @@ void xnclock_adjust(struct xnclock *clock, ktime_t delta)
 	xntimerh_t *h;
 	xntimerq_t *q;
 
-	nkclock.wallclock_offset += ktime_to_ns(delta);
-	nkvdso->wallclock_offset = nkclock.wallclock_offset;
-
 	INIT_LIST_HEAD(&adjq);
 
 	for_each_online_cpu(cpu) {

@@ -74,21 +74,25 @@ int xntimer_start(struct xntimer *timer,
 	if ((timer->status & XNTIMER_DEQUEUED) == 0)
 		xntimer_dequeue(timer, q);
 
-	now = xnclock_read_monotonic(clock);
-
 	timer->status &= ~(XNTIMER_REALTIME | XNTIMER_FIRED | XNTIMER_PERIODIC);
+	date = value;
 	switch (mode) {
 	case XN_RELATIVE:
+		now = xnclock_read_monotonic(clock);
 		if (ktime_to_ns(value) < 0)
 			return -ETIMEDOUT;
 		date = ktime_add(value,  now);
 		break;
 	case XN_REALTIME:
 		timer->status |= XNTIMER_REALTIME;
-		value = ktime_sub(value, xnclock_get_offset(clock));
-		/* fall through */
-	default: /* XN_ABSOLUTE || XN_REALTIME */
-		date = value;
+		now = xnclock_read_realtime(clock);
+		break;
+	default: /* XN_ABSOLUTE */
+		now = xnclock_read_monotonic(clock);
+		break;
+	}
+
+	if (mode != XN_RELATIVE) {
 		if (date <= now) {
 			if (timeout_infinite(interval))
 				return -ETIMEDOUT;
@@ -102,9 +106,8 @@ int xntimer_start(struct xntimer *timer,
 				    ktime_to_ns(interval) *
 				    (ktime_divns(lateness, ktime_to_ns(interval)) + 1));
 		}
-		break;
 	}
-
+	
 	/*
 	 * To cope with the basic system latency, we apply a clock
 	 * gravity value, which is the amount of time expressed in

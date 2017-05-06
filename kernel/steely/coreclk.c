@@ -203,18 +203,12 @@ static struct proxy_tick_ops proxy_ops = {
 
 int xnclock_core_takeover(void)
 {
-	struct timeval tv;
-	xnticks_t now;
 #ifdef CONFIG_STEELY_WATCHDOG
 	struct xnsched *sched;
 	int cpu;
 	spl_t s;
 #endif
 	int ret;
-
-	do_gettimeofday(&tv);
-	now = tv.tv_sec * 1000000000ULL + tv.tv_usec * 1000;
-	nkclock.wallclock_offset = now - xnclock_read_monotonic(&nkclock);
 
 #ifdef CONFIG_SMP
 	ret = request_percpu_irq_flags(IPIPE_HRTIMER_IPI,

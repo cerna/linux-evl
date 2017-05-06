@@ -34,8 +34,6 @@ struct xnclock_gravity {
 
 struct xnclock {
 	/* (ns) */
-	xnticks_t wallclock_offset;
-	/* (ns) */
 	ktime_t resolution;
 	/* Anticipation values for timer shots. */
 	struct xnclock_gravity gravity;
@@ -45,6 +43,7 @@ struct xnclock {
 #ifdef CONFIG_STEELY_EXTCLOCK
 		u64 (*read_cycles)(struct xnclock *clock);
 		ktime_t (*read_monotonic)(struct xnclock *clock);
+		ktime_t (*read_realtime)(struct xnclock *clock);
 		int (*set_time)(struct xnclock *clock,
 				const struct timespec *ts);
 		void (*program_local_shot)(struct xnclock *clock,
@@ -133,6 +132,14 @@ static inline ktime_t xnclock_read_monotonic(struct xnclock *clock)
 	return clock->ops.read_monotonic(clock);
 }
 
+static inline ktime_t xnclock_read_realtime(struct xnclock *clock)
+{
+	if (likely(clock == &nkclock))
+		return xnclock_core_read_realtime();
+
+	return clock->ops.read_realtime(clock);
+}
+
 static inline int xnclock_set_time(struct xnclock *clock,
 				   const struct timespec *ts)
 {
@@ -168,6 +175,11 @@ static inline ktime_t xnclock_read_monotonic(struct xnclock *clock)
 	return xnclock_core_read_monotonic();
 }
 
+static inline ktime_t xnclock_read_realtime(struct xnclock *clock)
+{
+	return xnclock_core_read_realtime();
+}
+
 static inline int xnclock_set_time(struct xnclock *clock,
 				   const struct timespec *ts)
 {
@@ -187,11 +199,6 @@ static inline int xnclock_get_default_cpu(struct xnclock *clock, int cpu)
 	return cpu;
 }
 #endif
-
-static inline xnticks_t xnclock_get_offset(struct xnclock *clock)
-{
-	return clock->wallclock_offset;
-}
 
 static inline ktime_t xnclock_get_resolution(struct xnclock *clock)
 {
@@ -220,16 +227,6 @@ static inline void xnclock_reset_gravity(struct xnclock *clock)
 }
 
 #define xnclock_get_gravity(__clock, __type)  ((__clock)->gravity.__type)
-
-static inline ktime_t xnclock_read_realtime(struct xnclock *clock)
-{
-	/*
-	 * Return an adjusted value of the monotonic time with the
-	 * translated system wallclock offset. FIXME.
-	 */
-	return ktime_add_ns(xnclock_read_monotonic(clock),
-			    xnclock_get_offset(clock));
-}
 
 #ifdef CONFIG_STEELY_VFILE
 

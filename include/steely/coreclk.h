@@ -45,6 +45,11 @@ static inline ktime_t xnclock_core_read_monotonic(void)
 	return ktime_get_mono_fast_ns();
 }
 
+static inline ktime_t xnclock_core_read_realtime(void)
+{
+	return ktime_get_real_fast();
+}
+
 static inline ktime_t xnclock_core_read_cycles(void)
 {
 	return ktime_get_raw_fast_ns(); /* FIXME */

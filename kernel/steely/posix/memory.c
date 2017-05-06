@@ -255,7 +255,6 @@ static struct rtdm_device sysmem_device = {
 static inline void init_vdso(void)
 {
 	nkvdso->features = XNVDSO_FEATURES;
-	nkvdso->wallclock_offset = nkclock.wallclock_offset;
 }
 
 int steely_memdev_init(void)

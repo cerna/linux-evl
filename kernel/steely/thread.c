@@ -951,17 +951,9 @@ int xnthread_set_periodic(struct xnthread *thread, ktime_t idate,
 
 	if (timeout_infinite(idate))
 		xntimer_start(&thread->ptimer, period, period, XN_RELATIVE);
-	else {
-		if (timeout_mode == XN_REALTIME)
-			idate = ktime_sub(idate, xnclock_get_offset(clock));
-		else if (timeout_mode != XN_ABSOLUTE) {
-			ret = -EINVAL;
-			goto unlock_and_exit;
-		}
+	else
 		ret = xntimer_start(&thread->ptimer, idate, period,
 				    XN_ABSOLUTE);
-	}
-
 unlock_and_exit:
 	xnlock_put_irqrestore(&nklock, s);
 

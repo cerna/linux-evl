@@ -28,13 +28,9 @@
  */
 struct xnvdso {
 	__u64 features;
-	/* XNVDSO_FEAT_WALLCLOCK_OFFSET */
-	__u64 wallclock_offset;
 };
 
 /* For each shared feature, add a flag below. */
-
-#define XNVDSO_FEAT_WALLCLOCK_OFFSET	0x0000000000000002ULL
 
 static inline int xnvdso_test_feature(struct xnvdso *vdso,
 				      __u64 feature)
