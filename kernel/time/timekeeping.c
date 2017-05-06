@@ -62,6 +62,7 @@ struct tk_fast {
 
 static struct tk_fast tk_fast_mono ____cacheline_aligned;
 static struct tk_fast tk_fast_raw  ____cacheline_aligned;
+static struct timespec64 fast_wall_to_monotonic ____cacheline_aligned;
 
 /* flag for if timekeeping is suspended */
 int __read_mostly timekeeping_suspended;
@@ -448,6 +449,17 @@ u64 ktime_get_raw_fast_ns(void)
 }
 EXPORT_SYMBOL_GPL(ktime_get_raw_fast_ns);
 
+ktime_t ktime_get_real_fast(void)
+{
+	ktime_t mono, wtm;
+
+	mono = ns_to_ktime(ktime_get_mono_fast_ns());
+	wtm = timespec64_to_ktime(fast_wall_to_monotonic);
+
+	return ktime_sub(mono, wtm);
+}
+EXPORT_SYMBOL_GPL(ktime_get_real_fast);
+
 /**
  * ktime_get_boot_fast_ns - NMI safe and fast access to boot clock.
  *
@@ -513,6 +525,8 @@ static void halt_fast_timekeeper(struct timekeeper *tk)
 	memcpy(&tkr_dummy, tkr, sizeof(tkr_dummy));
 	tkr_dummy.clock = &dummy_clock;
 	update_fast_timekeeper(&tkr_dummy, &tk_fast_raw);
+
+	fast_wall_to_monotonic = tk->wall_to_monotonic;
 }
 
 #ifdef CONFIG_GENERIC_TIME_VSYSCALL_OLD
@@ -656,6 +670,7 @@ static void timekeeping_update(struct timekeeper *tk, unsigned int action)
 
 	update_fast_timekeeper(&tk->tkr_mono, &tk_fast_mono);
 	update_fast_timekeeper(&tk->tkr_raw,  &tk_fast_raw);
+	fast_wall_to_monotonic = tk->wall_to_monotonic;
 
 	if (action & TK_CLOCK_WAS_SET)
 		tk->clock_was_set_seq++;
