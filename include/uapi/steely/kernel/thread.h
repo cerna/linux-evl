@@ -82,7 +82,7 @@
  */
 #define XNTHREAD_STATE_LABELS  "SWDRU..X.HbTlrt.....L."
 
-struct xnthread_user_window {
+struct steely_user_window {
 	__u32 state;
 	__u32 info;
 	__u32 grant_value;

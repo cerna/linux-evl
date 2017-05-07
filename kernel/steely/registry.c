@@ -439,15 +439,15 @@ static struct xnobject *registry_hash_find(const char *key)
 }
 
 struct registry_wait_context {
-	struct xnthread_wait_context wc;
+	struct steely_wait_context wc;
 	const char *key;
 };
 
 static inline int registry_wakeup_sleepers(const char *key)
 {
 	struct registry_wait_context *rwc;
-	struct xnthread_wait_context *wc;
-	struct xnthread *sleeper, *tmp;
+	struct steely_wait_context *wc;
+	struct steely_thread *sleeper, *tmp;
 	int cnt = 0;
 
 	xnsynch_for_each_sleeper_safe(sleeper, tmp, &register_synch) {

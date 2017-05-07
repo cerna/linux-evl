@@ -41,20 +41,20 @@ struct xnsched_mlq {
 	struct list_head heads[XNSCHED_MLQ_LEVELS];
 };
 
-struct xnthread;
+struct steely_thread;
 
 void xnsched_initq(struct xnsched_mlq *q);
 
 void xnsched_addq(struct xnsched_mlq *q,
-		  struct xnthread *thread);
+		  struct steely_thread *thread);
 
 void xnsched_addq_tail(struct xnsched_mlq *q, 
-		       struct xnthread *thread);
+		       struct steely_thread *thread);
 
 void xnsched_delq(struct xnsched_mlq *q,
-		  struct xnthread *thread);
+		  struct steely_thread *thread);
 
-struct xnthread *xnsched_getq(struct xnsched_mlq *q);
+struct steely_thread *xnsched_getq(struct xnsched_mlq *q);
 
 static inline int xnsched_emptyq_p(struct xnsched_mlq *q)
 {
@@ -79,21 +79,21 @@ typedef struct list_head xnsched_queue_t;
 #define xnsched_delq(__q, __t)			(void)(__q), list_del(&(__t)->rlink)
 #define xnsched_getq(__q)							\
 	({									\
-		struct xnthread *__t = NULL;					\
+		struct steely_thread *__t = NULL;					\
 		if (!list_empty(__q))						\
-			__t = list_get_entry(__q, struct xnthread, rlink);	\
+			__t = list_get_entry(__q, struct steely_thread, rlink);	\
 		__t;								\
 	})
 #define xnsched_weightq(__q)						\
 	({								\
-		struct xnthread *__t;					\
-		__t = list_first_entry(__q, struct xnthread, rlink);	\
+		struct steely_thread *__t;					\
+		__t = list_first_entry(__q, struct steely_thread, rlink);	\
 		__t->cprio;						\
 	})
 	
 
 #endif /* !CONFIG_STEELY_SCALABLE_SCHED */
 
-struct xnthread *xnsched_findq(xnsched_queue_t *q, int prio);
+struct steely_thread *xnsched_findq(xnsched_queue_t *q, int prio);
 
 #endif /* !_STEELY_KERNEL_SCHEDQUEUE_H */

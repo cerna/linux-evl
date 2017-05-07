@@ -90,7 +90,7 @@ module_param_named(watchdog_timeout, wd_timeout_arg, ulong, 0644);
 static void watchdog_handler(struct xntimer *timer)
 {
 	struct xnsched *sched = xnsched_current();
-	struct xnthread *curr = sched->curr;
+	struct steely_thread *curr = sched->curr;
 
 	if (likely(xnthread_test_state(curr, XNROOT))) {
 		xnsched_reset_watchdog(sched);
@@ -138,7 +138,7 @@ void xnsched_init(struct xnsched *sched, int cpu)
 	char htimer_name[XNOBJECT_NAME_LEN];
 	char root_name[XNOBJECT_NAME_LEN];
 	union xnsched_policy_param param;
-	struct xnthread_init_attr attr;
+	struct steely_thread_init_attr attr;
 	struct xnsched_class *p;
 
 #ifdef CONFIG_SMP
@@ -211,7 +211,7 @@ void xnsched_destroy(struct xnsched *sched)
 }
 
 static inline void set_thread_running(struct xnsched *sched,
-				      struct xnthread *thread)
+				      struct steely_thread *thread)
 {
 	xnthread_clear_state(thread, XNREADY);
 	if (xnthread_test_state(thread, XNRRB))
@@ -222,11 +222,11 @@ static inline void set_thread_running(struct xnsched *sched,
 }
 
 /* Must be called with nklock locked, interrupts off. */
-struct xnthread *xnsched_pick_next(struct xnsched *sched)
+struct steely_thread *xnsched_pick_next(struct xnsched *sched)
 {
 	struct xnsched_class *p __maybe_unused;
-	struct xnthread *curr = sched->curr;
-	struct xnthread *thread;
+	struct steely_thread *curr = sched->curr;
+	struct steely_thread *thread;
 
 	if (!xnthread_test_state(curr, XNTHREAD_BLOCK_BITS | XNZOMBIE)) {
 		/*
@@ -276,10 +276,10 @@ struct xnthread *xnsched_pick_next(struct xnsched *sched)
 void xnsched_lock(void)
 {
 	struct xnsched *sched = xnsched_current();
-	struct xnthread *curr = sched->curr;
+	struct steely_thread *curr = sched->curr;
 
 	/*
-	 * CAUTION: The fast xnthread_current() accessor carries the
+	 * CAUTION: The fast steely_current_thread() accessor carries the
 	 * relevant lock nesting count only if current runs in primary
 	 * mode. Otherwise, if the caller is unknown or relaxed
 	 * Steely-wise, then we fall back to the root thread on the
@@ -307,7 +307,7 @@ EXPORT_SYMBOL_GPL(xnsched_lock);
 void xnsched_unlock(void)
 {
 	struct xnsched *sched = xnsched_current();
-	struct xnthread *curr = sched->curr;
+	struct steely_thread *curr = sched->curr;
 
 	if (unlikely(curr == NULL || xnthread_test_state(curr, XNRELAX))) {
 		/*
@@ -331,7 +331,7 @@ void xnsched_unlock(void)
 EXPORT_SYMBOL_GPL(xnsched_unlock);
 
 /* nklock locked, interrupts off. */
-void xnsched_putback(struct xnthread *thread)
+void xnsched_putback(struct steely_thread *thread)
 {
 	if (xnthread_test_state(thread, XNREADY))
 		xnsched_dequeue(thread);
@@ -343,7 +343,7 @@ void xnsched_putback(struct xnthread *thread)
 }
 
 /* nklock locked, interrupts off. */
-int xnsched_set_policy(struct xnthread *thread,
+int xnsched_set_policy(struct steely_thread *thread,
 		       struct xnsched_class *sched_class,
 		       const union xnsched_policy_param *p)
 {
@@ -415,7 +415,7 @@ int xnsched_set_policy(struct xnthread *thread,
 EXPORT_SYMBOL_GPL(xnsched_set_policy);
 
 /* nklock locked, interrupts off. */
-bool xnsched_set_effective_priority(struct xnthread *thread, int prio)
+bool xnsched_set_effective_priority(struct steely_thread *thread, int prio)
 {
 	int wprio = xnsched_calc_wprio(thread->base_class, prio);
 
@@ -439,8 +439,8 @@ bool xnsched_set_effective_priority(struct xnthread *thread, int prio)
 }
 
 /* nklock locked, interrupts off. */
-void xnsched_track_policy(struct xnthread *thread,
-			  struct xnthread *target)
+void xnsched_track_policy(struct steely_thread *thread,
+			  struct steely_thread *target)
 {
 	union xnsched_policy_param param;
 
@@ -480,7 +480,7 @@ void xnsched_track_policy(struct xnthread *thread,
 }
 
 /* nklock locked, interrupts off. */
-void xnsched_protect_priority(struct xnthread *thread, int prio)
+void xnsched_protect_priority(struct steely_thread *thread, int prio)
 {
 	/*
 	 * Apply a PP boost by changing the effective priority of a
@@ -505,7 +505,7 @@ void xnsched_protect_priority(struct xnthread *thread, int prio)
 	xnsched_set_resched(thread->sched);
 }
 
-static void migrate_thread(struct xnthread *thread, struct xnsched *sched)
+static void migrate_thread(struct steely_thread *thread, struct xnsched *sched)
 {
 	struct xnsched_class *sched_class = thread->sched_class;
 
@@ -526,7 +526,7 @@ static void migrate_thread(struct xnthread *thread, struct xnsched *sched)
 /*
  * nklock locked, interrupts off. thread must be runnable.
  */
-void xnsched_migrate(struct xnthread *thread, struct xnsched *sched)
+void xnsched_migrate(struct steely_thread *thread, struct xnsched *sched)
 {
 	xnsched_set_resched(thread->sched);
 	migrate_thread(thread, sched);
@@ -537,7 +537,7 @@ void xnsched_migrate(struct xnthread *thread, struct xnsched *sched)
 /*
  * nklock locked, interrupts off. Thread may be blocked.
  */
-void xnsched_migrate_passive(struct xnthread *thread, struct xnsched *sched)
+void xnsched_migrate_passive(struct steely_thread *thread, struct xnsched *sched)
 {
 	struct xnsched *last_sched = thread->sched;
 
@@ -593,13 +593,13 @@ static struct list_head *add_q(struct xnsched_mlq *q, int prio)
 	return head;
 }
 
-void xnsched_addq(struct xnsched_mlq *q, struct xnthread *thread)
+void xnsched_addq(struct xnsched_mlq *q, struct steely_thread *thread)
 {
 	struct list_head *head = add_q(q, thread->cprio);
 	list_add(&thread->rlink, head);
 }
 
-void xnsched_addq_tail(struct xnsched_mlq *q, struct xnthread *thread)
+void xnsched_addq_tail(struct xnsched_mlq *q, struct steely_thread *thread)
 {
 	struct list_head *head = add_q(q, thread->cprio);
 	list_add_tail(&thread->rlink, head);
@@ -617,14 +617,14 @@ static void del_q(struct xnsched_mlq *q,
 		__clear_bit(idx, q->prio_map);
 }
 
-void xnsched_delq(struct xnsched_mlq *q, struct xnthread *thread)
+void xnsched_delq(struct xnsched_mlq *q, struct steely_thread *thread)
 {
 	del_q(q, &thread->rlink, get_qindex(q, thread->cprio));
 }
 
-struct xnthread *xnsched_getq(struct xnsched_mlq *q)
+struct steely_thread *xnsched_getq(struct xnsched_mlq *q)
 {
-	struct xnthread *thread;
+	struct steely_thread *thread;
 	struct list_head *head;
 	int idx;
 
@@ -634,13 +634,13 @@ struct xnthread *xnsched_getq(struct xnsched_mlq *q)
 	idx = xnsched_weightq(q);
 	head = q->heads + idx;
 	STEELY_BUG_ON(STEELY, list_empty(head));
-	thread = list_first_entry(head, struct xnthread, rlink);
+	thread = list_first_entry(head, struct steely_thread, rlink);
 	del_q(q, &thread->rlink, idx);
 
 	return thread;
 }
 
-struct xnthread *xnsched_findq(struct xnsched_mlq *q, int prio)
+struct steely_thread *xnsched_findq(struct xnsched_mlq *q, int prio)
 {
 	struct list_head *head;
 	int idx;
@@ -650,15 +650,15 @@ struct xnthread *xnsched_findq(struct xnsched_mlq *q, int prio)
 	if (list_empty(head))
 		return NULL;
 
-	return list_first_entry(head, struct xnthread, rlink);
+	return list_first_entry(head, struct steely_thread, rlink);
 }
 
 #ifdef CONFIG_STEELY_SCHED_CLASSES
 
-struct xnthread *xnsched_rt_pick(struct xnsched *sched)
+struct steely_thread *xnsched_rt_pick(struct xnsched *sched)
 {
 	struct xnsched_mlq *q = &sched->rt.runnable;
-	struct xnthread *thread;
+	struct steely_thread *thread;
 	struct list_head *head;
 	int idx;
 
@@ -681,7 +681,7 @@ struct xnthread *xnsched_rt_pick(struct xnsched *sched)
 	 * queuing the thread, reflecting any priority boost due to
 	 * PI.
 	 */
-	thread = list_first_entry(head, struct xnthread, rlink);
+	thread = list_first_entry(head, struct steely_thread, rlink);
 	if (unlikely(thread->sched_class != &xnsched_class_rt))
 		return thread->sched_class->sched_pick(sched);
 
@@ -694,9 +694,9 @@ struct xnthread *xnsched_rt_pick(struct xnsched *sched)
 
 #else /* !CONFIG_STEELY_SCALABLE_SCHED */
 
-struct xnthread *xnsched_findq(struct list_head *q, int prio)
+struct steely_thread *xnsched_findq(struct list_head *q, int prio)
 {
-	struct xnthread *thread;
+	struct steely_thread *thread;
 
 	if (list_empty(q))
 		return NULL;
@@ -712,15 +712,15 @@ struct xnthread *xnsched_findq(struct list_head *q, int prio)
 
 #ifdef CONFIG_STEELY_SCHED_CLASSES
 
-struct xnthread *xnsched_rt_pick(struct xnsched *sched)
+struct steely_thread *xnsched_rt_pick(struct xnsched *sched)
 {
 	struct list_head *q = &sched->rt.runnable;
-	struct xnthread *thread;
+	struct steely_thread *thread;
 
 	if (list_empty(q))
 		return NULL;
 
-	thread = list_first_entry(q, struct xnthread, rlink);
+	thread = list_first_entry(q, struct steely_thread, rlink);
 	if (unlikely(thread->sched_class != &xnsched_class_rt))
 		return thread->sched_class->sched_pick(sched);
 
@@ -749,7 +749,7 @@ static inline int test_resched(struct xnsched *sched)
 	return resched;
 }
 
-static inline void leave_root(struct xnthread *root)
+static inline void leave_root(struct steely_thread *root)
 {
 	struct xnarchtcb *rootcb = xnthread_archtcb(root);
 	struct task_struct *p = current;
@@ -772,14 +772,14 @@ irqreturn_t __xnsched_run_handler(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static inline void do_lazy_user_work(struct xnthread *curr)
+static inline void do_lazy_user_work(struct steely_thread *curr)
 {
 	xnthread_commit_ceiling(curr);
 }
 
 int ___xnsched_run(struct xnsched *sched)
 {
-	struct xnthread *prev, *next, *curr;
+	struct steely_thread *prev, *next, *curr;
 	int switched, shadow;
 	spl_t s;
 
@@ -851,7 +851,7 @@ int ___xnsched_run(struct xnsched *sched)
 	 * for determining the current domain in context switch code.
 	 */
 	if (shadow && __on_root_stage()) {
-		curr = xnthread_current();
+		curr = steely_current_thread();
 		STEELY_WARN_ON(STEELY, xnthread_test_state(curr,
 				 XNTHREAD_BLOCK_BITS & ~XNRELAX));
 		goto shadow_epilogue;
@@ -892,7 +892,7 @@ EXPORT_SYMBOL_GPL(___xnsched_run);
 static struct xnvfile_directory sched_vfroot;
 
 struct vfile_schedlist_priv {
-	struct xnthread *curr;
+	struct steely_thread *curr;
 	ktime_t start_time;
 };
 
@@ -921,7 +921,7 @@ static int vfile_schedlist_rewind(struct xnvfile_snapshot_iterator *it)
 	struct vfile_schedlist_priv *priv = xnvfile_iterator_priv(it);
 
 	/* &nkthreadq cannot be empty (root thread(s)). */
-	priv->curr = list_first_entry(&nkthreadq, struct xnthread, glink);
+	priv->curr = list_first_entry(&nkthreadq, struct steely_thread, glink);
 	priv->start_time = xnclock_read_monotonic(&nkclock);
 
 	return steely_nrthreads;
@@ -933,7 +933,7 @@ static int vfile_schedlist_next(struct xnvfile_snapshot_iterator *it,
 	struct vfile_schedlist_priv *priv = xnvfile_iterator_priv(it);
 	struct vfile_schedlist_data *p = data;
 	ktime_t timeout, period;
-	struct xnthread *thread;
+	struct steely_thread *thread;
 	ktime_t base_time;
 
 	if (priv->curr == NULL)
@@ -1042,7 +1042,7 @@ static struct xnvfile_lock_ops vfile_schedstat_lockops = {
 };
 
 struct vfile_schedstat_priv {
-	struct xnthread *curr;
+	struct steely_thread *curr;
 	struct xnintr_iterator intr_it;
 };
 
@@ -1082,7 +1082,7 @@ static int vfile_schedstat_rewind(struct xnvfile_snapshot_iterator *it)
 	 * The activity numbers on each valid interrupt descriptor are
 	 * grouped under a pseudo-thread.
 	 */
-	priv->curr = list_first_entry(&nkthreadq, struct xnthread, glink);
+	priv->curr = list_first_entry(&nkthreadq, struct steely_thread, glink);
 	irqnr = xnintr_query_init(&priv->intr_it) * NR_CPUS;
 
 	return irqnr + steely_nrthreads;
@@ -1093,7 +1093,7 @@ static int vfile_schedstat_next(struct xnvfile_snapshot_iterator *it,
 {
 	struct vfile_schedstat_priv *priv = xnvfile_iterator_priv(it);
 	struct vfile_schedstat_data *p = data;
-	struct xnthread *thread;
+	struct steely_thread *thread;
 	struct xnsched *sched;
 	ktime_t period;
 	int ret;

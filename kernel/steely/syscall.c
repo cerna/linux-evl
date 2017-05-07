@@ -28,22 +28,22 @@
 #include <steely/vdso.h>
 #include <steely/init.h>
 #include <asm-generic/steely/mayday.h>
-#include "internal.h"
-#include "thread.h"
-#include "sched.h"
-#include "mutex.h"
-#include "cond.h"
-#include "mqueue.h"
-#include "sem.h"
-#include "signal.h"
-#include "timer.h"
-#include "monitor.h"
-#include "clock.h"
-#include "event.h"
-#include "timerfd.h"
-#include "io.h"
-#include "corectl.h"
-#include "../debug.h"
+#include "posix/internal.h"
+#include "posix/thread.h"
+#include "posix/sched.h"
+#include "posix/mutex.h"
+#include "posix/cond.h"
+#include "posix/mqueue.h"
+#include "posix/sem.h"
+#include "posix/signal.h"
+#include "posix/timer.h"
+#include "posix/monitor.h"
+#include "posix/clock.h"
+#include "posix/event.h"
+#include "posix/timerfd.h"
+#include "posix/io.h"
+#include "posix/corectl.h"
+#include "debug.h"
 #include <trace/events/steely.h>
 
 /* Syscall must run into the Linux domain. */
@@ -85,7 +85,7 @@ typedef long (*steely_syshand)(unsigned long arg1, unsigned long arg2,
 			       unsigned long arg5);
 
 static void prepare_for_signal(struct task_struct *p,
-			       struct xnthread *thread,
+			       struct steely_thread *thread,
 			       struct pt_regs *regs,
 			       int sysflags)
 {
@@ -114,7 +114,7 @@ static void prepare_for_signal(struct task_struct *p,
 
 static STEELY_SYSCALL(migrate, current, (int domain))
 {
-	struct xnthread *thread = xnthread_current();
+	struct steely_thread *thread = steely_current_thread();
 
 	if (on_root_stage()) {
 		if (domain == STEELY_PRIMARY) {
@@ -160,7 +160,7 @@ static STEELY_SYSCALL(archcall, current,
 static STEELY_SYSCALL(get_current, current,
 		      (xnhandle_t __user *u_handle))
 {
-	struct xnthread *cur = xnthread_current();
+	struct steely_thread *cur = steely_current_thread();
 
 	if (cur == NULL)
 		return -EPERM;
@@ -224,9 +224,9 @@ static STEELY_SYSCALL(serialdbg, current,
 static STEELY_SYSCALL(mayday, current, (void))
 {
 	struct pt_regs *regs = task_pt_regs(current);
-	struct xnthread *cur;
+	struct steely_thread *cur;
 
-	cur = xnthread_current();
+	cur = steely_current_thread();
 	if (cur == NULL) {
 		printk(STEELY_WARNING
 		       "MAYDAY received from invalid context %s[%d]\n",
@@ -334,7 +334,7 @@ static STEELY_SYSCALL(extend, lostage, (unsigned int magic))
 	return steely_bind_personality(magic);
 }
 
-static int CoBaLt_ni(void)
+static int StEeLy_ni(void)
 {
 	return -ENOSYS;
 }
@@ -399,7 +399,7 @@ static int CoBaLt_ni(void)
  *
  * --rpm
  */
-#define __syshand__(__name)	((steely_syshand)(CoBaLt_ ## __name))
+#define __syshand__(__name)	((steely_syshand)(StEeLy_ ## __name))
 
 #define __STEELY_NI	__syshand__(ni)
 
@@ -438,7 +438,7 @@ static const int steely_sysmodes[] = {
 };
 
 static inline int allowed_syscall(struct steely_process *process,
-				  struct xnthread *thread,
+				  struct steely_thread *thread,
 				  int sysflags, int nr)
 {
 	if (nr == sc_steely_bind)
@@ -457,7 +457,7 @@ static int handle_head_syscall(struct irq_stage *stage, struct pt_regs *regs)
 {
 	struct steely_process *process;
 	int switched, sigs, sysflags;
-	struct xnthread *thread;
+	struct steely_thread *thread;
 	steely_syshand handler;
 	struct task_struct *p;
 	unsigned int nr, code;
@@ -466,7 +466,7 @@ static int handle_head_syscall(struct irq_stage *stage, struct pt_regs *regs)
 	if (!__xn_syscall_p(regs))
 		goto linux_syscall;
 
-	thread = xnthread_current();
+	thread = steely_current_thread();
 	code = __xn_syscall(regs);
 	if (code >= ARRAY_SIZE(steely_syscalls))
 		goto bad_syscall;
@@ -648,7 +648,7 @@ bad_syscall:
 static int handle_root_syscall(struct irq_stage *stage, struct pt_regs *regs)
 {
 	int sysflags, switched, sigs;
-	struct xnthread *thread;
+	struct steely_thread *thread;
 	steely_syshand handler;
 	struct task_struct *p;
 	unsigned int nr, code;
@@ -666,7 +666,7 @@ static int handle_root_syscall(struct irq_stage *stage, struct pt_regs *regs)
 		/* Fall back to Linux syscall handling. */
 		return SYSCALL_PROPAGATE;
 
-	thread = xnthread_current();
+	thread = steely_current_thread();
 	/* code has already been checked in the head domain handler. */
 	code = __xn_syscall(regs);
 	nr = code & (__NR_STEELY_SYSCALLS - 1);
@@ -729,7 +729,7 @@ restart:
 		 * We may have gained a shadow TCB from the syscall we
 		 * just invoked, so make sure to fetch it.
 		 */
-		thread = xnthread_current();
+		thread = steely_current_thread();
 		p = current;
 		if (signal_pending(p)) {
 			sigs = 1;

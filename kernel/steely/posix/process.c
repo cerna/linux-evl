@@ -79,7 +79,7 @@ static struct hlist_head *process_hash;
 DEFINE_PRIVATE_XNLOCK(process_hash_lock);
 #define PROCESS_HASH_SIZE 13
 
-struct xnthread_personality *steely_personalities[NR_PERSONALITIES];
+struct steely_thread_personality *steely_personalities[NR_PERSONALITIES];
 
 static struct xnsynch yield_sync;
 
@@ -181,7 +181,7 @@ static void *lookup_context(int xid)
 
 static void remove_process(struct steely_process *process)
 {
-	struct xnthread_personality *personality;
+	struct steely_thread_personality *personality;
 	void *priv;
 	int xid;
 
@@ -281,7 +281,7 @@ static inline int raise_cap(int cap)
 	return commit_creds(new);
 }
 
-static int bind_personality(struct xnthread_personality *personality)
+static int bind_personality(struct steely_thread_personality *personality)
 {
 	struct steely_process *process;
 	void *priv;
@@ -330,7 +330,7 @@ static int bind_personality(struct xnthread_personality *personality)
 
 int steely_bind_personality(unsigned int magic)
 {
-	struct xnthread_personality *personality;
+	struct steely_thread_personality *personality;
 	int xid, ret = -ESRCH;
 
 	mutex_lock(&personality_lock);
@@ -366,7 +366,7 @@ int steely_bind_core(int ufeatures)
 	return 0;
 }
 
-int steely_register_personality(struct xnthread_personality *personality)
+int steely_register_personality(struct steely_thread_personality *personality)
 {
 	int xid;
 
@@ -391,7 +391,7 @@ EXPORT_SYMBOL_GPL(steely_register_personality);
 
 int steely_unregister_personality(int xid)
 {
-	struct xnthread_personality *personality;
+	struct steely_thread_personality *personality;
 	int ret = 0;
 
 	if (xid < 0 || xid >= NR_PERSONALITIES)
@@ -411,12 +411,12 @@ int steely_unregister_personality(int xid)
 }
 EXPORT_SYMBOL_GPL(steely_unregister_personality);
 
-struct xnthread_personality *
+struct steely_thread_personality *
 steely_push_personality(int xid)
 {
 	struct dovetail_state *p = dovetail_current_state();
-	struct xnthread_personality *prev, *next;
-	struct xnthread *thread = p->thread;
+	struct steely_thread_personality *prev, *next;
+	struct steely_thread *thread = p->thread;
 
 	secondary_mode_only();
 
@@ -443,10 +443,10 @@ steely_push_personality(int xid)
 }
 EXPORT_SYMBOL_GPL(steely_push_personality);
 
-void steely_pop_personality(struct xnthread_personality *prev)
+void steely_pop_personality(struct steely_thread_personality *prev)
 {
 	struct dovetail_state *p = dovetail_current_state();
-	struct xnthread *thread = p->thread;
+	struct steely_thread *thread = p->thread;
 
 	secondary_mode_only();
 	thread->personality = prev;
@@ -478,15 +478,6 @@ int steely_yield(ktime_t min, ktime_t max)
 }
 EXPORT_SYMBOL_GPL(steely_yield);
 
-static inline void init_uthread_info(struct xnthread *thread)
-{
-	struct dovetail_state *p;
-
-	p = dovetail_current_state();
-	p->thread = thread;
-	p->process = steely_search_process(current->mm);
-}
-
 static inline void clear_threadinfo(void)
 {
 	struct dovetail_state *p = dovetail_current_state();
@@ -496,34 +487,12 @@ static inline void clear_threadinfo(void)
 
 #ifdef CONFIG_MMU
 
-static inline int commit_process_memory(void)
-{
-	struct task_struct *p = current;
-	siginfo_t si;
-
-	if ((p->mm->def_flags & VM_LOCKED) == 0) {
-		memset(&si, 0, sizeof(si));
-		si.si_signo = SIGDEBUG;
-		si.si_code = SI_QUEUE;
-		si.si_int = SIGDEBUG_NOMLOCK | sigdebug_marker;
-		send_sig_info(SIGDEBUG, &si, p);
-		return 0;
-	}
-
-	return force_commit_memory();
-}
-
 static inline int get_mayday_prot(void)
 {
 	return PROT_READ|PROT_EXEC;
 }
 
 #else /* !CONFIG_MMU */
-
-static inline int commit_process_memory(void)
-{
-	return 0;
-}
 
 static inline int get_mayday_prot(void)
 {
@@ -546,75 +515,9 @@ void arch_dovetail_init_task(struct task_struct *tsk)
 	dovetail_init_task_state(p);
 }
 
-int steely_map_user(struct xnthread *thread, __u32 __user *u_winoff)
-{
-	struct xnthread_user_window *u_window;
-	struct xnthread_start_attr attr;
-	struct steely_ppd *sys_ppd;
-	struct steely_umm *umm;
-	int ret;
-
-	if (!xnthread_test_state(thread, XNUSER))
-		return -EINVAL;
-
-	if (xnthread_current() || xnthread_test_state(thread, XNMAPPED))
-		return -EBUSY;
-
-	if (!access_wok(u_winoff, sizeof(*u_winoff)))
-		return -EFAULT;
-
-	ret = commit_process_memory();
-	if (ret)
-		return ret;
-
-	umm = &steely_kernel_ppd.umm;
-	u_window = steely_umm_zalloc(umm, sizeof(*u_window));
-	if (u_window == NULL)
-		return -ENOMEM;
-
-	thread->u_window = u_window;
-	__xn_put_user(steely_umm_offset(umm, u_window), u_winoff);
-	xnthread_pin_initial(thread);
-
-	trace_steely_shadow_map(thread);
-
-	xnthread_init_shadow_tcb(thread);
-	xnthread_suspend(thread, XNRELAX, XN_INFINITE, XN_RELATIVE, NULL);
-	init_uthread_info(thread);
-	xnthread_set_state(thread, XNMAPPED);
-	xndebug_shadow_init(thread);
-	sys_ppd = steely_ppd_get(0);
-	atomic_inc(&sys_ppd->refcnt);
-	/*
-	 * ->map_thread() handler is invoked after the TCB is fully
-	 * built, and when we know for sure that current will go
-	 * through our task-exit handler, because it has a shadow
-	 * extension and I-pipe notifications will soon be enabled for
-	 * it.
-	 */
-	xnthread_run_handler(thread, map_thread);
-	/*
-	 * CAUTION: we enable dovetailing only when our shadow TCB is
-	 * consistent, so that we won't trigger false positive in
-	 * debug code from handle_schedule_event() and friends.
-	 */
-	dovetail_enable(0);
-
-	attr.mode = 0;
-	attr.entry = NULL;
-	attr.cookie = NULL;
-	ret = xnthread_start(thread, &attr);
-	if (ret)
-		return ret;
-
-	xnthread_sync_window(thread);
-
-	return 0;
-}
-
 void dovetail_trap_hook(struct dovetail_trap_data *d)
 {
-	struct xnthread *thread;
+	struct steely_thread *thread;
 	struct xnsched *sched;
 
 	raw_cpu_ptr(&steely_machine_cpudata)->faults[d->exception]++;
@@ -661,7 +564,7 @@ void dovetail_trap_hook(struct dovetail_trap_data *d)
 
 void dovetail_mayday_hook(struct pt_regs *regs)
 {
-	struct xnthread *thread = xnthread_current();
+	struct steely_thread *thread = steely_current_thread();
 	struct xnarchtcb *tcb = xnthread_archtcb(thread);
 	struct steely_ppd *sys_ppd;
 
@@ -678,7 +581,7 @@ void dovetail_mayday_hook(struct pt_regs *regs)
 static void handle_setaffinity_event(struct dovetail_migration_data *d)
 {
 	struct task_struct *p = d->task;
-	struct xnthread *thread;
+	struct steely_thread *thread;
 	struct xnsched *sched;
 	spl_t s;
 
@@ -730,7 +633,7 @@ static void handle_setaffinity_event(struct dovetail_migration_data *d)
 
 static inline void check_affinity(struct task_struct *p) /* nklocked, IRQs off */
 {
-	struct xnthread *thread = xnthread_from_task(p);
+	struct steely_thread *thread = xnthread_from_task(p);
 	struct xnsched *sched;
 	int cpu = task_cpu(p);
 
@@ -785,7 +688,7 @@ static inline void check_affinity(struct task_struct *p) { }
 
 void dovetail_migration_hook(struct task_struct *p) /* hw IRQs off */
 {
-	struct xnthread *thread = xnthread_from_task(p);
+	struct steely_thread *thread = xnthread_from_task(p);
 
 	/*
 	 * We fire the handler before the thread is migrated, so that
@@ -802,14 +705,14 @@ void dovetail_migration_hook(struct task_struct *p) /* hw IRQs off */
 }
 
 /* called with nklock held */
-static void register_debugged_thread(struct xnthread *thread)
+static void register_debugged_thread(struct steely_thread *thread)
 {
 	nkclock_lock++;
 
 	xnthread_set_state(thread, XNSSTEP);
 }
 
-static void unregister_debugged_thread(struct xnthread *thread)
+static void unregister_debugged_thread(struct steely_thread *thread)
 {
 	spl_t s;
 
@@ -826,7 +729,7 @@ static void unregister_debugged_thread(struct xnthread *thread)
 static void __handle_taskexit_event(void)
 {
 	struct steely_ppd *sys_ppd;
-	struct xnthread *thread;
+	struct steely_thread *thread;
 
 	/*
 	 * We are called for both kernel and user shadows over the
@@ -834,7 +737,7 @@ static void __handle_taskexit_event(void)
 	 */
 	secondary_mode_only();
 
-	thread = xnthread_current();
+	thread = steely_current_thread();
 	STEELY_BUG_ON(STEELY, thread == NULL);
 	trace_steely_shadow_unmap(thread);
 
@@ -862,7 +765,7 @@ static void handle_taskexit_event(void) /* exiting current. */
 	 * handler. From that point, the TCB is dropped. Be careful of
 	 * not treading on stale memory within @thread.
 	 */
-	__xnthread_cleanup(xnthread_current());
+	__xnthread_cleanup(steely_current_thread());
 
 	clear_threadinfo();
 }
@@ -885,7 +788,7 @@ static inline void signal_yield(void)
 static void handle_schedule_event(struct task_struct *next_task)
 {
 	struct task_struct *prev_task;
-	struct xnthread *next;
+	struct steely_thread *next;
 	sigset_t pending;
 
 	signal_yield();
@@ -948,7 +851,7 @@ no_ptrace:
 
 static void handle_sigwake_event(struct task_struct *p)
 {
-	struct xnthread *thread;
+	struct steely_thread *thread;
 	sigset_t pending;
 	spl_t s;
 
@@ -997,7 +900,7 @@ static void handle_cleanup_event(struct mm_struct *mm)
 {
 	struct steely_process *old, *process;
 	struct steely_ppd *sys_ppd;
-	struct xnthread *curr;
+	struct steely_thread *curr;
 
 	/*
 	 * We are NOT called for exiting kernel shadows.
@@ -1020,7 +923,7 @@ static void handle_cleanup_event(struct mm_struct *mm)
 		 * running though, we have to disable the event
 		 * notifier manually for it.
 		 */
-		curr = xnthread_current();
+		curr = steely_current_thread();
 		running_exec = curr && (current->flags & PF_EXITING) == 0;
 		if (running_exec) {
 			__handle_taskexit_event();
@@ -1125,7 +1028,7 @@ fail_mayday:
 	return ret;
 }
 
-static void *steely_process_attach(void)
+void *steely_process_attach(void)
 {
 	struct steely_process *process;
 	int ret;
@@ -1217,7 +1120,7 @@ out:
 			   &(__process)->resources.__type ## q,		\
 			   &steely_global_resources.__type ## q)
 
-static void steely_process_detach(void *arg)
+void steely_process_detach(void *arg)
 {
 	struct steely_process *process = arg;
 
@@ -1236,19 +1139,6 @@ static void steely_process_detach(void *arg)
 	 * is potentially stale memory already.
 	 */
 }
-
-struct xnthread_personality steely_interface_personality = {
-	.name = "steely",
-	.magic = 0,
-	.ops = {
-		.attach_process = steely_process_attach,
-		.detach_process = steely_process_detach,
-		.map_thread = steely_thread_map,
-		.exit_thread = steely_thread_exit,
-		.finalize_thread = steely_thread_finalize,
-	},
-};
-EXPORT_SYMBOL_GPL(steely_interface_personality);
 
 __init int steely_interface_init(void)
 {

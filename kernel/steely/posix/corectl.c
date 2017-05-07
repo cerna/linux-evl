@@ -122,7 +122,7 @@ static int stop_services(const void __user *u_buf, size_t u_bufsz)
 	 * Steely services. i.e. _CC_STEELY_STOP_CORE must be issued
 	 * from a plain regular linux thread.
 	 */
-	if (xnthread_current())
+	if (steely_current_thread())
 		return -EPERM;
 
 	if (u_bufsz != sizeof(__u32))

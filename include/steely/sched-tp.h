@@ -65,7 +65,7 @@ struct xnsched_tp {
 	struct list_head threads;
 };
 
-static inline int xnsched_tp_init_thread(struct xnthread *thread)
+static inline int xnsched_tp_init_thread(struct steely_thread *thread)
 {
 	thread->tps = NULL;
 

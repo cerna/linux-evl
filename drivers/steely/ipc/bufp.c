@@ -161,7 +161,7 @@ static ssize_t __bufp_readbuf(struct bufp_socket *sk,
 {
 	struct bufp_wait_context wait, *bufwc;
 	struct rtipc_wait_context *wc;
-	struct xnthread *waiter;
+	struct steely_thread *waiter;
 	rtdm_toseq_t toseq;
 	ssize_t len, ret;
 	size_t rbytes, n;
@@ -415,7 +415,7 @@ static ssize_t __bufp_writebuf(struct bufp_socket *rsk,
 {
 	struct bufp_wait_context wait, *bufwc;
 	struct rtipc_wait_context *wc;
-	struct xnthread *waiter;
+	struct steely_thread *waiter;
 	rtdm_toseq_t toseq;
 	rtdm_lockctx_t s;
 	ssize_t len, ret;

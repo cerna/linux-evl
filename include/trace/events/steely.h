@@ -36,17 +36,17 @@ struct rtdm_fd;
 struct rtdm_event;
 struct rtdm_sem;
 struct rtdm_mutex;
-struct xnthread;
+struct steely_thread;
 struct rtdm_device;
 struct rtdm_dev_context;
 struct _rtdm_mmap_request;
 
 DECLARE_EVENT_CLASS(thread_event,
-	TP_PROTO(struct xnthread *thread),
+	TP_PROTO(struct steely_thread *thread),
 	TP_ARGS(thread),
 
 	TP_STRUCT__entry(
-		__field(struct xnthread *, thread)
+		__field(struct steely_thread *, thread)
 		__string(name, thread->name)
 		__field(pid_t, pid)
 		__field(unsigned long, state)
@@ -67,11 +67,11 @@ DECLARE_EVENT_CLASS(thread_event,
 );
 
 DECLARE_EVENT_CLASS(synch_wait_event,
-	TP_PROTO(struct xnsynch *synch, struct xnthread *thread),
+	TP_PROTO(struct xnsynch *synch, struct steely_thread *thread),
 	TP_ARGS(synch, thread),
 
 	TP_STRUCT__entry(
-		__field(struct xnthread *, thread)
+		__field(struct steely_thread *, thread)
 		__string(name, thread->name)
 		__field(struct xnsynch *, synch)
 	),
@@ -132,11 +132,11 @@ DECLARE_EVENT_CLASS(clock_event,
 );
 
 DECLARE_EVENT_CLASS(thread_migrate,
-	TP_PROTO(struct xnthread *thread, unsigned int cpu),
+	TP_PROTO(struct steely_thread *thread, unsigned int cpu),
 	TP_ARGS(thread, cpu),
 
 	TP_STRUCT__entry(
-		__field(struct xnthread *, thread)
+		__field(struct steely_thread *, thread)
 		__string(name, thread->name)
 		__field(unsigned int, cpu)
 	),
@@ -197,12 +197,12 @@ TRACE_EVENT(steely_schedule_remote,
 );
 
 TRACE_EVENT(steely_switch_context,
-	TP_PROTO(struct xnthread *prev, struct xnthread *next),
+	TP_PROTO(struct steely_thread *prev, struct steely_thread *next),
 	TP_ARGS(prev, next),
 
 	TP_STRUCT__entry(
-		__field(struct xnthread *, prev)
-		__field(struct xnthread *, next)
+		__field(struct steely_thread *, prev)
+		__field(struct steely_thread *, next)
 		__string(prev_name, prev->name)
 		__string(next_name, next->name)
 	),
@@ -220,13 +220,13 @@ TRACE_EVENT(steely_switch_context,
 );
 
 TRACE_EVENT(steely_thread_init,
-	TP_PROTO(struct xnthread *thread,
-		 const struct xnthread_init_attr *attr,
+	TP_PROTO(struct steely_thread *thread,
+		 const struct steely_thread_init_attr *attr,
 		 struct xnsched_class *sched_class),
 	TP_ARGS(thread, attr, sched_class),
 
 	TP_STRUCT__entry(
-		__field(struct xnthread *, thread)
+		__field(struct steely_thread *, thread)
 		__string(thread_name, thread->name)
 		__string(class_name, sched_class->name)
 		__field(unsigned long, flags)
@@ -247,12 +247,12 @@ TRACE_EVENT(steely_thread_init,
 );
 
 TRACE_EVENT(steely_thread_suspend,
-	TP_PROTO(struct xnthread *thread, unsigned long mask, ktime_t timeout,
+	TP_PROTO(struct steely_thread *thread, unsigned long mask, ktime_t timeout,
 		 xntmode_t timeout_mode, struct xnsynch *wchan),
 	TP_ARGS(thread, mask, timeout, timeout_mode, wchan),
 
 	TP_STRUCT__entry(
-		__field(struct xnthread *, thread)
+		__field(struct steely_thread *, thread)
 		__field(unsigned long, mask)
 		__field(ktime_t, timeout)
 		__field(xntmode_t, timeout_mode)
@@ -274,11 +274,11 @@ TRACE_EVENT(steely_thread_suspend,
 );
 
 TRACE_EVENT(steely_thread_resume,
-	TP_PROTO(struct xnthread *thread, unsigned long mask),
+	TP_PROTO(struct steely_thread *thread, unsigned long mask),
 	TP_ARGS(thread, mask),
 
 	TP_STRUCT__entry(
-		__field(struct xnthread *, thread)
+		__field(struct steely_thread *, thread)
 		__field(unsigned long, mask)
 	),
 
@@ -292,11 +292,11 @@ TRACE_EVENT(steely_thread_resume,
 );
 
 TRACE_EVENT(steely_thread_fault,
-	TP_PROTO(struct xnthread *thread, struct dovetail_trap_data *td),
+	TP_PROTO(struct steely_thread *thread, struct dovetail_trap_data *td),
 	TP_ARGS(thread, td),
 
 	TP_STRUCT__entry(
-		__field(struct xnthread *, thread)
+		__field(struct steely_thread *, thread)
 		__string(name, thread->name)
 		__field(void *,	ip)
 		__field(unsigned int, type)
@@ -315,62 +315,62 @@ TRACE_EVENT(steely_thread_fault,
 );
 
 DEFINE_EVENT(thread_event, steely_thread_start,
-	TP_PROTO(struct xnthread *thread),
+	TP_PROTO(struct steely_thread *thread),
 	TP_ARGS(thread)
 );
 
 DEFINE_EVENT(thread_event, steely_thread_cancel,
-	TP_PROTO(struct xnthread *thread),
+	TP_PROTO(struct steely_thread *thread),
 	TP_ARGS(thread)
 );
 
 DEFINE_EVENT(thread_event, steely_thread_join,
-	TP_PROTO(struct xnthread *thread),
+	TP_PROTO(struct steely_thread *thread),
 	TP_ARGS(thread)
 );
 
 DEFINE_EVENT(thread_event, steely_thread_unblock,
-	TP_PROTO(struct xnthread *thread),
+	TP_PROTO(struct steely_thread *thread),
 	TP_ARGS(thread)
 );
 
 DEFINE_EVENT(thread_event, steely_thread_wait_period,
-	TP_PROTO(struct xnthread *thread),
+	TP_PROTO(struct steely_thread *thread),
 	TP_ARGS(thread)
 );
 
 DEFINE_EVENT(thread_event, steely_thread_missed_period,
-	TP_PROTO(struct xnthread *thread),
+	TP_PROTO(struct steely_thread *thread),
 	TP_ARGS(thread)
 );
 
 DEFINE_EVENT(thread_event, steely_thread_set_mode,
-	TP_PROTO(struct xnthread *thread),
+	TP_PROTO(struct steely_thread *thread),
 	TP_ARGS(thread)
 );
 
 DEFINE_EVENT(thread_migrate, steely_thread_migrate,
-	TP_PROTO(struct xnthread *thread, unsigned int cpu),
+	TP_PROTO(struct steely_thread *thread, unsigned int cpu),
 	TP_ARGS(thread, cpu)
 );
 
 DEFINE_EVENT(thread_migrate, steely_thread_migrate_passive,
-	TP_PROTO(struct xnthread *thread, unsigned int cpu),
+	TP_PROTO(struct steely_thread *thread, unsigned int cpu),
 	TP_ARGS(thread, cpu)
 );
 
 DEFINE_EVENT(thread_event, steely_shadow_gohard,
-	TP_PROTO(struct xnthread *thread),
+	TP_PROTO(struct steely_thread *thread),
 	TP_ARGS(thread)
 );
 
 DEFINE_EVENT(thread_event, steely_watchdog_signal,
-	TP_PROTO(struct xnthread *thread),
+	TP_PROTO(struct steely_thread *thread),
 	TP_ARGS(thread)
 );
 
 DEFINE_EVENT(thread_event, steely_shadow_hardened,
-	TP_PROTO(struct xnthread *thread),
+	TP_PROTO(struct steely_thread *thread),
 	TP_ARGS(thread)
 );
 
@@ -382,11 +382,11 @@ DEFINE_EVENT(thread_event, steely_shadow_hardened,
 			 { SIGDEBUG_MIGRATE_FAULT,	"fault" })
 
 TRACE_EVENT(steely_shadow_gorelax,
-	TP_PROTO(struct xnthread *thread, int reason),
+	TP_PROTO(struct steely_thread *thread, int reason),
 	TP_ARGS(thread, reason),
 
 	TP_STRUCT__entry(
-		__field(struct xnthread *, thread)
+		__field(struct steely_thread *, thread)
 		__field(int, reason)
 	),
 
@@ -400,21 +400,21 @@ TRACE_EVENT(steely_shadow_gorelax,
 );
 
 DEFINE_EVENT(thread_event, steely_shadow_relaxed,
-	TP_PROTO(struct xnthread *thread),
+	TP_PROTO(struct steely_thread *thread),
 	TP_ARGS(thread)
 );
 
 DEFINE_EVENT(thread_event, steely_shadow_entry,
-	TP_PROTO(struct xnthread *thread),
+	TP_PROTO(struct steely_thread *thread),
 	TP_ARGS(thread)
 );
 
 TRACE_EVENT(steely_shadow_map,
-	TP_PROTO(struct xnthread *thread),
+	TP_PROTO(struct steely_thread *thread),
 	TP_ARGS(thread),
 
 	TP_STRUCT__entry(
-		__field(struct xnthread *, thread)
+		__field(struct steely_thread *, thread)
 		__string(name, thread->name)
 		__field(int, prio)
 	),
@@ -430,7 +430,7 @@ TRACE_EVENT(steely_shadow_map,
 );
 
 DEFINE_EVENT(thread_event, steely_shadow_unmap,
-	TP_PROTO(struct xnthread *thread),
+	TP_PROTO(struct steely_thread *thread),
 	TP_ARGS(thread)
 );
 
@@ -608,17 +608,17 @@ TRACE_EVENT(steely_timer_migrate,
 #endif /* CONFIG_SMP */
 
 DEFINE_EVENT(synch_wait_event, steely_synch_sleepon,
-	TP_PROTO(struct xnsynch *synch, struct xnthread *thread),
+	TP_PROTO(struct xnsynch *synch, struct steely_thread *thread),
 	TP_ARGS(synch, thread)
 );
 
 DEFINE_EVENT(synch_wait_event, steely_synch_try_acquire,
-	TP_PROTO(struct xnsynch *synch, struct xnthread *thread),
+	TP_PROTO(struct xnsynch *synch, struct steely_thread *thread),
 	TP_ARGS(synch, thread)
 );
 
 DEFINE_EVENT(synch_wait_event, steely_synch_acquire,
-	TP_PROTO(struct xnsynch *synch, struct xnthread *thread),
+	TP_PROTO(struct xnsynch *synch, struct steely_thread *thread),
 	TP_ARGS(synch, thread)
 );
 
@@ -661,11 +661,11 @@ DEFINE_EVENT(synch_post_event, steely_synch_forget,
 	__entry->tv_sec_##__name, __entry->tv_nsec_##__name
 
 DECLARE_EVENT_CLASS(syscall_entry,
-	TP_PROTO(struct xnthread *thread, unsigned int nr),
+	TP_PROTO(struct steely_thread *thread, unsigned int nr),
 	TP_ARGS(thread, nr),
 
 	TP_STRUCT__entry(
-		__field(struct xnthread *, thread)
+		__field(struct steely_thread *, thread)
 		__string(name, thread ? thread->name : "(anon)")
 		__field(unsigned int, nr)
 	),
@@ -681,11 +681,11 @@ DECLARE_EVENT_CLASS(syscall_entry,
 );
 
 DECLARE_EVENT_CLASS(syscall_exit,
-	TP_PROTO(struct xnthread *thread, long result),
+	TP_PROTO(struct steely_thread *thread, long result),
 	TP_ARGS(thread, result),
 
 	TP_STRUCT__entry(
-		__field(struct xnthread *, thread)
+		__field(struct steely_thread *, thread)
 		__field(long, result)
 	),
 
@@ -816,22 +816,22 @@ DECLARE_EVENT_CLASS(steely_void,
 );
 
 DEFINE_EVENT(syscall_entry, steely_head_sysentry,
-	TP_PROTO(struct xnthread *thread, unsigned int nr),
+	TP_PROTO(struct steely_thread *thread, unsigned int nr),
 	TP_ARGS(thread, nr)
 );
 
 DEFINE_EVENT(syscall_exit, steely_head_sysexit,
-	TP_PROTO(struct xnthread *thread, long result),
+	TP_PROTO(struct steely_thread *thread, long result),
 	TP_ARGS(thread, result)
 );
 
 DEFINE_EVENT(syscall_entry, steely_root_sysentry,
-	TP_PROTO(struct xnthread *thread, unsigned int nr),
+	TP_PROTO(struct steely_thread *thread, unsigned int nr),
 	TP_ARGS(thread, nr)
 );
 
 DEFINE_EVENT(syscall_exit, steely_root_sysexit,
-	TP_PROTO(struct xnthread *thread, long result),
+	TP_PROTO(struct steely_thread *thread, long result),
 	TP_ARGS(thread, result)
 );
 
@@ -1747,11 +1747,11 @@ DECLARE_EVENT_CLASS(fd_request_status,
 );
 
 DECLARE_EVENT_CLASS(task_op,
-	TP_PROTO(struct xnthread *task),
+	TP_PROTO(struct steely_thread *task),
 	TP_ARGS(task),
 
 	TP_STRUCT__entry(
-		__field(struct xnthread *, task)
+		__field(struct steely_thread *, task)
 		__string(task_name, task->name)
 	),
 
@@ -2014,7 +2014,7 @@ DEFINE_EVENT(fd_request_status, steely_fd_mmap_status,
 );
 
 DEFINE_EVENT(task_op, steely_driver_task_join,
-	TP_PROTO(struct xnthread *task),
+	TP_PROTO(struct steely_thread *task),
 	TP_ARGS(task)
 );
 
@@ -2037,11 +2037,11 @@ TRACE_EVENT(steely_driver_event_init,
 );
 
 TRACE_EVENT(steely_driver_event_wait,
-	TP_PROTO(struct rtdm_event *ev, struct xnthread *task),
+	TP_PROTO(struct rtdm_event *ev, struct steely_thread *task),
 	TP_ARGS(ev, task),
 
 	TP_STRUCT__entry(
-		__field(struct xnthread *, task)
+		__field(struct steely_thread *, task)
 		__string(task_name, task->name)
 		__field(struct rtdm_event *, ev)
 	),
@@ -2095,11 +2095,11 @@ TRACE_EVENT(steely_driver_sem_init,
 );
 
 TRACE_EVENT(steely_driver_sem_wait,
-	TP_PROTO(struct rtdm_sem *sem, struct xnthread *task),
+	TP_PROTO(struct rtdm_sem *sem, struct steely_thread *task),
 	TP_ARGS(sem, task),
 
 	TP_STRUCT__entry(
-		__field(struct xnthread *, task)
+		__field(struct steely_thread *, task)
 		__string(task_name, task->name)
 		__field(struct rtdm_sem *, sem)
 	),
@@ -2140,11 +2140,11 @@ DEFINE_EVENT(mutex_op, steely_driver_mutex_destroy,
 );
 
 TRACE_EVENT(steely_driver_mutex_wait,
-	TP_PROTO(struct rtdm_mutex *mutex, struct xnthread *task),
+	TP_PROTO(struct rtdm_mutex *mutex, struct steely_thread *task),
 	TP_ARGS(mutex, task),
 
 	TP_STRUCT__entry(
-		__field(struct xnthread *, task)
+		__field(struct steely_thread *, task)
 		__string(task_name, task->name)
 		__field(struct rtdm_mutex *, mutex)
 	),

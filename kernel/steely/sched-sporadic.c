@@ -22,7 +22,7 @@
 
 #define MAX_REPLENISH CONFIG_STEELY_SCHED_SPORADIC_MAXREPL
 
-static void sporadic_post_recharge(struct xnthread *thread, ktime_t budget);
+static void sporadic_post_recharge(struct steely_thread *thread, ktime_t budget);
 
 #if STEELY_DEBUG(STEELY)
 
@@ -65,7 +65,7 @@ static void sporadic_drop_handler(struct xntimer *timer)
 {
 	struct xnsched_sporadic_data *pss;
 	union xnsched_policy_param p;
-	struct xnthread *thread;
+	struct steely_thread *thread;
 
 	/*
 	 * XXX: this code will work properly regardless of
@@ -94,7 +94,7 @@ static void sporadic_drop_handler(struct xntimer *timer)
 	}
 }
 
-static void sporadic_schedule_drop(struct xnthread *thread)
+static void sporadic_schedule_drop(struct steely_thread *thread)
 {
 	ktime_t now = xnclock_read_monotonic(&nkclock);
 	struct xnsched_sporadic_data *pss = thread->pss;
@@ -120,7 +120,7 @@ static void sporadic_replenish_handler(struct xntimer *timer)
 {
 	struct xnsched_sporadic_data *pss;
 	union xnsched_policy_param p;
-	struct xnthread *thread;
+	struct steely_thread *thread;
 	ktime_t now;
 	int r, ret;
 
@@ -169,7 +169,7 @@ retry:
 		sporadic_schedule_drop(thread);
 }
 
-static void sporadic_post_recharge(struct xnthread *thread, ktime_t budget)
+static void sporadic_post_recharge(struct steely_thread *thread, ktime_t budget)
 {
 	struct xnsched_sporadic_data *pss = thread->pss;
 	int r, ret;
@@ -201,7 +201,7 @@ static void sporadic_post_recharge(struct xnthread *thread, ktime_t budget)
 	}
 }
 
-static void sporadic_suspend_activity(struct xnthread *thread)
+static void sporadic_suspend_activity(struct steely_thread *thread)
 {
 	struct xnsched_sporadic_data *pss = thread->pss;
 	ktime_t budget, now;
@@ -214,7 +214,7 @@ static void sporadic_suspend_activity(struct xnthread *thread)
 	}
 }
 
-static inline void sporadic_resume_activity(struct xnthread *thread)
+static inline void sporadic_resume_activity(struct steely_thread *thread)
 {
 	if (ktime_to_ns(thread->pss->budget) > 0)
 		sporadic_schedule_drop(thread);
@@ -234,7 +234,7 @@ static void xnsched_sporadic_init(struct xnsched *sched)
 #endif
 }
 
-static bool xnsched_sporadic_setparam(struct xnthread *thread,
+static bool xnsched_sporadic_setparam(struct steely_thread *thread,
 				      const union xnsched_policy_param *p)
 {
 	struct xnsched_sporadic_data *pss = thread->pss;
@@ -265,14 +265,14 @@ static bool xnsched_sporadic_setparam(struct xnthread *thread,
 	return effective;
 }
 
-static void xnsched_sporadic_getparam(struct xnthread *thread,
+static void xnsched_sporadic_getparam(struct steely_thread *thread,
 				      union xnsched_policy_param *p)
 {
 	p->pss = thread->pss->param;
 	p->pss.current_prio = thread->cprio;
 }
 
-static void xnsched_sporadic_trackprio(struct xnthread *thread,
+static void xnsched_sporadic_trackprio(struct steely_thread *thread,
 				       const union xnsched_policy_param *p)
 {
 	if (p)
@@ -281,7 +281,7 @@ static void xnsched_sporadic_trackprio(struct xnthread *thread,
 		thread->cprio = thread->bprio;
 }
 
-static void xnsched_sporadic_protectprio(struct xnthread *thread, int prio)
+static void xnsched_sporadic_protectprio(struct steely_thread *thread, int prio)
 {
 	if (prio > XNSCHED_SPORADIC_MAX_PRIO)
 		prio = XNSCHED_SPORADIC_MAX_PRIO;
@@ -289,7 +289,7 @@ static void xnsched_sporadic_protectprio(struct xnthread *thread, int prio)
 	thread->cprio = prio;
 }
 
-static int xnsched_sporadic_declare(struct xnthread *thread,
+static int xnsched_sporadic_declare(struct steely_thread *thread,
 				    const union xnsched_policy_param *p)
 {
 	struct xnsched_sporadic_data *pss;
@@ -335,7 +335,7 @@ static int xnsched_sporadic_declare(struct xnthread *thread,
 	return 0;
 }
 
-static void xnsched_sporadic_forget(struct xnthread *thread)
+static void xnsched_sporadic_forget(struct steely_thread *thread)
 {
 	struct xnsched_sporadic_data *pss = thread->pss;
 
@@ -345,24 +345,24 @@ static void xnsched_sporadic_forget(struct xnthread *thread)
 	thread->pss = NULL;
 }
 
-static void xnsched_sporadic_enqueue(struct xnthread *thread)
+static void xnsched_sporadic_enqueue(struct steely_thread *thread)
 {
 	__xnsched_rt_enqueue(thread);
 }
 
-static void xnsched_sporadic_dequeue(struct xnthread *thread)
+static void xnsched_sporadic_dequeue(struct steely_thread *thread)
 {
 	__xnsched_rt_dequeue(thread);
 }
 
-static void xnsched_sporadic_requeue(struct xnthread *thread)
+static void xnsched_sporadic_requeue(struct steely_thread *thread)
 {
 	__xnsched_rt_requeue(thread);
 }
 
-static struct xnthread *xnsched_sporadic_pick(struct xnsched *sched)
+static struct steely_thread *xnsched_sporadic_pick(struct xnsched *sched)
 {
-	struct xnthread *curr = sched->curr, *next;
+	struct steely_thread *curr = sched->curr, *next;
 
 	next = xnsched_getq(&sched->rt.runnable);
 	if (next == NULL)
@@ -394,7 +394,7 @@ struct xnvfile_directory sched_sporadic_vfroot;
 
 struct vfile_sched_sporadic_priv {
 	int nrthreads;
-	struct xnthread *curr;
+	struct steely_thread *curr;
 };
 
 struct vfile_sched_sporadic_data {
@@ -426,7 +426,7 @@ static int vfile_sched_sporadic_rewind(struct xnvfile_snapshot_iterator *it)
 	if (nrthreads == 0)
 		return -ESRCH;
 
-	priv->curr = list_first_entry(&nkthreadq, struct xnthread, glink);
+	priv->curr = list_first_entry(&nkthreadq, struct steely_thread, glink);
 
 	return nrthreads;
 }
@@ -436,7 +436,7 @@ static int vfile_sched_sporadic_next(struct xnvfile_snapshot_iterator *it,
 {
 	struct vfile_sched_sporadic_priv *priv = xnvfile_iterator_priv(it);
 	struct vfile_sched_sporadic_data *p = data;
-	struct xnthread *thread;
+	struct steely_thread *thread;
 
 	if (priv->curr == NULL)
 		return 0;	/* All done. */

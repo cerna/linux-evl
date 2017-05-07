@@ -135,7 +135,7 @@ extern struct rtipc_protocol bufp_proto_driver;
 
 extern struct xnptree rtipc_ptree;
 
-#define rtipc_wait_context		xnthread_wait_context
+#define rtipc_wait_context		steely_wait_context
 #define rtipc_prepare_wait		xnthread_prepare_wait
 #define rtipc_get_wait_context		xnthread_get_wait_context
 #define rtipc_peek_wait_head(obj)	xnsynch_peek_pendq(&(obj)->synch_base)

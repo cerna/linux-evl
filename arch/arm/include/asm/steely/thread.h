@@ -47,7 +47,7 @@ struct xnarchtcb {
 
 #define xnarch_fault_notify(d) (!xnarch_fault_bp_p(d))
 
-void xnarch_switch_to(struct xnthread *out, struct xnthread *in);
+void xnarch_switch_to(struct steely_thread *out, struct steely_thread *in);
 
 static inline int xnarch_escalate(void)
 {
@@ -59,9 +59,9 @@ static inline int xnarch_escalate(void)
 	return 0;
 }
 
-static inline void xnarch_init_root_tcb(struct xnthread *thread) { }
-static inline void xnarch_init_shadow_tcb(struct xnthread *thread) { }
-static inline void xnarch_enter_root(struct xnthread *root) { }
-static inline void xnarch_leave_root(struct xnthread *root) { }
+static inline void xnarch_init_root_tcb(struct steely_thread *thread) { }
+static inline void xnarch_init_shadow_tcb(struct steely_thread *thread) { }
+static inline void xnarch_enter_root(struct steely_thread *root) { }
+static inline void xnarch_leave_root(struct steely_thread *root) { }
 
 #endif /* !_STEELY_ARM_ASM_THREAD_H */

@@ -179,7 +179,7 @@ int __steely_clock_nanosleep(clockid_t clock_id, int flags,
 			     struct timespec *rmt)
 {
 	struct restart_block *restart;
-	struct xnthread *cur;
+	struct steely_thread *cur;
 	ktime_t timeout, rem;
 	int ret = 0;
 	spl_t s;
@@ -199,7 +199,7 @@ int __steely_clock_nanosleep(clockid_t clock_id, int flags,
 	if (flags & ~TIMER_ABSTIME)
 		return -EINVAL;
 
-	cur = xnthread_current();
+	cur = steely_current_thread();
 
 	if (xnthread_test_localinfo(cur, XNSYSRST)) {
 		xnthread_clear_localinfo(cur, XNSYSRST);

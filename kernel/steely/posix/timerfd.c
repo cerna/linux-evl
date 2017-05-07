@@ -34,7 +34,7 @@ struct steely_tfd {
 	DECLARE_XNSELECT(read_select);
 	struct itimerspec value;
 	struct xnsynch readers;
-	struct xnthread *target;
+	struct steely_thread *target;
 };
 
 #define STEELY_TFD_TICKED	(1 << 2)
@@ -165,7 +165,7 @@ static void timerfd_handler(struct xntimer *xntimer)
 STEELY_SYSCALL(timerfd_create, lostage, (int clockid, int flags))
 {
 	struct steely_tfd *tfd;
-	struct xnthread *curr;
+	struct steely_thread *curr;
 	struct xnclock *clock;
 	int ret, ufd;
 
@@ -190,7 +190,7 @@ STEELY_SYSCALL(timerfd_create, lostage, (int clockid, int flags))
 	tfd->flags = flags & ~TFD_NONBLOCK;
 	tfd->fd.oflags = (flags & TFD_NONBLOCK) ? O_NONBLOCK : 0;
 	tfd->clockid = clockid;
-	curr = xnthread_current();
+	curr = steely_current_thread();
 	xntimer_init(&tfd->timer, clock, timerfd_handler,
 		     curr ? curr->sched : NULL, XNTIMER_UGRAVITY);
 	xnsynch_init(&tfd->readers, XNSYNCH_PRIO, NULL);
@@ -254,7 +254,7 @@ int __steely_timerfd_settime(int fd, int flags,
 
 	tfd->target = NULL;
 	if (flags & TFD_WAKEUP) {
-		tfd->target = xnthread_current();
+		tfd->target = steely_current_thread();
 		if (tfd->target == NULL) {
 			ret = -EPERM;
 			goto out;

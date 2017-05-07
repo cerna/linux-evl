@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2001-2013 Philippe Gerum <rpm@xenomai.org>.
- * Copyright (C) 2006-2010 Gilles Chanteperdrix <gilles.chanteperdrix@xenomai.org>
- * Copyright (C) 2001-2013 The Xenomai project <http://www.xenomai.org>
+ * Copyright (C) 2001-2017 Philippe Gerum <rpm@xenomai.org>.
+ * Copyright (C) 2006-2016 Gilles Chanteperdrix <gilles.chanteperdrix@xenomai.org>
+ * Copyright (C) 2001-2017 The Xenomai project <http://www.xenomai.org>
  *
  * SMP support Copyright (C) 2004 The HYADES project <http://www.hyades-itea.org>
  *
@@ -28,6 +28,11 @@
 #include <linux/irq_work.h>
 #include <linux/sched/signal.h>
 #include <linux/sched/types.h>
+#include <linux/sched/task.h>
+#include <linux/jiffies.h>
+#include <linux/cred.h>
+#include <linux/jhash.h>
+#include <linux/err.h>
 #include <steely/sched.h>
 #include <steely/timer.h>
 #include <steely/synch.h>
@@ -42,19 +47,51 @@
 #include <steely/thread.h>
 #include <trace/events/steely.h>
 #include <asm-generic/steely/mayday.h>
+#include "posix/internal.h"
+#include "posix/thread.h"
+#include "posix/sched.h"
+#include "posix/signal.h"
+#include "posix/timer.h"
+#include "posix/clock.h"
+#include "posix/sem.h"
 #include "debug.h"
+
+static int steely_map_kernel(struct steely_thread *thread, struct completion *done);
+
+static ktime_t steely_time_slice = CONFIG_STEELY_RR_QUANTUM * 1000;
+
+#define PTHREAD_HSLOTS (1 << 8)	/* Must be a power of 2 */
+
+/* Process-local index, pthread_t x mm_struct (steely_local_hkey). */
+struct local_thread_hash {
+	pid_t pid;
+	struct steely_thread *thread;
+	struct steely_local_hkey hkey;
+	struct local_thread_hash *next;
+};
+
+/* System-wide index on task_pid_nr(). */
+struct global_thread_hash {
+	pid_t pid;
+	struct steely_thread *thread;
+	struct global_thread_hash *next;
+};
+
+static struct local_thread_hash *local_index[PTHREAD_HSLOTS];
+
+static struct global_thread_hash *global_index[PTHREAD_HSLOTS];
 
 static DECLARE_WAIT_QUEUE_HEAD(join_all);
 
 static void timeout_handler(struct xntimer *timer)
 {
-	struct xnthread *thread = container_of(timer, struct xnthread, rtimer);
+	struct steely_thread *thread = container_of(timer, struct steely_thread, rtimer);
 
 	xnthread_set_info(thread, XNTIMEO);	/* Interrupts are off. */
 	xnthread_resume(thread, XNDELAY);
 }
 
-static inline void fixup_ptimer_affinity(struct xnthread *thread)
+static inline void fixup_ptimer_affinity(struct steely_thread *thread)
 {
 #ifdef CONFIG_SMP
 	struct xntimer *timer = &thread->ptimer;
@@ -73,7 +110,7 @@ static inline void fixup_ptimer_affinity(struct xnthread *thread)
 
 static void periodic_handler(struct xntimer *timer)
 {
-	struct xnthread *thread = container_of(timer, struct xnthread, ptimer);
+	struct steely_thread *thread = container_of(timer, struct steely_thread, ptimer);
 	/*
 	 * Prevent unwanted round-robin, and do not wake up threads
 	 * blocked on a resource.
@@ -84,7 +121,7 @@ static void periodic_handler(struct xntimer *timer)
 	fixup_ptimer_affinity(thread);
 }
 
-static inline void enlist_new_thread(struct xnthread *thread)
+static inline void enlist_new_thread(struct steely_thread *thread)
 {				/* nklock held, irqs off */
 	list_add_tail(&thread->glink, &nkthreadq);
 	steely_nrthreads++;
@@ -92,14 +129,14 @@ static inline void enlist_new_thread(struct xnthread *thread)
 }
 
 struct kthread_arg {
-	struct xnthread *thread;
+	struct steely_thread *thread;
 	struct completion *done;
 };
 
 static int kthread_trampoline(void *arg)
 {
 	struct kthread_arg *ka = arg;
-	struct xnthread *thread = ka->thread;
+	struct steely_thread *thread = ka->thread;
 	struct sched_param param;
 	int ret, policy, prio;
 
@@ -120,7 +157,7 @@ static int kthread_trampoline(void *arg)
 	param.sched_priority = prio;
 	sched_setscheduler(current, policy, &param);
 
-	ret = xnthread_map(thread, ka->done);
+	ret = steely_map_kernel(thread, ka->done);
 	if (ret) {
 		printk(STEELY_WARNING "failed to create kernel shadow %s\n",
 		       thread->name);
@@ -136,7 +173,7 @@ static int kthread_trampoline(void *arg)
 	return 0;
 }
 
-static inline int spawn_kthread(struct xnthread *thread)
+static inline int spawn_kthread(struct steely_thread *thread)
 {
 	DECLARE_COMPLETION_ONSTACK(done);
 	struct kthread_arg ka = {
@@ -154,8 +191,8 @@ static inline int spawn_kthread(struct xnthread *thread)
 	return 0;
 }
 
-int __xnthread_init(struct xnthread *thread,
-		    const struct xnthread_init_attr *attr,
+int __xnthread_init(struct steely_thread *thread,
+		    const struct steely_thread_init_attr *attr,
 		    struct xnsched *sched,
 		    struct xnsched_class *sched_class,
 		    const union xnsched_policy_param *sched_param)
@@ -240,7 +277,7 @@ err_out:
 	return ret;
 }
 
-void xnthread_init_shadow_tcb(struct xnthread *thread)
+void xnthread_init_shadow_tcb(struct steely_thread *thread)
 {
 	struct xnarchtcb *tcb = xnthread_archtcb(thread);
 	struct task_struct *p = current;
@@ -254,7 +291,7 @@ void xnthread_init_shadow_tcb(struct xnthread *thread)
 	xnarch_init_shadow_tcb(thread);
 }
 
-void xnthread_init_root_tcb(struct xnthread *thread)
+void xnthread_init_root_tcb(struct steely_thread *thread)
 {
 	struct xnarchtcb *tcb = xnthread_archtcb(thread);
 	struct task_struct *p = current;
@@ -267,7 +304,7 @@ void xnthread_init_root_tcb(struct xnthread *thread)
 	xnarch_init_root_tcb(thread);
 }
 
-void xnthread_deregister(struct xnthread *thread)
+void xnthread_deregister(struct steely_thread *thread)
 {
 	if (thread->handle != XN_NO_HANDLE)
 		xnregistry_remove(thread->handle);
@@ -322,12 +359,12 @@ char *xnthread_format_status(unsigned long status, char *buf, int size)
 	return buf;
 }
 
-int xnthread_set_clock(struct xnthread *thread, struct xnclock *newclock)
+int xnthread_set_clock(struct steely_thread *thread, struct xnclock *newclock)
 {
 	spl_t s;
 
 	if (thread == NULL) {
-		thread = xnthread_current();
+		thread = steely_current_thread();
 		if (thread == NULL)
 			return -EPERM;
 	}
@@ -341,7 +378,7 @@ int xnthread_set_clock(struct xnthread *thread, struct xnclock *newclock)
 }
 EXPORT_SYMBOL_GPL(xnthread_set_clock);
 
-ktime_t xnthread_get_timeout(struct xnthread *thread, ktime_t base)
+ktime_t xnthread_get_timeout(struct steely_thread *thread, ktime_t base)
 {
 	struct xntimer *timer;
 	ktime_t timeout;
@@ -364,7 +401,7 @@ ktime_t xnthread_get_timeout(struct xnthread *thread, ktime_t base)
 }
 EXPORT_SYMBOL_GPL(xnthread_get_timeout);
 
-ktime_t xnthread_get_period(struct xnthread *thread)
+ktime_t xnthread_get_period(struct steely_thread *thread)
 {
 	ktime_t period = 0;
 	/*
@@ -382,16 +419,16 @@ ktime_t xnthread_get_period(struct xnthread *thread)
 }
 EXPORT_SYMBOL_GPL(xnthread_get_period);
 
-void xnthread_prepare_wait(struct xnthread_wait_context *wc)
+void xnthread_prepare_wait(struct steely_wait_context *wc)
 {
-	struct xnthread *curr = xnthread_current();
+	struct steely_thread *curr = steely_current_thread();
 
 	wc->posted = 0;
 	curr->wcontext = wc;
 }
 EXPORT_SYMBOL_GPL(xnthread_prepare_wait);
 
-static inline void release_all_ownerships(struct xnthread *curr)
+static inline void release_all_ownerships(struct steely_thread *curr)
 {
 	struct xnsynch *synch, *tmp;
 
@@ -407,7 +444,7 @@ static inline void release_all_ownerships(struct xnthread *curr)
 	}
 }
 
-static inline void cleanup_tcb(struct xnthread *curr) /* nklock held, irqs off */
+static inline void cleanup_tcb(struct steely_thread *curr) /* nklock held, irqs off */
 {
 	list_del(&curr->glink);
 	steely_nrthreads--;
@@ -434,7 +471,7 @@ static inline void cleanup_tcb(struct xnthread *curr) /* nklock held, irqs off *
 	xnthread_deregister(curr);
 }
 
-void __xnthread_cleanup(struct xnthread *curr)
+void __xnthread_cleanup(struct steely_thread *curr)
 {
 	spl_t s;
 
@@ -467,7 +504,7 @@ void __xnthread_cleanup(struct xnthread *curr)
  * Unwinds xnthread_init() ops for an unmapped thread.  Since the
  * latter must be dormant, it can't be part of any runqueue.
  */
-void __xnthread_discard(struct xnthread *thread)
+void __xnthread_discard(struct steely_thread *thread)
 {
 	spl_t s;
 
@@ -486,8 +523,8 @@ void __xnthread_discard(struct xnthread *thread)
 	xnlock_put_irqrestore(&nklock, s);
 }
 
-int xnthread_init(struct xnthread *thread,
-		  const struct xnthread_init_attr *attr,
+int xnthread_init(struct steely_thread *thread,
+		  const struct steely_thread_init_attr *attr,
 		  struct xnsched_class *sched_class,
 		  const union xnsched_policy_param *sched_param)
 {
@@ -519,8 +556,8 @@ int xnthread_init(struct xnthread *thread,
 }
 EXPORT_SYMBOL_GPL(xnthread_init);
 
-int xnthread_start(struct xnthread *thread,
-		   const struct xnthread_start_attr *attr)
+int xnthread_start(struct steely_thread *thread,
+		   const struct steely_thread_start_attr *attr)
 {
 	spl_t s;
 
@@ -559,7 +596,7 @@ EXPORT_SYMBOL_GPL(xnthread_start);
 int xnthread_set_mode(int clrmask, int setmask)
 {
 	int oldmode, lock_count;
-	struct xnthread *curr;
+	struct steely_thread *curr;
 	spl_t s;
 
 	primary_mode_only();
@@ -592,7 +629,7 @@ int xnthread_set_mode(int clrmask, int setmask)
 }
 EXPORT_SYMBOL_GPL(xnthread_set_mode);
 
-void xnthread_suspend(struct xnthread *thread, int mask,
+void xnthread_suspend(struct steely_thread *thread, int mask,
 		      ktime_t timeout, xntmode_t timeout_mode,
 		      struct xnsynch *wchan)
 {
@@ -765,7 +802,7 @@ abort:
 }
 EXPORT_SYMBOL_GPL(xnthread_suspend);
 
-void xnthread_resume(struct xnthread *thread, int mask)
+void xnthread_resume(struct steely_thread *thread, int mask)
 {
 	unsigned long oldstate;
 	struct xnsched *sched;
@@ -857,7 +894,7 @@ unlock_and_exit:
 }
 EXPORT_SYMBOL_GPL(xnthread_resume);
 
-int xnthread_unblock(struct xnthread *thread)
+int xnthread_unblock(struct steely_thread *thread)
 {
 	int ret = 1;
 	spl_t s;
@@ -903,7 +940,7 @@ int xnthread_unblock(struct xnthread *thread)
 }
 EXPORT_SYMBOL_GPL(xnthread_unblock);
 
-int xnthread_set_periodic(struct xnthread *thread, ktime_t idate,
+int xnthread_set_periodic(struct steely_thread *thread, ktime_t idate,
 			  xntmode_t timeout_mode, ktime_t period)
 {
 	struct xnclock *clock;
@@ -911,7 +948,7 @@ int xnthread_set_periodic(struct xnthread *thread, ktime_t idate,
 	spl_t s;
 
 	if (thread == NULL) {
-		thread = xnthread_current();
+		thread = steely_current_thread();
 		if (thread == NULL)
 			return -EPERM;
 	}
@@ -961,13 +998,13 @@ EXPORT_SYMBOL_GPL(xnthread_set_periodic);
 int xnthread_wait_period(unsigned long *overruns_r)
 {
 	unsigned long overruns = 0;
-	struct xnthread *thread;
+	struct steely_thread *thread;
 	struct xnclock *clock;
 	ktime_t now;
 	int ret = 0;
 	spl_t s;
 
-	thread = xnthread_current();
+	thread = steely_current_thread();
 
 	xnlock_get_irqsave(&nklock, s);
 
@@ -1004,7 +1041,7 @@ int xnthread_wait_period(unsigned long *overruns_r)
 }
 EXPORT_SYMBOL_GPL(xnthread_wait_period);
 
-int xnthread_set_slice(struct xnthread *thread, ktime_t quantum)
+int xnthread_set_slice(struct steely_thread *thread, ktime_t quantum)
 {
 	struct xnsched *sched;
 	spl_t s;
@@ -1038,7 +1075,7 @@ int xnthread_set_slice(struct xnthread *thread, ktime_t quantum)
 }
 EXPORT_SYMBOL_GPL(xnthread_set_slice);
 
-void xnthread_cancel(struct xnthread *thread)
+void xnthread_cancel(struct steely_thread *thread)
 {
 	spl_t s;
 
@@ -1066,7 +1103,7 @@ void xnthread_cancel(struct xnthread *thread)
 	}
 
 check_self_cancel:
-	if (xnthread_current() == thread) {
+	if (steely_current_thread() == thread) {
 		xnlock_put_irqrestore(&nklock, s);
 		xnthread_test_cancel();
 		/*
@@ -1134,9 +1171,9 @@ static void wait_for_rcu_grace_period(struct pid *pid)
 	}
 }
 
-int xnthread_join(struct xnthread *thread, bool uninterruptible)
+int xnthread_join(struct steely_thread *thread, bool uninterruptible)
 {
-	struct xnthread *curr = xnthread_current();
+	struct steely_thread *curr = steely_current_thread();
 	int ret = 0, switched = 0;
 	struct pid *pid;
 	pid_t tpid;
@@ -1243,14 +1280,14 @@ EXPORT_SYMBOL_GPL(xnthread_join);
 
 int xnthread_migrate(int cpu)
 {
-	struct xnthread *curr;
+	struct steely_thread *curr;
 	struct xnsched *sched;
 	int ret = 0;
 	spl_t s;
 
 	xnlock_get_irqsave(&nklock, s);
 
-	curr = xnthread_current();
+	curr = steely_current_thread();
 	if (!xnsched_primary_p() || curr->lock_count > 0) {
 		ret = -EPERM;
 		goto unlock_and_exit;
@@ -1299,7 +1336,7 @@ int xnthread_migrate(int cpu)
 }
 EXPORT_SYMBOL_GPL(xnthread_migrate);
 
-void xnthread_migrate_passive(struct xnthread *thread, struct xnsched *sched)
+void xnthread_migrate_passive(struct steely_thread *thread, struct xnsched *sched)
 {				/* nklocked, IRQs off */
 	if (thread->sched == sched)
 		return;
@@ -1318,7 +1355,7 @@ void xnthread_migrate_passive(struct xnthread *thread, struct xnsched *sched)
 
 #endif	/* CONFIG_SMP */
 
-int xnthread_set_schedparam(struct xnthread *thread,
+int xnthread_set_schedparam(struct steely_thread *thread,
 			    struct xnsched_class *sched_class,
 			    const union xnsched_policy_param *sched_param)
 {
@@ -1333,7 +1370,7 @@ int xnthread_set_schedparam(struct xnthread *thread,
 }
 EXPORT_SYMBOL_GPL(xnthread_set_schedparam);
 
-int __xnthread_set_schedparam(struct xnthread *thread,
+int __xnthread_set_schedparam(struct steely_thread *thread,
 			      struct xnsched_class *sched_class,
 			      const union xnsched_policy_param *sched_param)
 {
@@ -1381,7 +1418,7 @@ int __xnthread_set_schedparam(struct xnthread *thread,
 	return ret;
 }
 
-void __xnthread_test_cancel(struct xnthread *curr)
+void __xnthread_test_cancel(struct steely_thread *curr)
 {
 	/*
 	 * Just in case xnthread_test_cancel() is called from an IRQ
@@ -1405,13 +1442,13 @@ EXPORT_SYMBOL_GPL(__xnthread_test_cancel);
 int xnthread_harden(void)
 {
 	struct task_struct *p = current;
-	struct xnthread *thread;
+	struct steely_thread *thread;
 	struct xnsched *sched;
 	int ret;
 
 	secondary_mode_only();
 
-	thread = xnthread_current();
+	thread = steely_current_thread();
 	if (thread == NULL)
 		return -EPERM;
 
@@ -1480,7 +1517,7 @@ static void post_wakeup(struct task_struct *p)
 	irq_work_queue(&rq->work);
 }
 
-void __xnthread_propagate_schedparam(struct xnthread *curr)
+void __xnthread_propagate_schedparam(struct steely_thread *curr)
 {
 	int kpolicy = SCHED_FIFO, kprio = curr->bprio, ret;
 	struct task_struct *p = current;
@@ -1516,7 +1553,7 @@ void __xnthread_propagate_schedparam(struct xnthread *curr)
 
 void xnthread_relax(int notify, int reason)
 {
-	struct xnthread *thread = xnthread_current();
+	struct steely_thread *thread = steely_current_thread();
 	struct task_struct *p = current;
 	int cpu __maybe_unused;
 	siginfo_t si;
@@ -1625,7 +1662,7 @@ struct lostage_signal {
 };
 
 static inline void do_kthread_signal(struct task_struct *p,
-				     struct xnthread *thread,
+				     struct steely_thread *thread,
 				     struct lostage_signal *rq)
 {
 	printk(STEELY_WARNING
@@ -1636,7 +1673,7 @@ static inline void do_kthread_signal(struct task_struct *p,
 static void lostage_task_signal(struct irq_work *work)
 {
 	struct lostage_signal *rq;
-	struct xnthread *thread;
+	struct steely_thread *thread;
 	struct task_struct *p;
 	siginfo_t si;
 	int signo;
@@ -1662,7 +1699,7 @@ static void lostage_task_signal(struct irq_work *work)
 	steely_free_irq_work(rq);
 }
 
-static int force_wakeup(struct xnthread *thread) /* nklock locked, irqs off */
+static int force_wakeup(struct steely_thread *thread) /* nklock locked, irqs off */
 {
 	int ret = 0;
 
@@ -1727,7 +1764,7 @@ static int force_wakeup(struct xnthread *thread) /* nklock locked, irqs off */
 	return ret;
 }
 
-void __xnthread_kick(struct xnthread *thread) /* nklock locked, irqs off */
+void __xnthread_kick(struct steely_thread *thread) /* nklock locked, irqs off */
 {
 	struct task_struct *p = xnthread_host_task(thread);
 
@@ -1771,7 +1808,7 @@ void __xnthread_kick(struct xnthread *thread) /* nklock locked, irqs off */
 		dovetail_send_mayday(p);
 }
 
-void xnthread_kick(struct xnthread *thread)
+void xnthread_kick(struct steely_thread *thread)
 {
 	spl_t s;
 
@@ -1781,7 +1818,7 @@ void xnthread_kick(struct xnthread *thread)
 }
 EXPORT_SYMBOL_GPL(xnthread_kick);
 
-void __xnthread_demote(struct xnthread *thread) /* nklock locked, irqs off */
+void __xnthread_demote(struct steely_thread *thread) /* nklock locked, irqs off */
 {
 	struct xnsched_class *sched_class;
 	union xnsched_policy_param param;
@@ -1811,7 +1848,7 @@ void __xnthread_demote(struct xnthread *thread) /* nklock locked, irqs off */
 	__xnthread_set_schedparam(thread, sched_class, &param);
 }
 
-void xnthread_demote(struct xnthread *thread)
+void xnthread_demote(struct steely_thread *thread)
 {
 	spl_t s;
 
@@ -1821,7 +1858,7 @@ void xnthread_demote(struct xnthread *thread)
 }
 EXPORT_SYMBOL_GPL(xnthread_demote);
 
-void xnthread_signal(struct xnthread *thread, int sig, int arg)
+void xnthread_signal(struct steely_thread *thread, int sig, int arg)
 {
 	struct lostage_signal *rq;
 
@@ -1835,7 +1872,7 @@ void xnthread_signal(struct xnthread *thread, int sig, int arg)
 }
 EXPORT_SYMBOL_GPL(xnthread_signal);
 
-void xnthread_pin_initial(struct xnthread *thread)
+void xnthread_pin_initial(struct steely_thread *thread)
 {
 	struct task_struct *p = current;
 	struct xnsched *sched;
@@ -1890,7 +1927,35 @@ static inline void wakeup_parent(struct completion *done)
 	irq_work_queue(&rq->work);
 }
 
-static inline void init_kthread_info(struct xnthread *thread)
+#ifdef CONFIG_MMU
+
+static inline int commit_process_memory(void)
+{
+	struct task_struct *p = current;
+	siginfo_t si;
+
+	if ((p->mm->def_flags & VM_LOCKED) == 0) {
+		memset(&si, 0, sizeof(si));
+		si.si_signo = SIGDEBUG;
+		si.si_code = SI_QUEUE;
+		si.si_int = SIGDEBUG_NOMLOCK | sigdebug_marker;
+		send_sig_info(SIGDEBUG, &si, p);
+		return 0;
+	}
+
+	return force_commit_memory();
+}
+
+#else /* !CONFIG_MMU */
+
+static inline int commit_process_memory(void)
+{
+	return 0;
+}
+
+#endif /* !CONFIG_MMU */
+
+static inline void init_kthread_info(struct steely_thread *thread)
 {
 	struct dovetail_state *p;
 
@@ -1899,7 +1964,16 @@ static inline void init_kthread_info(struct xnthread *thread)
 	p->process = NULL;
 }
 
-int xnthread_map(struct xnthread *thread, struct completion *done)
+static inline void init_uthread_info(struct steely_thread *thread)
+{
+	struct dovetail_state *p;
+
+	p = dovetail_current_state();
+	p->thread = thread;
+	p->process = steely_search_process(current->mm);
+}
+
+static int steely_map_kernel(struct steely_thread *thread, struct completion *done)
 {
 	int ret;
 	spl_t s;
@@ -1907,7 +1981,7 @@ int xnthread_map(struct xnthread *thread, struct completion *done)
 	if (xnthread_test_state(thread, XNUSER))
 		return -EINVAL;
 
-	if (xnthread_current() || xnthread_test_state(thread, XNMAPPED))
+	if (steely_current_thread() || xnthread_test_state(thread, XNMAPPED))
 		return -EBUSY;
 
 	thread->u_window = NULL;
@@ -1929,7 +2003,7 @@ int xnthread_map(struct xnthread *thread, struct completion *done)
 	 * xnthread_start() is commonly invoked from the root domain,
 	 * therefore the call site may expect the started kernel
 	 * shadow to preempt immediately. As a result of such
-	 * assumption, start attributes (struct xnthread_start_attr)
+	 * assumption, start attributes (struct steely_thread_start_attr)
 	 * are often laid on the caller's stack.
 	 *
 	 * For this reason, we raise the completion signal to wake up
@@ -1960,10 +2034,75 @@ int xnthread_map(struct xnthread *thread, struct completion *done)
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(xnthread_map);
+
+static int steely_map_user(struct steely_thread *thread, __u32 __user *u_winoff)
+{
+	struct steely_user_window *u_window;
+	struct steely_thread_start_attr attr;
+	struct steely_ppd *sys_ppd;
+	struct steely_umm *umm;
+	int ret;
+
+	if (!xnthread_test_state(thread, XNUSER))
+		return -EINVAL;
+
+	if (steely_current_thread() || xnthread_test_state(thread, XNMAPPED))
+		return -EBUSY;
+
+	if (!access_wok(u_winoff, sizeof(*u_winoff)))
+		return -EFAULT;
+
+	ret = commit_process_memory();
+	if (ret)
+		return ret;
+
+	umm = &steely_kernel_ppd.umm;
+	u_window = steely_umm_zalloc(umm, sizeof(*u_window));
+	if (u_window == NULL)
+		return -ENOMEM;
+
+	thread->u_window = u_window;
+	__xn_put_user(steely_umm_offset(umm, u_window), u_winoff);
+	xnthread_pin_initial(thread);
+
+	trace_steely_shadow_map(thread);
+
+	xnthread_init_shadow_tcb(thread);
+	xnthread_suspend(thread, XNRELAX, XN_INFINITE, XN_RELATIVE, NULL);
+	init_uthread_info(thread);
+	xnthread_set_state(thread, XNMAPPED);
+	xndebug_shadow_init(thread);
+	sys_ppd = steely_ppd_get(0);
+	atomic_inc(&sys_ppd->refcnt);
+	/*
+	 * ->map_thread() handler is invoked after the TCB is fully
+	 * built, and when we know for sure that current will go
+	 * through our task-exit handler, because it has a shadow
+	 * extension and I-pipe notifications will soon be enabled for
+	 * it.
+	 */
+	xnthread_run_handler(thread, map_thread);
+	/*
+	 * CAUTION: we enable dovetailing only when our shadow TCB is
+	 * consistent, so that we won't trigger false positive in
+	 * debug code from handle_schedule_event() and friends.
+	 */
+	dovetail_enable(0);
+
+	attr.mode = 0;
+	attr.entry = NULL;
+	attr.cookie = NULL;
+	ret = xnthread_start(thread, &attr);
+	if (ret)
+		return ret;
+
+	xnthread_sync_window(thread);
+
+	return 0;
+}
 
 /* nklock locked, irqs off */
-void xnthread_call_mayday(struct xnthread *thread, int reason)
+void xnthread_call_mayday(struct steely_thread *thread, int reason)
 {
 	struct task_struct *p = xnthread_host_task(thread);
 
@@ -1977,7 +2116,7 @@ EXPORT_SYMBOL_GPL(xnthread_call_mayday);
 
 int xnthread_killall(int grace, int mask)
 {
-	struct xnthread *t, *curr = xnthread_current();
+	struct steely_thread *t, *curr = steely_current_thread();
 	int nrkilled = 0, nrthreads, count;
 	long ret;
 	spl_t s;
@@ -2039,9 +2178,819 @@ int xnthread_killall(int grace, int mask)
 }
 EXPORT_SYMBOL_GPL(xnthread_killall);
 		     
+static inline struct local_thread_hash *
+thread_hash(const struct steely_local_hkey *hkey,
+	    struct steely_thread *thread, pid_t pid)
+{
+	struct global_thread_hash **ghead, *gslot;
+	struct local_thread_hash **lhead, *lslot;
+	u32 hash;
+	void *p;
+	spl_t s;
+
+	p = xnmalloc(sizeof(*lslot) + sizeof(*gslot));
+	if (p == NULL)
+		return NULL;
+
+	lslot = p;
+	lslot->hkey = *hkey;
+	lslot->thread = thread;
+	lslot->pid = pid;
+	hash = jhash2((u32 *)&lslot->hkey,
+		      sizeof(lslot->hkey) / sizeof(u32), 0);
+	lhead = &local_index[hash & (PTHREAD_HSLOTS - 1)];
+
+	gslot = p + sizeof(*lslot);
+	gslot->pid = pid;
+	gslot->thread = thread;
+	hash = jhash2((u32 *)&pid, sizeof(pid) / sizeof(u32), 0);
+	ghead = &global_index[hash & (PTHREAD_HSLOTS - 1)];
+
+	xnlock_get_irqsave(&nklock, s);
+	lslot->next = *lhead;
+	*lhead = lslot;
+	gslot->next = *ghead;
+	*ghead = gslot;
+	xnlock_put_irqrestore(&nklock, s);
+
+	return lslot;
+}
+
+static inline void thread_unhash(const struct steely_local_hkey *hkey)
+{
+	struct global_thread_hash **gtail, *gslot;
+	struct local_thread_hash **ltail, *lslot;
+	pid_t pid;
+	u32 hash;
+	spl_t s;
+
+	hash = jhash2((u32 *) hkey, sizeof(*hkey) / sizeof(u32), 0);
+	ltail = &local_index[hash & (PTHREAD_HSLOTS - 1)];
+
+	xnlock_get_irqsave(&nklock, s);
+
+	lslot = *ltail;
+	while (lslot &&
+	       (lslot->hkey.u_pth != hkey->u_pth ||
+		lslot->hkey.mm != hkey->mm)) {
+		ltail = &lslot->next;
+		lslot = *ltail;
+	}
+
+	if (lslot == NULL) {
+		xnlock_put_irqrestore(&nklock, s);
+		return;
+	}
+
+	*ltail = lslot->next;
+	pid = lslot->pid;
+	hash = jhash2((u32 *)&pid, sizeof(pid) / sizeof(u32), 0);
+	gtail = &global_index[hash & (PTHREAD_HSLOTS - 1)];
+	gslot = *gtail;
+	while (gslot && gslot->pid != pid) {
+		gtail = &gslot->next;
+		gslot = *gtail;
+	}
+	/* gslot must be found here. */
+	STEELY_BUG_ON(STEELY, !(gslot && gtail));
+	*gtail = gslot->next;
+
+	xnlock_put_irqrestore(&nklock, s);
+
+	xnfree(lslot);
+}
+
+static struct steely_thread *
+thread_lookup(const struct steely_local_hkey *hkey)
+{
+	struct local_thread_hash *lslot;
+	struct steely_thread *thread;
+	u32 hash;
+	spl_t s;
+
+	hash = jhash2((u32 *)hkey, sizeof(*hkey) / sizeof(u32), 0);
+	lslot = local_index[hash & (PTHREAD_HSLOTS - 1)];
+
+	xnlock_get_irqsave(&nklock, s);
+
+	while (lslot != NULL &&
+	       (lslot->hkey.u_pth != hkey->u_pth || lslot->hkey.mm != hkey->mm))
+		lslot = lslot->next;
+
+	thread = lslot ? lslot->thread : NULL;
+
+	xnlock_put_irqrestore(&nklock, s);
+
+	return thread;
+}
+
+struct steely_thread *steely_thread_find(pid_t pid) /* nklocked, IRQs off */
+{
+	struct global_thread_hash *gslot;
+	u32 hash;
+
+	hash = jhash2((u32 *)&pid, sizeof(pid) / sizeof(u32), 0);
+
+	gslot = global_index[hash & (PTHREAD_HSLOTS - 1)];
+	while (gslot && gslot->pid != pid)
+		gslot = gslot->next;
+
+	return gslot ? gslot->thread : NULL;
+}
+EXPORT_SYMBOL_GPL(steely_thread_find);
+
+struct steely_thread *steely_thread_find_local(pid_t pid) /* nklocked, IRQs off */
+{
+	struct steely_thread *thread;
+
+	thread = steely_thread_find(pid);
+	if (thread == NULL || thread->hkey.mm != current->mm)
+		return NULL;
+
+	return thread;
+}
+EXPORT_SYMBOL_GPL(steely_thread_find_local);
+
+struct steely_thread *steely_thread_lookup(unsigned long pth) /* nklocked, IRQs off */
+{
+	struct steely_local_hkey hkey;
+
+	hkey.u_pth = pth;
+	hkey.mm = current->mm;
+	return thread_lookup(&hkey);
+}
+EXPORT_SYMBOL_GPL(steely_thread_lookup);
+
+static void steely_thread_map(struct steely_thread *curr)
+{
+	curr->process = steely_current_process();
+	STEELY_BUG_ON(STEELY, curr->process == NULL);
+}
+
+static struct steely_thread_personality *steely_thread_exit(struct steely_thread *curr)
+{
+	spl_t s;
+
+	/*
+	 * Unhash first, to prevent further access to the TCB from
+	 * userland.
+	 */
+	thread_unhash(&curr->hkey);
+	xnlock_get_irqsave(&nklock, s);
+	steely_mark_deleted(curr);
+	list_del(&curr->next);
+	xnlock_put_irqrestore(&nklock, s);
+	steely_signal_flush(curr);
+	xnsynch_destroy(&curr->monitor_synch);
+	xnsynch_destroy(&curr->sigwait);
+
+	return NULL;
+}
+
+static struct steely_thread_personality *steely_thread_finalize(struct steely_thread *zombie)
+{
+	xnfree(zombie);
+
+	return NULL;
+}
+
+int __steely_thread_setschedparam_ex(struct steely_thread *thread, int policy,
+				     const struct sched_param_ex *param_ex)
+{
+	struct xnsched_class *sched_class;
+	union xnsched_policy_param param;
+	ktime_t tslice;
+	int ret = 0;
+	spl_t s;
+
+	xnlock_get_irqsave(&nklock, s);
+
+	if (!steely_obj_active(thread, STEELY_THREAD_MAGIC,
+			       struct steely_thread)) {
+		ret = -ESRCH;
+		goto out;
+	}
+
+	if (policy == __SCHED_CURRENT) {
+		policy = thread->base_class->policy;
+		if (xnthread_base_priority(thread) == 0)
+			policy = SCHED_NORMAL;
+		else if (thread->base_class == &xnsched_class_rt &&
+			 xnthread_test_state(thread, XNRRB))
+			policy = SCHED_RR;
+	}
+
+	tslice = thread->rrperiod;
+	sched_class = steely_sched_policy_param(&param, policy,
+						param_ex, &tslice);
+	if (sched_class == NULL) {
+		ret = -EINVAL;
+		goto out;
+	}
+	xnthread_set_slice(thread, tslice);
+	if (steely_call_extension(thread_setsched, &thread->extref, ret,
+				  sched_class, &param) && ret)
+		goto out;
+	ret = xnthread_set_schedparam(thread, sched_class, &param);
+	xnsched_run();
+out:
+	xnlock_put_irqrestore(&nklock, s);
+
+	return ret;
+}
+
+int __steely_thread_getschedparam_ex(struct steely_thread *thread,
+				     int *policy_r,
+				     struct sched_param_ex *param_ex)
+{
+	struct xnsched_class *base_class;
+	spl_t s;
+
+	xnlock_get_irqsave(&nklock, s);
+
+	if (!steely_obj_active(thread, STEELY_THREAD_MAGIC,
+			       struct steely_thread)) {
+		xnlock_put_irqrestore(&nklock, s);
+		return -ESRCH;
+	}
+
+	base_class = thread->base_class;
+	*policy_r = base_class->policy;
+
+	param_ex->sched_priority = xnthread_base_priority(thread);
+	if (param_ex->sched_priority == 0) /* SCHED_FIFO/SCHED_WEAK */
+		*policy_r = SCHED_NORMAL;
+
+	if (base_class == &xnsched_class_rt) {
+		if (xnthread_test_state(thread, XNRRB)) {
+			param_ex->sched_rr_quantum =
+				ktime_to_timespec(thread->rrperiod);
+			*policy_r = SCHED_RR;
+		}
+		goto out;
+	}
+
+#ifdef CONFIG_STEELY_SCHED_WEAK
+	if (base_class == &xnsched_class_weak) {
+		if (*policy_r != SCHED_WEAK)
+			param_ex->sched_priority = -param_ex->sched_priority;
+		goto out;
+	}
+#endif
+#ifdef CONFIG_STEELY_SCHED_SPORADIC
+	if (base_class == &xnsched_class_sporadic) {
+		param_ex->sched_ss_low_priority = thread->pss->param.low_prio;
+		param_ex->sched_ss_repl_period =
+			ktime_to_timespec(thread->pss->param.repl_period);
+		param_ex->sched_ss_init_budget =
+			ktime_to_timespec(thread->pss->param.init_budget);
+		param_ex->sched_ss_max_repl = thread->pss->param.max_repl;
+		goto out;
+	}
+#endif
+#ifdef CONFIG_STEELY_SCHED_TP
+	if (base_class == &xnsched_class_tp) {
+		param_ex->sched_tp_partition =
+			thread->tps - thread->sched->tp.partitions;
+		goto out;
+	}
+#endif
+#ifdef CONFIG_STEELY_SCHED_QUOTA
+	if (base_class == &xnsched_class_quota) {
+		param_ex->sched_quota_group = thread->quota->tgid;
+		goto out;
+	}
+#endif
+
+out:
+	xnlock_put_irqrestore(&nklock, s);
+
+	return 0;
+}
+
+static int pthread_create(struct steely_thread **thread_p,
+			  int policy,
+			  const struct sched_param_ex *param_ex,
+			  struct task_struct *task)
+{
+	struct xnsched_class *sched_class;
+	union xnsched_policy_param param;
+	struct steely_thread_init_attr iattr;
+	struct steely_thread *thread;
+	ktime_t tslice;
+	int ret, n;
+	spl_t s;
+
+	thread = xnmalloc(sizeof(*thread));
+	if (thread == NULL)
+		return -EAGAIN;
+
+	tslice = steely_time_slice;
+	sched_class = steely_sched_policy_param(&param, policy,
+						param_ex, &tslice);
+	if (sched_class == NULL) {
+		xnfree(thread);
+		return -EINVAL;
+	}
+
+	iattr.name = task->comm;
+	iattr.flags = XNUSER;
+	iattr.personality = &steely_interface_personality;
+	iattr.affinity = CPU_MASK_ALL;
+	ret = xnthread_init(thread, &iattr, sched_class, &param);
+	if (ret) {
+		xnfree(thread);
+		return ret;
+	}
+
+	thread->magic = STEELY_THREAD_MAGIC;
+	xnsynch_init(&thread->monitor_synch, XNSYNCH_FIFO, NULL);
+
+	xnsynch_init(&thread->sigwait, XNSYNCH_FIFO, NULL);
+	sigemptyset(&thread->sigpending);
+	for (n = 0; n < _NSIG; n++)
+		INIT_LIST_HEAD(thread->sigqueues + n);
+
+	xnthread_set_slice(thread, tslice);
+	steely_set_extref(&thread->extref, NULL, NULL);
+
+	/*
+	 * We need an anonymous registry entry to obtain a handle for
+	 * fast mutex locking.
+	 */
+	ret = xnthread_register(thread, "");
+	if (ret) {
+		xnsynch_destroy(&thread->monitor_synch);
+		xnsynch_destroy(&thread->sigwait);
+		xnfree(thread);
+		return ret;
+	}
+
+	xnlock_get_irqsave(&nklock, s);
+	list_add_tail(&thread->next, &steely_thread_list);
+	xnlock_put_irqrestore(&nklock, s);
+
+	thread->hkey.u_pth = 0;
+	thread->hkey.mm = NULL;
+
+	*thread_p = thread;
+
+	return 0;
+}
+
+static void pthread_discard(struct steely_thread *thread)
+{
+	spl_t s;
+
+	xnsynch_destroy(&thread->monitor_synch);
+	xnsynch_destroy(&thread->sigwait);
+
+	xnlock_get_irqsave(&nklock, s);
+	list_del(&thread->next);
+	xnlock_put_irqrestore(&nklock, s);
+	__xnthread_discard(thread);
+	xnfree(thread);
+}
+
+static inline int pthread_setmode_np(int clrmask, int setmask, int *mode_r)
+{
+	const int valid_flags = XNLOCK|XNWARN|XNTRAPLB;
+	int old;
+
+	/*
+	 * The conforming mode bit is actually zero, since jumping to
+	 * this code entailed switching to primary mode already.
+	 */
+	if ((clrmask & ~valid_flags) != 0 || (setmask & ~valid_flags) != 0)
+		return -EINVAL;
+
+	old = xnthread_set_mode(clrmask, setmask);
+	if (mode_r)
+		*mode_r = old;
+
+	if ((clrmask & ~setmask) & XNLOCK)
+		/* Reschedule if the scheduler has been unlocked. */
+		xnsched_run();
+
+	return 0;
+}
+
+int steely_thread_setschedparam_ex(unsigned long pth,
+				   int policy,
+				   const struct sched_param_ex *param_ex,
+				   __u32 __user *u_winoff,
+				   int __user *u_promoted)
+{
+	struct steely_local_hkey hkey;
+	struct steely_thread *thread;
+	int ret, promoted = 0;
+
+	hkey.u_pth = pth;
+	hkey.mm = current->mm;
+	trace_steely_pthread_setschedparam(pth, policy, param_ex);
+
+	thread = thread_lookup(&hkey);
+	if (thread == NULL) {
+		if (u_winoff == NULL)
+			return -EINVAL;
+			
+		thread = steely_thread_shadow(current, &hkey, u_winoff);
+		if (IS_ERR(thread))
+			return PTR_ERR(thread);
+
+		promoted = 1;
+	}
+
+	ret = __steely_thread_setschedparam_ex(thread, policy, param_ex);
+	if (ret)
+		return ret;
+
+	return steely_copy_to_user(u_promoted, &promoted, sizeof(promoted));
+}
+
+STEELY_SYSCALL(thread_setschedparam_ex, conforming,
+	       (unsigned long pth,
+		int policy,
+		const struct sched_param_ex __user *u_param,
+		__u32 __user *u_winoff,
+		int __user *u_promoted))
+{
+	struct sched_param_ex param_ex;
+
+	if (steely_copy_from_user(&param_ex, u_param, sizeof(param_ex)))
+		return -EFAULT;
+
+	return steely_thread_setschedparam_ex(pth, policy, &param_ex,
+					      u_winoff, u_promoted);
+}
+
+int steely_thread_getschedparam_ex(unsigned long pth,
+				   int *policy_r,
+				   struct sched_param_ex *param_ex)
+{
+	struct steely_local_hkey hkey;
+	struct steely_thread *thread;
+	int ret;
+
+	hkey.u_pth = pth;
+	hkey.mm = current->mm;
+	thread = thread_lookup(&hkey);
+	if (thread == NULL)
+		return -ESRCH;
+
+	ret = __steely_thread_getschedparam_ex(thread, policy_r, param_ex);
+	if (ret)
+		return ret;
+
+	trace_steely_pthread_getschedparam(pth, *policy_r, param_ex);
+
+	return 0;
+}
+
+STEELY_SYSCALL(thread_getschedparam_ex, current,
+	       (unsigned long pth,
+		int __user *u_policy,
+		struct sched_param_ex __user *u_param))
+{
+	struct sched_param_ex param_ex;
+	int ret, policy;
+
+	ret = steely_thread_getschedparam_ex(pth, &policy, &param_ex);
+	if (ret)
+		return ret;
+
+	ret = steely_copy_to_user(u_policy, &policy, sizeof(policy));
+	if (ret)
+		return ret;
+
+	return steely_copy_to_user(u_param, &param_ex, sizeof(param_ex));
+}
+
+int __steely_thread_create(unsigned long pth, int policy,
+			   struct sched_param_ex *param_ex,
+			   int xid, __u32 __user *u_winoff)
+{
+	struct steely_thread *thread = NULL;
+	struct task_struct *p = current;
+	struct steely_local_hkey hkey;
+	int ret;
+
+	trace_steely_pthread_create(pth, policy, param_ex);
+
+	/*
+	 * We have been passed the pthread_t identifier the user-space
+	 * Steely library has assigned to our caller; we'll index our
+	 * internal pthread_t descriptor in kernel space on it.
+	 */
+	hkey.u_pth = pth;
+	hkey.mm = p->mm;
+
+	ret = pthread_create(&thread, policy, param_ex, p);
+	if (ret)
+		return ret;
+
+	ret = steely_map_user(thread, u_winoff);
+	if (ret) {
+		pthread_discard(thread);
+		return ret;
+	}
+
+	if (!thread_hash(&hkey, thread, task_pid_vnr(p))) {
+		ret = -EAGAIN;
+		goto fail;
+	}
+
+	thread->hkey = hkey;
+
+	if (xid > 0 && steely_push_personality(xid) == NULL) {
+		ret = -EINVAL;
+		goto fail;
+	}
+
+	return xnthread_harden();
+fail:
+	xnthread_cancel(thread);
+
+	return ret;
+}
+
+STEELY_SYSCALL(thread_create, init,
+	       (unsigned long pth, int policy,
+		struct sched_param_ex __user *u_param,
+		int xid,
+		__u32 __user *u_winoff))
+{
+	struct sched_param_ex param_ex;
+	int ret;
+
+	ret = steely_copy_from_user(&param_ex, u_param, sizeof(param_ex));
+	if (ret)
+		return ret;
+
+	return __steely_thread_create(pth, policy, &param_ex, xid, u_winoff);
+}
+
+struct steely_thread *
+steely_thread_shadow(struct task_struct *p,
+		     struct steely_local_hkey *hkey,
+		     __u32 __user *u_winoff)
+{
+	struct steely_thread *thread = NULL;
+	struct sched_param_ex param_ex;
+	int ret;
+
+	param_ex.sched_priority = 0;
+	trace_steely_pthread_create(hkey->u_pth, SCHED_NORMAL, &param_ex);
+	ret = pthread_create(&thread, SCHED_NORMAL, &param_ex, p);
+	if (ret)
+		return ERR_PTR(ret);
+
+	ret = steely_map_user(thread, u_winoff);
+	if (ret) {
+		pthread_discard(thread);
+		return ERR_PTR(ret);
+	}
+
+	if (!thread_hash(hkey, thread, task_pid_vnr(p))) {
+		ret = -EAGAIN;
+		goto fail;
+	}
+
+	thread->hkey = *hkey;
+
+	xnthread_harden();
+
+	return thread;
+fail:
+	xnthread_cancel(thread);
+
+	return ERR_PTR(ret);
+}
+
+STEELY_SYSCALL(thread_setmode, primary,
+	       (int clrmask, int setmask, int __user *u_mode_r))
+{
+	int ret, old;
+
+	trace_steely_pthread_setmode(clrmask, setmask);
+
+	ret = pthread_setmode_np(clrmask, setmask, &old);
+	if (ret)
+		return ret;
+
+	if (u_mode_r && steely_copy_to_user(u_mode_r, &old, sizeof(old)))
+		return -EFAULT;
+
+	return 0;
+}
+
+STEELY_SYSCALL(thread_setname, current,
+	       (unsigned long pth, const char __user *u_name))
+{
+	struct steely_local_hkey hkey;
+	struct steely_thread *thread;
+	char name[XNOBJECT_NAME_LEN];
+	struct task_struct *p;
+	spl_t s;
+
+	if (steely_strncpy_from_user(name, u_name,
+				     sizeof(name) - 1) < 0)
+		return -EFAULT;
+
+	name[sizeof(name) - 1] = '\0';
+	hkey.u_pth = pth;
+	hkey.mm = current->mm;
+
+	trace_steely_pthread_setname(pth, name);
+
+	xnlock_get_irqsave(&nklock, s);
+
+	thread = thread_lookup(&hkey);
+	if (thread == NULL) {
+		xnlock_put_irqrestore(&nklock, s);
+		return -ESRCH;
+	}
+
+	ksformat(thread->name, XNOBJECT_NAME_LEN - 1, "%s", name);
+	p = xnthread_host_task(thread);
+	get_task_struct(p);
+
+	xnlock_put_irqrestore(&nklock, s);
+
+	knamecpy(p->comm, name);
+	put_task_struct(p);
+
+	return 0;
+}
+
+STEELY_SYSCALL(thread_kill, conforming,
+	       (unsigned long pth, int sig))
+{
+	struct steely_local_hkey hkey;
+	struct steely_thread *thread;
+	int ret;
+	spl_t s;
+
+	trace_steely_pthread_kill(pth, sig);
+
+	xnlock_get_irqsave(&nklock, s);
+
+	hkey.u_pth = pth;
+	hkey.mm = current->mm;
+	thread = thread_lookup(&hkey);
+	if (thread == NULL)
+		ret = -ESRCH;
+	else
+		ret = __steely_kill(thread, sig, 0);
+
+	xnlock_put_irqrestore(&nklock, s);
+
+	return ret;
+}
+
+STEELY_SYSCALL(thread_join, primary, (unsigned long pth))
+{
+	struct steely_local_hkey hkey;
+	struct steely_thread *thread;
+	spl_t s;
+
+	trace_steely_pthread_join(pth);
+
+	xnlock_get_irqsave(&nklock, s);
+
+	hkey.u_pth = pth;
+	hkey.mm = current->mm;
+	thread = thread_lookup(&hkey);
+
+	xnlock_put_irqrestore(&nklock, s);
+
+	if (thread == NULL)
+		return -ESRCH;
+
+	return xnthread_join(thread, false);
+}
+
+STEELY_SYSCALL(thread_getpid, current, (unsigned long pth))
+{
+	struct steely_local_hkey hkey;
+	struct steely_thread *thread;
+	pid_t pid;
+	spl_t s;
+
+	trace_steely_pthread_pid(pth);
+
+	xnlock_get_irqsave(&nklock, s);
+
+	hkey.u_pth = pth;
+	hkey.mm = current->mm;
+	thread = thread_lookup(&hkey);
+	if (thread == NULL)
+		pid = -ESRCH;
+	else
+		pid = xnthread_host_pid(thread);
+
+	xnlock_put_irqrestore(&nklock, s);
+
+	return pid;
+}
+
+STEELY_SYSCALL(thread_getstat, current,
+	       (pid_t pid, struct steely_threadstat __user *u_stat))
+{
+	struct steely_threadstat stat;
+	struct steely_thread *thread;
+	ktime_t xtime;
+	spl_t s;
+
+	trace_steely_pthread_stat(pid);
+
+	if (pid == 0) {
+		thread = steely_current_thread();
+		if (thread == NULL)
+			return -EPERM;
+		xnlock_get_irqsave(&nklock, s);
+	} else {
+		xnlock_get_irqsave(&nklock, s);
+		thread = steely_thread_find(pid);
+		if (thread == NULL) {
+			xnlock_put_irqrestore(&nklock, s);
+			return -ESRCH;
+		}
+	}
+
+	/* We have to hold the nklock to keep most values consistent. */
+	stat.cpu = xnsched_cpu(thread->sched);
+	stat.cprio = xnthread_current_priority(thread);
+	xtime = xnstat_exectime_get_total(&thread->stat.account);
+	if (thread->sched->curr == thread)
+		xtime = ktime_add(xtime, ktime_sub(xnstat_exectime_now(),
+			   xnstat_exectime_get_last_switch(thread->sched)));
+	stat.xtime = xtime;
+	stat.msw = xnstat_counter_get(&thread->stat.ssw);
+	stat.csw = xnstat_counter_get(&thread->stat.csw);
+	stat.xsc = xnstat_counter_get(&thread->stat.xsc);
+	stat.pf = xnstat_counter_get(&thread->stat.pf);
+	stat.status = xnthread_get_state(thread);
+	if (thread->lock_count > 0)
+		stat.status |= XNLOCK;
+	stat.timeout = xnthread_get_timeout(thread,
+			    xnclock_read_monotonic(&nkclock));
+	strcpy(stat.name, thread->name);
+	strcpy(stat.personality, thread->personality->name);
+	xnlock_put_irqrestore(&nklock, s);
+
+	return steely_copy_to_user(u_stat, &stat, sizeof(stat));
+}
+
+#ifdef CONFIG_STEELY_EXTENSION
+
+int steely_thread_extend(struct steely_extension *ext,
+			 void *priv)
+{
+	struct steely_thread *thread = steely_current_thread();
+	struct steely_thread_personality *prev;
+
+	trace_steely_pthread_extend(thread->hkey.u_pth, ext->core.name);
+
+	prev = steely_push_personality(ext->core.xid);
+	if (prev == NULL)
+		return -EINVAL;
+
+	steely_set_extref(&thread->extref, ext, priv);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(steely_thread_extend);
+
+void steely_thread_restrict(void)
+{
+	struct steely_thread *thread = steely_current_thread();
+
+	trace_steely_pthread_restrict(thread->hkey.u_pth,
+		      thread->personality->name);
+	steely_pop_personality(&steely_interface_personality);
+	steely_set_extref(&thread->extref, NULL, NULL);
+}
+EXPORT_SYMBOL_GPL(steely_thread_restrict);
+
+#endif /* !CONFIG_STEELY_EXTENSION */
+
 /* Steely's generic personality. */
-struct xnthread_personality steely_personality = {
+struct steely_thread_personality steely_personality = {
 	.name = "core",
 	.magic = -1
 };
 EXPORT_SYMBOL_GPL(steely_personality);
+
+struct steely_thread_personality steely_interface_personality = {
+	.name = "steely",
+	.magic = 0,
+	.ops = {
+		.attach_process = steely_process_attach,
+		.detach_process = steely_process_detach,
+		.map_thread = steely_thread_map,
+		.exit_thread = steely_thread_exit,
+		.finalize_thread = steely_thread_finalize,
+	},
+};
+EXPORT_SYMBOL_GPL(steely_interface_personality);

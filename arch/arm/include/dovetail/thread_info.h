@@ -23,8 +23,8 @@ struct xnthread;
 struct steely_process;
 
 struct dovetail_state {
-	/* Core thread backlink. */
-	struct xnthread *thread;
+	/* Backlink to mated steely thread. */
+	struct steely_thread *thread;
 	/* User process backlink. NULL for core threads. */
 	struct steely_process *process;
 };

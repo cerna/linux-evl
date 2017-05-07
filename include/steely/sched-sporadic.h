@@ -47,7 +47,7 @@ struct xnsched_sporadic_data {
 	struct xntimer drop_timer;
 	struct xnsched_sporadic_repl repl_data[CONFIG_STEELY_SCHED_SPORADIC_MAXREPL];
 	struct xnsched_sporadic_param param;
-	struct xnthread *thread;
+	struct steely_thread *thread;
 };
 
 struct xnsched_sporadic {
@@ -56,7 +56,7 @@ struct xnsched_sporadic {
 #endif
 };
 
-static inline int xnsched_sporadic_init_thread(struct xnthread *thread)
+static inline int xnsched_sporadic_init_thread(struct steely_thread *thread)
 {
 	thread->pss = NULL;
 

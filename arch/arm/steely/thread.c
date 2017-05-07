@@ -27,7 +27,7 @@
 #include <asm/switch_to.h>
 #include <steely/thread.h>
 
-void xnarch_switch_to(struct xnthread *out, struct xnthread *in)
+void xnarch_switch_to(struct steely_thread *out, struct steely_thread *in)
 {
 	struct xnarchtcb *out_tcb = &out->tcb, *in_tcb = &in->tcb;
 	struct mm_struct *prev_mm, *next_mm;

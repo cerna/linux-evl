@@ -102,7 +102,7 @@ STEELY_SYSCALL(monitor_init, current,
 }
 
 /* nklock held, irqs off */
-static int monitor_enter(xnhandle_t handle, struct xnthread *curr)
+static int monitor_enter(xnhandle_t handle, struct steely_thread *curr)
 {
 	struct steely_monitor *mon;
 	int info;
@@ -124,7 +124,7 @@ static int monitor_enter(xnhandle_t handle, struct xnthread *curr)
 STEELY_SYSCALL(monitor_enter, primary,
 	       (struct steely_monitor_shadow __user *u_mon))
 {
-	struct xnthread *curr = xnthread_current();
+	struct steely_thread *curr = steely_current_thread();
 	xnhandle_t handle;
 	int ret;
 	spl_t s;
@@ -143,7 +143,6 @@ static void monitor_wakeup(struct steely_monitor *mon)
 {
 	struct steely_monitor_state *state = mon->state;
 	struct steely_thread *thread, *tmp;
-	struct xnthread *p;
 	int bcast;
 
 	/*
@@ -167,7 +166,6 @@ static void monitor_wakeup(struct steely_monitor *mon)
 	 * at the gate.
 	 */
 	list_for_each_entry_safe(thread, tmp, &mon->waiters, monitor_link) {
-		p = &thread->threadbase;
 		/*
 		 * A thread might receive a grant signal albeit it
 		 * does not wait on a monitor, or it might have timed
@@ -175,8 +173,9 @@ static void monitor_wakeup(struct steely_monitor *mon)
 		 * that ->wchan does match our sleep queue.
 		 */
 		if (bcast ||
-		    (p->u_window->grant_value && p->wchan == &thread->monitor_synch)) {
-			xnsynch_wakeup_this_sleeper(&thread->monitor_synch, p);
+		    (thread->u_window->grant_value &&
+		     thread->wchan == &thread->monitor_synch)) {
+			xnsynch_wakeup_this_sleeper(&thread->monitor_synch, thread);
 			list_del_init(&thread->monitor_link);
 		}
 	}
@@ -235,13 +234,13 @@ int __steely_monitor_wait(struct steely_monitor_shadow __user *u_mon,
 		monitor_wakeup(mon);
 
 	/* Release the gate prior to waiting, all atomically. */
-	xnsynch_release(&mon->gate, &curr->threadbase);
+	xnsynch_release(&mon->gate, curr);
 
 	synch = &curr->monitor_synch;
 	if (event & STEELY_MONITOR_WAITDRAIN)
 		synch = &mon->drain;
 	else {
-		curr->threadbase.u_window->grant_value = 0;
+		curr->u_window->grant_value = 0;
 		list_add_tail(&curr->monitor_link, &mon->waiters);
 	}
 	state->flags |= STEELY_MONITOR_PENDED;
@@ -264,7 +263,7 @@ int __steely_monitor_wait(struct steely_monitor_shadow __user *u_mon,
 			opret = -ETIMEDOUT;
 	}
 
-	ret = monitor_enter(handle, &curr->threadbase);
+	ret = monitor_enter(handle, curr);
 out:
 	xnlock_put_irqrestore(&nklock, s);
 
@@ -295,13 +294,13 @@ STEELY_SYSCALL(monitor_sync, nonrestartable,
 	       (struct steely_monitor_shadow __user *u_mon))
 {
 	struct steely_monitor *mon;
-	struct xnthread *curr;
+	struct steely_thread *curr;
 	xnhandle_t handle;
 	int ret = 0;
 	spl_t s;
 
 	handle = steely_get_handle_from_user(&u_mon->handle);
-	curr = xnthread_current();
+	curr = steely_current_thread();
 
 	xnlock_get_irqsave(&nklock, s);
 
@@ -324,13 +323,13 @@ STEELY_SYSCALL(monitor_exit, primary,
 	       (struct steely_monitor_shadow __user *u_mon))
 {
 	struct steely_monitor *mon;
-	struct xnthread *curr;
+	struct steely_thread *curr;
 	xnhandle_t handle;
 	int ret = 0;
 	spl_t s;
 
 	handle = steely_get_handle_from_user(&u_mon->handle);
-	curr = xnthread_current();
+	curr = steely_current_thread();
 
 	xnlock_get_irqsave(&nklock, s);
 
@@ -355,13 +354,13 @@ STEELY_SYSCALL(monitor_destroy, primary,
 {
 	struct steely_monitor_state *state;
 	struct steely_monitor *mon;
-	struct xnthread *curr;
+	struct steely_thread *curr;
 	xnhandle_t handle;
 	int ret = 0;
 	spl_t s;
 
 	handle = steely_get_handle_from_user(&u_mon->handle);
-	curr = xnthread_current();
+	curr = steely_current_thread();
 
 	xnlock_get_irqsave(&nklock, s);
 

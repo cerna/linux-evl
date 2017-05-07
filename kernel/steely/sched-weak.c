@@ -24,27 +24,27 @@ static void xnsched_weak_init(struct xnsched *sched)
 	xnsched_initq(&sched->weak.runnable);
 }
 
-static void xnsched_weak_requeue(struct xnthread *thread)
+static void xnsched_weak_requeue(struct steely_thread *thread)
 {
 	xnsched_addq(&thread->sched->weak.runnable, thread);
 }
 
-static void xnsched_weak_enqueue(struct xnthread *thread)
+static void xnsched_weak_enqueue(struct steely_thread *thread)
 {
 	xnsched_addq_tail(&thread->sched->weak.runnable, thread);
 }
 
-static void xnsched_weak_dequeue(struct xnthread *thread)
+static void xnsched_weak_dequeue(struct steely_thread *thread)
 {
 	xnsched_delq(&thread->sched->weak.runnable, thread);
 }
 
-static struct xnthread *xnsched_weak_pick(struct xnsched *sched)
+static struct steely_thread *xnsched_weak_pick(struct xnsched *sched)
 {
 	return xnsched_getq(&sched->weak.runnable);
 }
 
-bool xnsched_weak_setparam(struct xnthread *thread,
+bool xnsched_weak_setparam(struct steely_thread *thread,
 			   const union xnsched_policy_param *p)
 {
 	if (!xnthread_test_state(thread, XNBOOST))
@@ -53,13 +53,13 @@ bool xnsched_weak_setparam(struct xnthread *thread,
 	return xnsched_set_effective_priority(thread, p->weak.prio);
 }
 
-void xnsched_weak_getparam(struct xnthread *thread,
+void xnsched_weak_getparam(struct steely_thread *thread,
 			   union xnsched_policy_param *p)
 {
 	p->weak.prio = thread->cprio;
 }
 
-void xnsched_weak_trackprio(struct xnthread *thread,
+void xnsched_weak_trackprio(struct steely_thread *thread,
 			    const union xnsched_policy_param *p)
 {
 	if (p)
@@ -68,7 +68,7 @@ void xnsched_weak_trackprio(struct xnthread *thread,
 		thread->cprio = thread->bprio;
 }
 
-void xnsched_weak_protectprio(struct xnthread *thread, int prio)
+void xnsched_weak_protectprio(struct steely_thread *thread, int prio)
 {
   	if (prio > XNSCHED_WEAK_MAX_PRIO)
 		prio = XNSCHED_WEAK_MAX_PRIO;
@@ -76,7 +76,7 @@ void xnsched_weak_protectprio(struct xnthread *thread, int prio)
 	thread->cprio = prio;
 }
 
-static int xnsched_weak_declare(struct xnthread *thread,
+static int xnsched_weak_declare(struct steely_thread *thread,
 				const union xnsched_policy_param *p)
 {
 	if (p->weak.prio < XNSCHED_WEAK_MIN_PRIO ||
@@ -91,7 +91,7 @@ static int xnsched_weak_declare(struct xnthread *thread,
 struct xnvfile_directory sched_weak_vfroot;
 
 struct vfile_sched_weak_priv {
-	struct xnthread *curr;
+	struct steely_thread *curr;
 };
 
 struct vfile_sched_weak_data {
@@ -118,7 +118,7 @@ static int vfile_sched_weak_rewind(struct xnvfile_snapshot_iterator *it)
 	if (nrthreads == 0)
 		return -ESRCH;
 
-	priv->curr = list_first_entry(&nkthreadq, struct xnthread, glink);
+	priv->curr = list_first_entry(&nkthreadq, struct steely_thread, glink);
 
 	return nrthreads;
 }
@@ -128,7 +128,7 @@ static int vfile_sched_weak_next(struct xnvfile_snapshot_iterator *it,
 {
 	struct vfile_sched_weak_priv *priv = xnvfile_iterator_priv(it);
 	struct vfile_sched_weak_data *p = data;
-	struct xnthread *thread;
+	struct steely_thread *thread;
 
 	if (priv->curr == NULL)
 		return 0;	/* All done. */

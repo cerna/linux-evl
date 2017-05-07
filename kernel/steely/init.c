@@ -101,7 +101,7 @@ EXPORT_SYMBOL_GPL(steely_call_state_chain);
 
 static void sys_shutdown(void)
 {
-	struct xnthread *thread, *tmp;
+	struct steely_thread *thread, *tmp;
 	struct xnsched *sched;
 	void *membase;
 	int cpu;

@@ -23,7 +23,7 @@ static void xnsched_rt_init(struct xnsched *sched)
 	xnsched_initq(&sched->rt.runnable);
 }
 
-static void xnsched_rt_requeue(struct xnthread *thread)
+static void xnsched_rt_requeue(struct steely_thread *thread)
 {
 	/*
 	 * Put back at same place: i.e. requeue to head of current
@@ -32,7 +32,7 @@ static void xnsched_rt_requeue(struct xnthread *thread)
 	__xnsched_rt_requeue(thread);
 }
 
-static void xnsched_rt_enqueue(struct xnthread *thread)
+static void xnsched_rt_enqueue(struct steely_thread *thread)
 {
 	/*
 	 * Enqueue for next pick: i.e. move to end of current priority
@@ -41,7 +41,7 @@ static void xnsched_rt_enqueue(struct xnthread *thread)
 	__xnsched_rt_enqueue(thread);
 }
 
-static void xnsched_rt_dequeue(struct xnthread *thread)
+static void xnsched_rt_dequeue(struct steely_thread *thread)
 {
 	/*
 	 * Pull from the runnable thread queue.
@@ -52,7 +52,7 @@ static void xnsched_rt_dequeue(struct xnthread *thread)
 static void xnsched_rt_rotate(struct xnsched *sched,
 			      const union xnsched_policy_param *p)
 {
-	struct xnthread *thread, *curr;
+	struct steely_thread *thread, *curr;
 
 	if (xnsched_emptyq_p(&sched->rt.runnable))
 		return;	/* No runnable thread in this class. */
@@ -91,25 +91,25 @@ void xnsched_rt_tick(struct xnsched *sched)
 	xnsched_putback(sched->curr);
 }
 
-bool xnsched_rt_setparam(struct xnthread *thread,
+bool xnsched_rt_setparam(struct steely_thread *thread,
 			 const union xnsched_policy_param *p)
 {
 	return __xnsched_rt_setparam(thread, p);
 }
 
-void xnsched_rt_getparam(struct xnthread *thread,
+void xnsched_rt_getparam(struct steely_thread *thread,
 			 union xnsched_policy_param *p)
 {
 	__xnsched_rt_getparam(thread, p);
 }
 
-void xnsched_rt_trackprio(struct xnthread *thread,
+void xnsched_rt_trackprio(struct steely_thread *thread,
 			  const union xnsched_policy_param *p)
 {
 	__xnsched_rt_trackprio(thread, p);
 }
 
-void xnsched_rt_protectprio(struct xnthread *thread, int prio)
+void xnsched_rt_protectprio(struct steely_thread *thread, int prio)
 {
 	__xnsched_rt_protectprio(thread, prio);
 }
@@ -119,7 +119,7 @@ void xnsched_rt_protectprio(struct xnthread *thread, int prio)
 struct xnvfile_directory sched_rt_vfroot;
 
 struct vfile_sched_rt_priv {
-	struct xnthread *curr;
+	struct steely_thread *curr;
 };
 
 struct vfile_sched_rt_data {
@@ -147,7 +147,7 @@ static int vfile_sched_rt_rewind(struct xnvfile_snapshot_iterator *it)
 	if (nrthreads == 0)
 		return -ESRCH;
 
-	priv->curr = list_first_entry(&nkthreadq, struct xnthread, glink);
+	priv->curr = list_first_entry(&nkthreadq, struct steely_thread, glink);
 
 	return nrthreads;
 }
@@ -157,7 +157,7 @@ static int vfile_sched_rt_next(struct xnvfile_snapshot_iterator *it,
 {
 	struct vfile_sched_rt_priv *priv = xnvfile_iterator_priv(it);
 	struct vfile_sched_rt_data *p = data;
-	struct xnthread *thread;
+	struct steely_thread *thread;
 
 	if (priv->curr == NULL)
 		return 0;	/* All done. */

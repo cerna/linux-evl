@@ -17,12 +17,12 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  */
-#ifndef _STEELY_RTDM_STEELY_H
-#define _STEELY_RTDM_STEELY_H
+#ifndef _STEELY_STEELY_H
+#define _STEELY_STEELY_H
 
 #include <steely/posix/process.h>
-#include <steely/posix/extension.h>
-#include <steely/posix/thread.h>
+#include <steely/extension.h>
+#include <steely/thread.h>
 #include <steely/posix/signal.h>
 #include <steely/posix/timer.h>
 #include <steely/posix/clock.h>
@@ -30,4 +30,4 @@
 #include <steely/posix/monitor.h>
 #include <steely/posix/corectl.h>
 
-#endif /* !_STEELY_RTDM_STEELY_H */
+#endif /* !_STEELY_STEELY_H */

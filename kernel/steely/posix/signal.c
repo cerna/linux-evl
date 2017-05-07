@@ -44,7 +44,7 @@ static int steely_signal_deliver(struct steely_thread *thread,
 				 int group)
 {				/* nklocked, IRQs off */
 	struct steely_sigwait_context *swc;
-	struct xnthread_wait_context *wc;
+	struct steely_wait_context *wc;
 	int sig, ret;
 
 	sig = sigp->si.si_signo;
@@ -55,7 +55,7 @@ static int steely_signal_deliver(struct steely_thread *thread,
 	 * target that waits for it.
 	 */
 	if (xnsynch_pended_p(&thread->sigwait)) {
-		wc = xnthread_get_wait_context(&thread->threadbase);
+		wc = xnthread_get_wait_context(thread);
 		swc = container_of(wc, struct steely_sigwait_context, wc);
 		if (sigismember(swc->set, sig))
 			goto deliver;
@@ -70,7 +70,7 @@ static int steely_signal_deliver(struct steely_thread *thread,
 		return 0;
 
 	list_for_each_entry(thread, &thread->process->sigwaiters, signext) {
-		wc = xnthread_get_wait_context(&thread->threadbase);
+		wc = xnthread_get_wait_context(thread);
 		swc = container_of(wc, struct steely_sigwait_context, wc);
 		if (sigismember(swc->set, sig))
 			goto deliver;
@@ -478,23 +478,23 @@ int __steely_kill(struct steely_thread *thread, int sig, int group) /* nklocked,
 		 * self-directed suspension can only happen from
 		 * primary mode. Yummie.
 		 */
-		xnthread_suspend(&thread->threadbase, XNSUSP,
+		xnthread_suspend(thread, XNSUSP,
 				 XN_INFINITE, XN_RELATIVE, NULL);
-		if (&thread->threadbase == xnthread_current() &&
-		    xnthread_test_info(&thread->threadbase, XNBREAK))
+		if (thread == steely_current_thread() &&
+		    xnthread_test_info(thread, XNBREAK))
 			ret = -EINTR;
 		break;
 	case SIGRESM:
-		xnthread_resume(&thread->threadbase, XNSUSP);
+		xnthread_resume(thread, XNSUSP);
 		goto resched;
 	case SIGRELS:
-		xnthread_unblock(&thread->threadbase);
+		xnthread_unblock(thread);
 		goto resched;
 	case SIGKICK:
-		xnthread_kick(&thread->threadbase);
+		xnthread_kick(thread);
 		goto resched;
 	case SIGDEMT:
-		xnthread_demote(&thread->threadbase);
+		xnthread_demote(thread);
 		goto resched;
 	case 1 ... _NSIG:
 		sigp = steely_signal_alloc();

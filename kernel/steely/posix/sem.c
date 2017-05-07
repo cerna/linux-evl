@@ -518,7 +518,7 @@ STEELY_SYSCALL(sem_inquire, current,
 	unsigned long pstamp, nstamp = 0;
 	struct steely_sem_info info;
 	pid_t *t = NULL, fbuf[16];
-	struct xnthread *thread;
+	struct steely_thread *thread;
 	struct steely_sem *sem;
 	xnhandle_t handle;
 	spl_t s;

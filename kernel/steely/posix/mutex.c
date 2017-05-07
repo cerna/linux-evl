@@ -69,7 +69,7 @@ static int steely_mutex_init_inner(struct steely_mutex_shadow *shadow,
 }
 
 /* must be called with nklock locked, interrupts off. */
-int __steely_mutex_acquire_unchecked(struct xnthread *cur,
+int __steely_mutex_acquire_unchecked(struct steely_thread *cur,
 				     struct steely_mutex *mutex,
 				     const struct timespec *ts)
 {
@@ -96,7 +96,7 @@ int __steely_mutex_acquire_unchecked(struct xnthread *cur,
 	return 0;
 }
 
-int steely_mutex_release(struct xnthread *curr,
+int steely_mutex_release(struct steely_thread *curr,
 			 struct steely_mutex *mutex)
 {	/* nklock held, irqs off */
 	struct steely_mutex_state *state;
@@ -141,7 +141,7 @@ int __steely_mutex_timedlock_break(struct steely_mutex_shadow __user *u_mx,
 				   int (*fetch_timeout)(struct timespec *ts,
 							const void __user *u_ts))
 {
-	struct xnthread *curr = xnthread_current();
+	struct steely_thread *curr = steely_current_thread();
 	struct timespec ts, *tsp = NULL;
 	struct steely_mutex *mutex;
 	xnhandle_t handle;
@@ -319,7 +319,7 @@ fail:
 STEELY_SYSCALL(mutex_trylock, primary,
 	       (struct steely_mutex_shadow __user *u_mx))
 {
-	struct xnthread *curr = xnthread_current();
+	struct steely_thread *curr = steely_current_thread();
 	struct steely_mutex *mutex;
 	xnhandle_t handle;
 	spl_t s;
@@ -383,13 +383,13 @@ STEELY_SYSCALL(mutex_unlock, nonrestartable,
 	       (struct steely_mutex_shadow __user *u_mx))
 {
 	struct steely_mutex *mutex;
-	struct xnthread *curr;
+	struct steely_thread *curr;
 	xnhandle_t handle;
 	int ret;
 	spl_t s;
 
 	handle = steely_get_handle_from_user(&u_mx->handle);
-	curr = xnthread_current();
+	curr = steely_current_thread();
 
 	xnlock_get_irqsave(&nklock, s);
 

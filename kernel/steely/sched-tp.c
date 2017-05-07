@@ -107,7 +107,7 @@ static void xnsched_tp_init(struct xnsched *sched)
 	xntimer_set_name(&tp->tf_timer, timer_name);
 }
 
-static bool xnsched_tp_setparam(struct xnthread *thread,
+static bool xnsched_tp_setparam(struct steely_thread *thread,
 				const union xnsched_policy_param *p)
 {
 	struct xnsched *sched = thread->sched;
@@ -118,14 +118,14 @@ static bool xnsched_tp_setparam(struct xnthread *thread,
 	return xnsched_set_effective_priority(thread, p->tp.prio);
 }
 
-static void xnsched_tp_getparam(struct xnthread *thread,
+static void xnsched_tp_getparam(struct steely_thread *thread,
 				union xnsched_policy_param *p)
 {
 	p->tp.prio = thread->cprio;
 	p->tp.ptid = thread->tps - thread->sched->tp.partitions;
 }
 
-static void xnsched_tp_trackprio(struct xnthread *thread,
+static void xnsched_tp_trackprio(struct steely_thread *thread,
 				 const union xnsched_policy_param *p)
 {
 	/*
@@ -156,7 +156,7 @@ static void xnsched_tp_trackprio(struct xnthread *thread,
 		thread->cprio = thread->bprio;
 }
 
-static void xnsched_tp_protectprio(struct xnthread *thread, int prio)
+static void xnsched_tp_protectprio(struct steely_thread *thread, int prio)
 {
   	if (prio > XNSCHED_TP_MAX_PRIO)
 		prio = XNSCHED_TP_MAX_PRIO;
@@ -164,7 +164,7 @@ static void xnsched_tp_protectprio(struct xnthread *thread, int prio)
 	thread->cprio = prio;
 }
 
-static int xnsched_tp_declare(struct xnthread *thread,
+static int xnsched_tp_declare(struct steely_thread *thread,
 			      const union xnsched_policy_param *p)
 {
 	struct xnsched *sched = thread->sched;
@@ -180,28 +180,28 @@ static int xnsched_tp_declare(struct xnthread *thread,
 	return 0;
 }
 
-static void xnsched_tp_forget(struct xnthread *thread)
+static void xnsched_tp_forget(struct steely_thread *thread)
 {
 	list_del(&thread->tp_link);
 	thread->tps = NULL;
 }
 
-static void xnsched_tp_enqueue(struct xnthread *thread)
+static void xnsched_tp_enqueue(struct steely_thread *thread)
 {
 	xnsched_addq_tail(&thread->tps->runnable, thread);
 }
 
-static void xnsched_tp_dequeue(struct xnthread *thread)
+static void xnsched_tp_dequeue(struct steely_thread *thread)
 {
 	xnsched_delq(&thread->tps->runnable, thread);
 }
 
-static void xnsched_tp_requeue(struct xnthread *thread)
+static void xnsched_tp_requeue(struct steely_thread *thread)
 {
 	xnsched_addq(&thread->tps->runnable, thread);
 }
 
-static struct xnthread *xnsched_tp_pick(struct xnsched *sched)
+static struct steely_thread *xnsched_tp_pick(struct xnsched *sched)
 {
 	/* Never pick a thread if we don't schedule partitions. */
 	if (!xntimer_running_p(&sched->tp.tf_timer))
@@ -210,7 +210,7 @@ static struct xnthread *xnsched_tp_pick(struct xnsched *sched)
 	return xnsched_getq(&sched->tp.tps->runnable);
 }
 
-static void xnsched_tp_migrate(struct xnthread *thread, struct xnsched *sched)
+static void xnsched_tp_migrate(struct steely_thread *thread, struct xnsched *sched)
 {
 	union xnsched_policy_param param;
 	/*
@@ -255,7 +255,7 @@ xnsched_tp_set_schedule(struct xnsched *sched,
 	struct xnsched_tp_schedule *old_gps;
 	struct xnsched_tp *tp = &sched->tp;
 	union xnsched_policy_param param;
-	struct xnthread *thread, *tmp;
+	struct steely_thread *thread, *tmp;
 
 	STEELY_BUG_ON(STEELY, gps != NULL &&
 	      (gps->pwin_nr <= 0 || ktime_to_ns(gps->pwins[0].w_offset) != 0));
@@ -319,7 +319,7 @@ EXPORT_SYMBOL_GPL(xnsched_tp_get_partition);
 struct xnvfile_directory sched_tp_vfroot;
 
 struct vfile_sched_tp_priv {
-	struct xnthread *curr;
+	struct steely_thread *curr;
 };
 
 struct vfile_sched_tp_data {
@@ -347,7 +347,7 @@ static int vfile_sched_tp_rewind(struct xnvfile_snapshot_iterator *it)
 	if (nrthreads == 0)
 		return -ESRCH;
 
-	priv->curr = list_first_entry(&nkthreadq, struct xnthread, glink);
+	priv->curr = list_first_entry(&nkthreadq, struct steely_thread, glink);
 
 	return nrthreads;
 }
@@ -357,7 +357,7 @@ static int vfile_sched_tp_next(struct xnvfile_snapshot_iterator *it,
 {
 	struct vfile_sched_tp_priv *priv = xnvfile_iterator_priv(it);
 	struct vfile_sched_tp_data *p = data;
-	struct xnthread *thread;
+	struct steely_thread *thread;
 
 	if (priv->curr == NULL)
 		return 0;	/* All done. */

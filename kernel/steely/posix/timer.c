@@ -83,7 +83,7 @@ init:
 		return ERR_PTR(PTR_ERR(clock));
 
 	xntimer_init(&timer->timerbase, clock, steely_timer_handler,
-		     target->threadbase.sched, XNTIMER_UGRAVITY);
+		     target->sched, XNTIMER_UGRAVITY);
 
 	return target;
 }
@@ -183,7 +183,7 @@ static inline int timer_create(clockid_t clockid,
 		goto fail;
 	}
 
-	timer->target = xnthread_host_pid(&target->threadbase);
+	timer->target = xnthread_host_pid(target);
 	cc->timers[timer_id] = timer;
 
 	xnlock_put_irqrestore(&nklock, s);
@@ -340,7 +340,7 @@ static inline int timer_set(struct steely_timer *timer, int flags,
 	 * Make the timer affine to the CPU running the thread to be
 	 * signaled.
 	 */
-	xntimer_set_sched(&timer->timerbase, thread->threadbase.sched);
+	xntimer_set_sched(&timer->timerbase, thread->sched);
 
 	return __steely_timer_setval(&timer->timerbase,
 				     clock_flag(flags, timer->clockid), value);

@@ -66,7 +66,7 @@ static DECLARE_BITMAP(group_map, CONFIG_STEELY_SCHED_QUOTA_NR_GROUPS);
 
 static inline int group_is_active(struct xnsched_quota_group *tg)
 {
-	struct xnthread *curr = tg->sched->curr;
+	struct steely_thread *curr = tg->sched->curr;
 
 	if (tg->nr_active)
 		return 1;
@@ -150,7 +150,7 @@ static inline void replenish_budget(struct xnsched_quota *qs,
 static void quota_refill_handler(struct xntimer *timer)
 {
 	struct xnsched_quota_group *tg;
-	struct xnthread *thread, *tmp;
+	struct steely_thread *thread, *tmp;
 	struct xnsched_quota *qs;
 	struct xnsched *sched;
 
@@ -240,7 +240,7 @@ static void xnsched_quota_init(struct xnsched *sched)
 	xntimer_set_name(&qs->limit_timer, limiter_name);
 }
 
-static bool xnsched_quota_setparam(struct xnthread *thread,
+static bool xnsched_quota_setparam(struct steely_thread *thread,
 				   const union xnsched_policy_param *p)
 {
 	struct xnsched_quota_group *tg;
@@ -270,14 +270,14 @@ static bool xnsched_quota_setparam(struct xnthread *thread,
 	return false;
 }
 
-static void xnsched_quota_getparam(struct xnthread *thread,
+static void xnsched_quota_getparam(struct steely_thread *thread,
 				   union xnsched_policy_param *p)
 {
 	p->quota.prio = thread->cprio;
 	p->quota.tgid = thread->quota->tgid;
 }
 
-static void xnsched_quota_trackprio(struct xnthread *thread,
+static void xnsched_quota_trackprio(struct steely_thread *thread,
 				    const union xnsched_policy_param *p)
 {
 	if (p) {
@@ -290,7 +290,7 @@ static void xnsched_quota_trackprio(struct xnthread *thread,
 		thread->cprio = thread->bprio;
 }
 
-static void xnsched_quota_protectprio(struct xnthread *thread, int prio)
+static void xnsched_quota_protectprio(struct steely_thread *thread, int prio)
 {
 	if (prio > XNSCHED_QUOTA_MAX_PRIO)
 		prio = XNSCHED_QUOTA_MAX_PRIO;
@@ -298,7 +298,7 @@ static void xnsched_quota_protectprio(struct xnthread *thread, int prio)
 	thread->cprio = prio;
 }
 
-static int xnsched_quota_declare(struct xnthread *thread,
+static int xnsched_quota_declare(struct steely_thread *thread,
 				 const union xnsched_policy_param *p)
 {
 	struct xnsched_quota_group *tg;
@@ -333,7 +333,7 @@ static int xnsched_quota_declare(struct xnthread *thread,
 	return -EINVAL;
 }
 
-static void xnsched_quota_forget(struct xnthread *thread)
+static void xnsched_quota_forget(struct steely_thread *thread)
 {
 	thread->quota->nr_threads--;
 	STEELY_BUG_ON(STEELY, thread->quota->nr_threads < 0);
@@ -341,7 +341,7 @@ static void xnsched_quota_forget(struct xnthread *thread)
 	thread->quota = NULL;
 }
 
-static void xnsched_quota_kick(struct xnthread *thread)
+static void xnsched_quota_kick(struct steely_thread *thread)
 {
 	struct xnsched_quota_group *tg = thread->quota;
 	struct xnsched *sched = thread->sched;
@@ -357,13 +357,13 @@ static void xnsched_quota_kick(struct xnthread *thread)
 	}
 }
 
-static inline int thread_is_runnable(struct xnthread *thread)
+static inline int thread_is_runnable(struct steely_thread *thread)
 {
 	return thread->quota->run_budget > 0 ||
 		xnthread_test_info(thread, XNKICKED);
 }
 
-static void xnsched_quota_enqueue(struct xnthread *thread)
+static void xnsched_quota_enqueue(struct steely_thread *thread)
 {
 	struct xnsched_quota_group *tg = thread->quota;
 	struct xnsched *sched = thread->sched;
@@ -376,7 +376,7 @@ static void xnsched_quota_enqueue(struct xnthread *thread)
 	tg->nr_active++;
 }
 
-static void xnsched_quota_dequeue(struct xnthread *thread)
+static void xnsched_quota_dequeue(struct steely_thread *thread)
 {
 	struct xnsched_quota_group *tg = thread->quota;
 	struct xnsched *sched = thread->sched;
@@ -389,7 +389,7 @@ static void xnsched_quota_dequeue(struct xnthread *thread)
 	tg->nr_active--;
 }
 
-static void xnsched_quota_requeue(struct xnthread *thread)
+static void xnsched_quota_requeue(struct steely_thread *thread)
 {
 	struct xnsched_quota_group *tg = thread->quota;
 	struct xnsched *sched = thread->sched;
@@ -402,9 +402,9 @@ static void xnsched_quota_requeue(struct xnthread *thread)
 	tg->nr_active++;
 }
 
-static struct xnthread *xnsched_quota_pick(struct xnsched *sched)
+static struct steely_thread *xnsched_quota_pick(struct xnsched *sched)
 {
-	struct xnthread *next, *curr = sched->curr;
+	struct steely_thread *next, *curr = sched->curr;
 	struct xnsched_quota *qs = &sched->quota;
 	struct xnsched_quota_group *otg, *tg;
 	ktime_t now, elapsed;
@@ -475,7 +475,7 @@ out:
 	return next;
 }
 
-static void xnsched_quota_migrate(struct xnthread *thread, struct xnsched *sched)
+static void xnsched_quota_migrate(struct steely_thread *thread, struct xnsched *sched)
 {
 	union xnsched_policy_param param;
 	/*
@@ -530,7 +530,7 @@ int xnsched_quota_destroy_group(struct xnsched_quota_group *tg,
 {
 	struct xnsched_quota *qs = &tg->sched->quota;
 	union xnsched_policy_param param;
-	struct xnthread *thread, *tmp;
+	struct steely_thread *thread, *tmp;
 
 	atomic_only();
 
@@ -636,7 +636,7 @@ EXPORT_SYMBOL_GPL(xnsched_quota_sum_all);
 struct xnvfile_directory sched_quota_vfroot;
 
 struct vfile_sched_quota_priv {
-	struct xnthread *curr;
+	struct steely_thread *curr;
 };
 
 struct vfile_sched_quota_data {
@@ -665,7 +665,7 @@ static int vfile_sched_quota_rewind(struct xnvfile_snapshot_iterator *it)
 	if (nrthreads == 0)
 		return -ESRCH;
 
-	priv->curr = list_first_entry(&nkthreadq, struct xnthread, glink);
+	priv->curr = list_first_entry(&nkthreadq, struct steely_thread, glink);
 
 	return nrthreads;
 }
@@ -675,7 +675,7 @@ static int vfile_sched_quota_next(struct xnvfile_snapshot_iterator *it,
 {
 	struct vfile_sched_quota_priv *priv = xnvfile_iterator_priv(it);
 	struct vfile_sched_quota_data *p = data;
-	struct xnthread *thread;
+	struct steely_thread *thread;
 
 	if (priv->curr == NULL)
 		return 0;	/* All done. */

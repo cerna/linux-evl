@@ -18,30 +18,30 @@
  */
 #include <steely/sched.h>
 
-static struct xnthread *xnsched_idle_pick(struct xnsched *sched)
+static struct steely_thread *xnsched_idle_pick(struct xnsched *sched)
 {
 	return &sched->rootcb;
 }
 
-bool xnsched_idle_setparam(struct xnthread *thread,
+bool xnsched_idle_setparam(struct steely_thread *thread,
 			   const union xnsched_policy_param *p)
 {
 	return __xnsched_idle_setparam(thread, p);
 }
 
-void xnsched_idle_getparam(struct xnthread *thread,
+void xnsched_idle_getparam(struct steely_thread *thread,
 			   union xnsched_policy_param *p)
 {
 	__xnsched_idle_getparam(thread, p);
 }
 
-void xnsched_idle_trackprio(struct xnthread *thread,
+void xnsched_idle_trackprio(struct steely_thread *thread,
 			   const union xnsched_policy_param *p)
 {
 	__xnsched_idle_trackprio(thread, p);
 }
 
-void xnsched_idle_protectprio(struct xnthread *thread, int prio)
+void xnsched_idle_protectprio(struct steely_thread *thread, int prio)
 {
 	__xnsched_idle_protectprio(thread, prio);
 }

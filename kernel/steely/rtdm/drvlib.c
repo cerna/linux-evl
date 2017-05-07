@@ -39,8 +39,8 @@ int rtdm_task_init(rtdm_task_t *task, const char *name,
 		   int priority, nanosecs_rel_t period)
 {
 	union xnsched_policy_param param;
-	struct xnthread_start_attr sattr;
-	struct xnthread_init_attr iattr;
+	struct steely_thread_start_attr sattr;
+	struct steely_thread_init_attr iattr;
 	int err;
 
 	iattr.name = name;
@@ -84,12 +84,12 @@ EXPORT_SYMBOL_GPL(rtdm_task_init);
 
 int __rtdm_task_sleep(ktime_t timeout, xntmode_t mode)
 {
-	struct xnthread *thread;
+	struct steely_thread *thread;
 
 	if (!STEELY_ASSERT(STEELY, !xnsched_unblockable_p()))
 		return -EPERM;
 
-	thread = xnthread_current();
+	thread = steely_current_thread();
 	xnthread_suspend(thread, XNDELAY, timeout, mode, NULL);
 
 	return xnthread_test_info(thread, XNBREAK) ? -EINTR : 0;
@@ -251,14 +251,14 @@ EXPORT_SYMBOL_GPL(rtdm_event_wait);
 int rtdm_event_timedwait(rtdm_event_t *event, nanosecs_rel_t timeout,
 			 rtdm_toseq_t *timeout_seq)
 {
-	struct xnthread *thread;
+	struct steely_thread *thread;
 	int err = 0, ret;
 	spl_t s;
 
 	if (!STEELY_ASSERT(STEELY, timeout < 0 || !xnsched_unblockable_p()))
 		return -EPERM;
 
-	trace_steely_driver_event_wait(event, xnthread_current());
+	trace_steely_driver_event_wait(event, steely_current_thread());
 
 	xnlock_get_irqsave(&nklock, s);
 
@@ -274,7 +274,7 @@ int rtdm_event_timedwait(rtdm_event_t *event, nanosecs_rel_t timeout,
 			goto unlock_out;
 		}
 
-		thread = xnthread_current();
+		thread = steely_current_thread();
 
 		if (timeout_seq && (timeout > 0))
 			/* timeout sequence */
@@ -381,14 +381,14 @@ EXPORT_SYMBOL_GPL(rtdm_sem_down);
 int rtdm_sem_timeddown(rtdm_sem_t *sem, nanosecs_rel_t timeout,
 		       rtdm_toseq_t *timeout_seq)
 {
-	struct xnthread *thread;
+	struct steely_thread *thread;
 	int err = 0, ret;
 	spl_t s;
 
 	if (!STEELY_ASSERT(STEELY, timeout < 0 || !xnsched_unblockable_p()))
 		return -EPERM;
 
-	trace_steely_driver_sem_wait(sem, xnthread_current());
+	trace_steely_driver_sem_wait(sem, steely_current_thread());
 
 	xnlock_get_irqsave(&nklock, s);
 
@@ -400,7 +400,7 @@ int rtdm_sem_timeddown(rtdm_sem_t *sem, nanosecs_rel_t timeout,
 	} else if (timeout < 0) /* non-blocking mode */
 		err = -EWOULDBLOCK;
 	else {
-		thread = xnthread_current();
+		thread = steely_current_thread();
 
 		if (timeout_seq && timeout > 0)
 			/* timeout sequence */
@@ -514,14 +514,14 @@ EXPORT_SYMBOL_GPL(rtdm_mutex_lock);
 int rtdm_mutex_timedlock(rtdm_mutex_t *mutex, nanosecs_rel_t timeout,
 			 rtdm_toseq_t *timeout_seq)
 {
-	struct xnthread *curr;
+	struct steely_thread *curr;
 	int ret;
 	spl_t s;
 
 	if (!STEELY_ASSERT(STEELY, !xnsched_unblockable_p()))
 		return -EPERM;
 
-	curr = xnthread_current();
+	curr = steely_current_thread();
 	trace_steely_driver_mutex_wait(mutex, curr);
 
 	xnlock_get_irqsave(&nklock, s);

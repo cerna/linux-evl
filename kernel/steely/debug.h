@@ -22,7 +22,7 @@
 
 #include <steely/assert.h>
 
-struct xnthread;
+struct steely_thread;
 
 #ifdef CONFIG_STEELY_DEBUG
 
@@ -30,7 +30,7 @@ int xndebug_init(void);
 
 void xndebug_cleanup(void);
 
-void xndebug_shadow_init(struct xnthread *thread);
+void xndebug_shadow_init(struct steely_thread *thread);
 
 extern struct xnvfile_directory steely_debug_vfroot;
 
@@ -45,20 +45,20 @@ static inline void xndebug_cleanup(void)
 {
 }
 
-static inline void xndebug_shadow_init(struct xnthread *thread)
+static inline void xndebug_shadow_init(struct steely_thread *thread)
 {
 }
 
 #endif  /* !STEELY_DEBUG */
 
 #ifdef CONFIG_STEELY_DEBUG_TRACE_RELAX
-void xndebug_notify_relax(struct xnthread *thread,
+void xndebug_notify_relax(struct steely_thread *thread,
 			  int reason);
 void xndebug_trace_relax(int nr, unsigned long *backtrace,
 			 int reason);
 #else
 static inline
-void xndebug_notify_relax(struct xnthread *thread, int reason)
+void xndebug_notify_relax(struct steely_thread *thread, int reason)
 {
 }
 static inline

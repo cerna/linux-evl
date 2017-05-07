@@ -75,7 +75,7 @@ struct xnsched {
 	/* Private status bitmask. */
 	unsigned long lflags;
 	/* Current thread. */
-	struct xnthread *curr;
+	struct steely_thread *curr;
 #ifdef CONFIG_SMP
 	/* Owner CPU id. */
 	int cpu;
@@ -107,7 +107,7 @@ struct xnsched {
 	/* Round-robin timer. */
 	struct xntimer rrbtimer;
 	/* Root thread control block. */
-	struct xnthread rootcb;
+	struct steely_thread rootcb;
 #ifdef CONFIG_STEELY_WATCHDOG
 	/* Watchdog timer object. */
 	struct xntimer wdtimer;
@@ -138,14 +138,14 @@ union xnsched_policy_param;
 
 struct xnsched_class {
 	void (*sched_init)(struct xnsched *sched);
-	void (*sched_enqueue)(struct xnthread *thread);
-	void (*sched_dequeue)(struct xnthread *thread);
-	void (*sched_requeue)(struct xnthread *thread);
-	struct xnthread *(*sched_pick)(struct xnsched *sched);
+	void (*sched_enqueue)(struct steely_thread *thread);
+	void (*sched_dequeue)(struct steely_thread *thread);
+	void (*sched_requeue)(struct steely_thread *thread);
+	struct steely_thread *(*sched_pick)(struct xnsched *sched);
 	void (*sched_tick)(struct xnsched *sched);
 	void (*sched_rotate)(struct xnsched *sched,
 			     const union xnsched_policy_param *p);
-	void (*sched_migrate)(struct xnthread *thread,
+	void (*sched_migrate)(struct steely_thread *thread,
 			      struct xnsched *sched);
 	/*
 	 * Set base scheduling parameters. This routine is indirectly
@@ -169,17 +169,17 @@ struct xnsched_class {
 	 * Returns true if the effective priority was updated
 	 * (thread->cprio).
 	 */
-	bool (*sched_setparam)(struct xnthread *thread,
+	bool (*sched_setparam)(struct steely_thread *thread,
 			       const union xnsched_policy_param *p);
-	void (*sched_getparam)(struct xnthread *thread,
+	void (*sched_getparam)(struct steely_thread *thread,
 			       union xnsched_policy_param *p);
-	void (*sched_trackprio)(struct xnthread *thread,
+	void (*sched_trackprio)(struct steely_thread *thread,
 				const union xnsched_policy_param *p);
-	void (*sched_protectprio)(struct xnthread *thread, int prio);
-	int (*sched_declare)(struct xnthread *thread,
+	void (*sched_protectprio)(struct steely_thread *thread, int prio);
+	int (*sched_declare)(struct steely_thread *thread,
 			     const union xnsched_policy_param *p);
-	void (*sched_forget)(struct xnthread *thread);
-	void (*sched_kick)(struct xnthread *thread);
+	void (*sched_forget)(struct steely_thread *thread);
+	void (*sched_kick)(struct steely_thread *thread);
 #ifdef CONFIG_STEELY_VFILE
 	int (*sched_init_vfile)(struct xnsched_class *schedclass,
 				struct xnvfile_directory *vfroot);
@@ -223,7 +223,7 @@ static inline struct xnsched *xnsched_current(void)
 	return raw_cpu_ptr(&nksched);
 }
 
-static inline struct xnthread *xnsched_current_thread(void)
+static inline struct steely_thread *xnsched_current_thread(void)
 {
 	return xnsched_current()->curr;
 }
@@ -368,7 +368,7 @@ static inline void xnsched_reset_watchdog(struct xnsched *sched)
 }
 #endif /* CONFIG_STEELY_WATCHDOG */
 
-bool xnsched_set_effective_priority(struct xnthread *thread,
+bool xnsched_set_effective_priority(struct steely_thread *thread,
 				    int prio);
 
 #include <steely/sched-idle.h>
@@ -384,24 +384,24 @@ void xnsched_init(struct xnsched *sched, int cpu);
 
 void xnsched_destroy(struct xnsched *sched);
 
-struct xnthread *xnsched_pick_next(struct xnsched *sched);
+struct steely_thread *xnsched_pick_next(struct xnsched *sched);
 
-void xnsched_putback(struct xnthread *thread);
+void xnsched_putback(struct steely_thread *thread);
 
-int xnsched_set_policy(struct xnthread *thread,
+int xnsched_set_policy(struct steely_thread *thread,
 		       struct xnsched_class *sched_class,
 		       const union xnsched_policy_param *p);
 
-void xnsched_track_policy(struct xnthread *thread,
-			  struct xnthread *target);
+void xnsched_track_policy(struct steely_thread *thread,
+			  struct steely_thread *target);
 
-void xnsched_protect_priority(struct xnthread *thread,
+void xnsched_protect_priority(struct steely_thread *thread,
 			      int prio);
 
-void xnsched_migrate(struct xnthread *thread,
+void xnsched_migrate(struct steely_thread *thread,
 		     struct xnsched *sched);
 
-void xnsched_migrate_passive(struct xnthread *thread,
+void xnsched_migrate_passive(struct steely_thread *thread,
 			     struct xnsched *sched);
 
 static inline void xnsched_rotate(struct xnsched *sched,
@@ -411,7 +411,7 @@ static inline void xnsched_rotate(struct xnsched *sched,
 	sched_class->sched_rotate(sched, sched_param);
 }
 
-static inline int xnsched_init_thread(struct xnthread *thread)
+static inline int xnsched_init_thread(struct steely_thread *thread)
 {
 	int ret = 0;
 
@@ -449,7 +449,7 @@ static inline struct xnsched_class *xnsched_root_class(struct xnsched *sched)
 
 static inline void xnsched_tick(struct xnsched *sched)
 {
-	struct xnthread *curr = sched->curr;
+	struct steely_thread *curr = sched->curr;
 	struct xnsched_class *sched_class = curr->sched_class;
 	/*
 	 * A thread that undergoes round-robin scheduling only
@@ -465,7 +465,7 @@ static inline void xnsched_tick(struct xnsched *sched)
 }
 
 static inline int xnsched_declare(struct xnsched_class *sched_class,
-				  struct xnthread *thread,
+				  struct steely_thread *thread,
 				  const union xnsched_policy_param *p)
 {
 	int ret;
@@ -489,7 +489,7 @@ static inline int xnsched_calc_wprio(struct xnsched_class *sched_class,
 
 #ifdef CONFIG_STEELY_SCHED_CLASSES
 
-static inline void xnsched_enqueue(struct xnthread *thread)
+static inline void xnsched_enqueue(struct steely_thread *thread)
 {
 	struct xnsched_class *sched_class = thread->sched_class;
 
@@ -497,7 +497,7 @@ static inline void xnsched_enqueue(struct xnthread *thread)
 		sched_class->sched_enqueue(thread);
 }
 
-static inline void xnsched_dequeue(struct xnthread *thread)
+static inline void xnsched_dequeue(struct steely_thread *thread)
 {
 	struct xnsched_class *sched_class = thread->sched_class;
 
@@ -505,7 +505,7 @@ static inline void xnsched_dequeue(struct xnthread *thread)
 		sched_class->sched_dequeue(thread);
 }
 
-static inline void xnsched_requeue(struct xnthread *thread)
+static inline void xnsched_requeue(struct steely_thread *thread)
 {
 	struct xnsched_class *sched_class = thread->sched_class;
 
@@ -514,32 +514,32 @@ static inline void xnsched_requeue(struct xnthread *thread)
 }
 
 static inline
-bool xnsched_setparam(struct xnthread *thread,
+bool xnsched_setparam(struct steely_thread *thread,
 		      const union xnsched_policy_param *p)
 {
 	return thread->base_class->sched_setparam(thread, p);
 }
 
-static inline void xnsched_getparam(struct xnthread *thread,
+static inline void xnsched_getparam(struct steely_thread *thread,
 				    union xnsched_policy_param *p)
 {
 	thread->sched_class->sched_getparam(thread, p);
 }
 
-static inline void xnsched_trackprio(struct xnthread *thread,
+static inline void xnsched_trackprio(struct steely_thread *thread,
 				     const union xnsched_policy_param *p)
 {
 	thread->sched_class->sched_trackprio(thread, p);
 	thread->wprio = xnsched_calc_wprio(thread->sched_class, thread->cprio);
 }
 
-static inline void xnsched_protectprio(struct xnthread *thread, int prio)
+static inline void xnsched_protectprio(struct steely_thread *thread, int prio)
 {
 	thread->sched_class->sched_protectprio(thread, prio);
 	thread->wprio = xnsched_calc_wprio(thread->sched_class, thread->cprio);
 }
 
-static inline void xnsched_forget(struct xnthread *thread)
+static inline void xnsched_forget(struct steely_thread *thread)
 {
 	struct xnsched_class *sched_class = thread->base_class;
 
@@ -549,7 +549,7 @@ static inline void xnsched_forget(struct xnthread *thread)
 		sched_class->sched_forget(thread);
 }
 
-static inline void xnsched_kick(struct xnthread *thread)
+static inline void xnsched_kick(struct steely_thread *thread)
 {
 	struct xnsched_class *sched_class = thread->base_class;
 
@@ -568,7 +568,7 @@ static inline void xnsched_kick(struct xnthread *thread)
  * fully inline common helpers for dealing with those.
  */
 
-static inline void xnsched_enqueue(struct xnthread *thread)
+static inline void xnsched_enqueue(struct steely_thread *thread)
 {
 	struct xnsched_class *sched_class = thread->sched_class;
 
@@ -576,7 +576,7 @@ static inline void xnsched_enqueue(struct xnthread *thread)
 		__xnsched_rt_enqueue(thread);
 }
 
-static inline void xnsched_dequeue(struct xnthread *thread)
+static inline void xnsched_dequeue(struct steely_thread *thread)
 {
 	struct xnsched_class *sched_class = thread->sched_class;
 
@@ -584,7 +584,7 @@ static inline void xnsched_dequeue(struct xnthread *thread)
 		__xnsched_rt_dequeue(thread);
 }
 
-static inline void xnsched_requeue(struct xnthread *thread)
+static inline void xnsched_requeue(struct steely_thread *thread)
 {
 	struct xnsched_class *sched_class = thread->sched_class;
 
@@ -592,7 +592,7 @@ static inline void xnsched_requeue(struct xnthread *thread)
 		__xnsched_rt_requeue(thread);
 }
 
-static inline bool xnsched_setparam(struct xnthread *thread,
+static inline bool xnsched_setparam(struct steely_thread *thread,
 				    const union xnsched_policy_param *p)
 {
 	struct xnsched_class *sched_class = thread->base_class;
@@ -603,7 +603,7 @@ static inline bool xnsched_setparam(struct xnthread *thread,
 	return __xnsched_rt_setparam(thread, p);
 }
 
-static inline void xnsched_getparam(struct xnthread *thread,
+static inline void xnsched_getparam(struct steely_thread *thread,
 				    union xnsched_policy_param *p)
 {
 	struct xnsched_class *sched_class = thread->sched_class;
@@ -614,7 +614,7 @@ static inline void xnsched_getparam(struct xnthread *thread,
 		__xnsched_rt_getparam(thread, p);
 }
 
-static inline void xnsched_trackprio(struct xnthread *thread,
+static inline void xnsched_trackprio(struct steely_thread *thread,
 				     const union xnsched_policy_param *p)
 {
 	struct xnsched_class *sched_class = thread->sched_class;
@@ -627,7 +627,7 @@ static inline void xnsched_trackprio(struct xnthread *thread,
 	thread->wprio = xnsched_calc_wprio(sched_class, thread->cprio);
 }
 
-static inline void xnsched_protectprio(struct xnthread *thread, int prio)
+static inline void xnsched_protectprio(struct steely_thread *thread, int prio)
 {
 	struct xnsched_class *sched_class = thread->sched_class;
 
@@ -639,13 +639,13 @@ static inline void xnsched_protectprio(struct xnthread *thread, int prio)
 	thread->wprio = xnsched_calc_wprio(sched_class, thread->cprio);
 }
 
-static inline void xnsched_forget(struct xnthread *thread)
+static inline void xnsched_forget(struct steely_thread *thread)
 {
 	--thread->base_class->nthreads;
 	__xnsched_rt_forget(thread);
 }
 
-static inline void xnsched_kick(struct xnthread *thread)
+static inline void xnsched_kick(struct steely_thread *thread)
 {
 	xnthread_set_info(thread, XNKICKED);
 	xnsched_set_resched(thread->sched);

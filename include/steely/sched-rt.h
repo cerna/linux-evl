@@ -47,22 +47,22 @@
 
 extern struct xnsched_class xnsched_class_rt;
 
-static inline void __xnsched_rt_requeue(struct xnthread *thread)
+static inline void __xnsched_rt_requeue(struct steely_thread *thread)
 {
 	xnsched_addq(&thread->sched->rt.runnable, thread);
 }
 
-static inline void __xnsched_rt_enqueue(struct xnthread *thread)
+static inline void __xnsched_rt_enqueue(struct steely_thread *thread)
 {
 	xnsched_addq_tail(&thread->sched->rt.runnable, thread);
 }
 
-static inline void __xnsched_rt_dequeue(struct xnthread *thread)
+static inline void __xnsched_rt_dequeue(struct steely_thread *thread)
 {
 	xnsched_delq(&thread->sched->rt.runnable, thread);
 }
 
-static inline void __xnsched_rt_track_weakness(struct xnthread *thread)
+static inline void __xnsched_rt_track_weakness(struct steely_thread *thread)
 {
 	/*
 	 * We have to track threads exiting weak scheduling, i.e. any
@@ -80,7 +80,7 @@ static inline void __xnsched_rt_track_weakness(struct xnthread *thread)
 		xnthread_set_state(thread, XNWEAK);
 }
 
-static inline bool __xnsched_rt_setparam(struct xnthread *thread,
+static inline bool __xnsched_rt_setparam(struct steely_thread *thread,
 					 const union xnsched_policy_param *p)
 {
 	bool ret = xnsched_set_effective_priority(thread, p->rt.prio);
@@ -91,13 +91,13 @@ static inline bool __xnsched_rt_setparam(struct xnthread *thread,
 	return ret;
 }
 
-static inline void __xnsched_rt_getparam(struct xnthread *thread,
+static inline void __xnsched_rt_getparam(struct steely_thread *thread,
 					 union xnsched_policy_param *p)
 {
 	p->rt.prio = thread->cprio;
 }
 
-static inline void __xnsched_rt_trackprio(struct xnthread *thread,
+static inline void __xnsched_rt_trackprio(struct steely_thread *thread,
 					  const union xnsched_policy_param *p)
 {
 	if (p)
@@ -109,7 +109,7 @@ static inline void __xnsched_rt_trackprio(struct xnthread *thread,
 	}
 }
 
-static inline void __xnsched_rt_protectprio(struct xnthread *thread, int prio)
+static inline void __xnsched_rt_protectprio(struct steely_thread *thread, int prio)
 {
 	/*
 	 * The RT class supports the widest priority range from
@@ -120,19 +120,19 @@ static inline void __xnsched_rt_protectprio(struct xnthread *thread, int prio)
 	thread->cprio = prio;
 }
 
-static inline void __xnsched_rt_forget(struct xnthread *thread)
+static inline void __xnsched_rt_forget(struct steely_thread *thread)
 {
 }
 
-static inline int xnsched_rt_init_thread(struct xnthread *thread)
+static inline int xnsched_rt_init_thread(struct steely_thread *thread)
 {
 	return 0;
 }
 
 #ifdef CONFIG_STEELY_SCHED_CLASSES
-struct xnthread *xnsched_rt_pick(struct xnsched *sched);
+struct steely_thread *xnsched_rt_pick(struct xnsched *sched);
 #else
-static inline struct xnthread *xnsched_rt_pick(struct xnsched *sched)
+static inline struct steely_thread *xnsched_rt_pick(struct xnsched *sched)
 {
 	return xnsched_getq(&sched->rt.runnable);
 }

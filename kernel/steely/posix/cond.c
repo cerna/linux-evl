@@ -122,7 +122,7 @@ static inline int pthread_cond_destroy(struct steely_cond_shadow *cnd)
 	return 0;
 }
 
-static inline int steely_cond_timedwait_prologue(struct xnthread *cur,
+static inline int steely_cond_timedwait_prologue(struct steely_thread *cur,
 						 struct steely_cond *cond,
 						 struct steely_mutex *mutex,
 						 ktime_t abs_to)
@@ -198,7 +198,7 @@ unlock_and_return:
 	return err;
 }
 
-static inline int steely_cond_timedwait_epilogue(struct xnthread *cur,
+static inline int steely_cond_timedwait_epilogue(struct steely_thread *cur,
 						 struct steely_cond *cond,
 						 struct steely_mutex *mutex)
 {
@@ -285,7 +285,7 @@ int __steely_cond_wait_prologue(struct steely_cond_shadow __user *u_cnd,
 				int (*fetch_timeout)(struct timespec *ts,
 						     const void __user *u_ts))
 {
-	struct xnthread *cur = xnthread_current();
+	struct steely_thread *cur = steely_current_thread();
 	struct steely_cond *cond;
 	struct steely_mutex *mx;
 	struct us_cond_data d;
@@ -360,7 +360,7 @@ STEELY_SYSCALL(cond_wait_epilogue, primary,
 	       (struct steely_cond_shadow __user *u_cnd,
 		struct steely_mutex_shadow __user *u_mx))
 {
-	struct xnthread *cur = xnthread_current();
+	struct steely_thread *cur = steely_current_thread();
 	struct steely_cond *cond;
 	struct steely_mutex *mx;
 	xnhandle_t handle;

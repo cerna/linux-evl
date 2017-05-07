@@ -27,7 +27,7 @@
 #include <uapi/steely/sched.h>
 /* CAUTION: steely/steely.h reads this header. */
 #include <steely/posix/syscall.h>
-#include <steely/posix/extension.h>
+#include <steely/extension.h>
 
 #define PTHREAD_PROCESS_PRIVATE 0
 #define PTHREAD_PROCESS_SHARED  1
@@ -78,45 +78,6 @@ typedef struct {
 	int __m_kind;
 	struct _pthread_fastlock __m_lock;
 } pthread_mutex_t;
-
-struct steely_local_hkey {
-	/* pthread_t from userland. */
-	unsigned long u_pth;
-	/* kernel mm context. */
-	struct mm_struct *mm;
-};
-
-struct steely_thread {
-	unsigned int magic;
-	struct xnthread threadbase;
-	struct steely_extref extref;
-	struct steely_process *process;
-	struct list_head next;	/* in steely_thread_list */
-
-	/* Signal management. */
-	sigset_t sigpending;
-	struct list_head sigqueues[_NSIG]; /* in steely_sigpending */
-	struct xnsynch sigwait;
-	struct list_head signext;
-
-	/* Monitor wait object and link holder. */
-	struct xnsynch monitor_synch;
-	struct list_head monitor_link;
-
-	struct steely_local_hkey hkey;
-};
-
-struct steely_sigwait_context {
-	struct xnthread_wait_context wc;
-	sigset_t *set;
-	struct siginfo *si;
-};
-
-static inline struct steely_thread *steely_current_thread(void)
-{
-	struct xnthread *curr = xnthread_current();
-	return curr ? container_of(curr, struct steely_thread, threadbase) : NULL;
-}
 
 int __steely_thread_create(unsigned long pth, int policy,
 			   struct sched_param_ex __user *u_param,
@@ -181,38 +142,5 @@ STEELY_SYSCALL_DECL(thread_getschedparam_ex,
 		    (unsigned long pth,
 		     int __user *u_policy,
 		     struct sched_param_ex __user *u_param));
-
-void steely_thread_map(struct xnthread *curr);
-
-struct xnthread_personality *steely_thread_exit(struct xnthread *curr);
-
-struct xnthread_personality *steely_thread_finalize(struct xnthread *zombie);
-
-#ifdef CONFIG_STEELY_EXTENSION
-
-int steely_thread_extend(struct steely_extension *ext,
-			 void *priv);
-
-void steely_thread_restrict(void);
-
-static inline
-int steely_thread_extended_p(const struct steely_thread *thread,
-			     const struct steely_extension *ext)
-{
-	return thread->extref.extension == ext;
-}
-
-#else /* !CONFIG_STEELY_EXTENSION */
-
-static inline
-int steely_thread_extended_p(const struct steely_thread *thread,
-			     const struct steely_extension *ext)
-{
-	return 0;
-}
-
-#endif /* !CONFIG_STEELY_EXTENSION */
-
-extern ktime_t steely_time_slice;
 
 #endif /* !_STEELY_POSIX_THREAD_H */

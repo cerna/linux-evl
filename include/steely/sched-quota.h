@@ -56,7 +56,7 @@ struct xnsched_quota {
 	struct list_head groups;
 };
 
-static inline int xnsched_quota_init_thread(struct xnthread *thread)
+static inline int xnsched_quota_init_thread(struct steely_thread *thread)
 {
 	thread->quota = NULL;
 	INIT_LIST_HEAD(&thread->quota_expired);

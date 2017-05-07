@@ -38,7 +38,7 @@ struct rtswitch_task {
 	struct rttst_swtest_task base;
 	rtdm_event_t rt_synch;
 	struct semaphore nrt_synch;
-	struct xnthread ktask;          /* For kernel-space real-time tasks. */
+	struct steely_thread ktask;          /* For kernel-space real-time tasks. */
 	unsigned int last_switch;
 };
 
@@ -441,8 +441,8 @@ static int rtswitch_create_ktask(struct rtswitch_context *ctx,
 				 struct rttst_swtest_task *ptask)
 {
 	union xnsched_policy_param param;
-	struct xnthread_start_attr sattr;
-	struct xnthread_init_attr iattr;
+	struct steely_thread_start_attr sattr;
+	struct steely_thread_init_attr iattr;
 	struct rtswitch_task *task;
 	struct taskarg arg;
 	int init_flags;

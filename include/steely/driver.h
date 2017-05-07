@@ -472,7 +472,7 @@ static inline int __rtdm_timedwait(struct rtdm_waitqueue *wq,
 
 #define rtdm_waitqueue_signal(__wq)					\
 	({								\
-		struct xnthread *__waiter;				\
+		struct steely_thread *__waiter;				\
 		__waiter = xnsynch_wakeup_one_sleeper(&(__wq)->wait);	\
 		xnsched_run();						\
 		__waiter != NULL;					\
@@ -618,7 +618,7 @@ static inline void rtdm_timer_stop_in_handler(rtdm_timer_t *timer)
 
 /* --- task services --- */
 
-typedef struct xnthread rtdm_task_t;
+typedef struct steely_thread rtdm_task_t;
 
 typedef void (*rtdm_task_proc_t)(void *arg);
 
@@ -642,7 +642,7 @@ static inline void rtdm_task_destroy(rtdm_task_t *task)
 
 static inline int rtdm_task_should_stop(void)
 {
-	return xnthread_test_info(xnthread_current(), XNCANCELD);
+	return xnthread_test_info(steely_current_thread(), XNCANCELD);
 }
 
 void rtdm_task_join(rtdm_task_t *task);
@@ -682,7 +682,7 @@ static inline int rtdm_task_unblock(rtdm_task_t *task)
 
 static inline rtdm_task_t *rtdm_task_current(void)
 {
-	return xnthread_current();
+	return steely_current_thread();
 }
 
 static inline int rtdm_task_wait_period(unsigned long *overruns_r)
@@ -733,7 +733,7 @@ static inline int __deprecated rtdm_task_sleep_until(nanosecs_abs_t wakeup_time)
 		__ret;								\
 	})
 
-#define rtdm_wait_context	xnthread_wait_context
+#define rtdm_wait_context	steely_wait_context
 
 static inline
 void rtdm_wait_complete(struct rtdm_wait_context *wc)
@@ -933,7 +933,7 @@ static inline int rtdm_rt_capable(struct rtdm_fd *fd)
 	if (!rtdm_fd_is_user(fd))
 		return !xnsched_root_p();
 
-	return xnthread_current() != NULL;
+	return steely_current_thread() != NULL;
 }
 
 static inline int rtdm_in_rt_context(void)

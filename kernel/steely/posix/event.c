@@ -38,7 +38,7 @@
  */
 
 struct event_wait_context {
-	struct xnthread_wait_context wc;
+	struct steely_wait_context wc;
 	unsigned int value;
 	int mode;
 };
@@ -206,11 +206,11 @@ STEELY_SYSCALL(event_sync, current,
 	       (struct steely_event_shadow __user *u_event))
 {
 	unsigned int bits, waitval, testval;
-	struct xnthread_wait_context *wc;
 	struct steely_event_state *state;
 	struct event_wait_context *ewc;
+	struct steely_wait_context *wc;
+	struct steely_thread *p, *tmp;
 	struct steely_event *event;
-	struct xnthread *p, *tmp;
 	xnhandle_t handle;
 	int ret = 0;
 	spl_t s;
@@ -287,7 +287,7 @@ STEELY_SYSCALL(event_inquire, current,
 	struct steely_event_info info;
 	struct steely_event *event;
 	pid_t *t = NULL, fbuf[16];
-	struct xnthread *thread;
+	struct steely_thread *thread;
 	xnhandle_t handle;
 	spl_t s;
 

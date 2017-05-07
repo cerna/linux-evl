@@ -28,7 +28,7 @@
 #endif
 
 struct mm_struct;
-struct xnthread_personality;
+struct steely_thread_personality;
 struct steely_timer;
 
 struct steely_resources {
@@ -61,21 +61,19 @@ struct steely_resnode {
 	xnhandle_t handle;
 };
 
-int steely_register_personality(struct xnthread_personality *personality);
+int steely_register_personality(struct steely_thread_personality *personality);
 
 int steely_unregister_personality(int xid);
 
-struct xnthread_personality *steely_push_personality(int xid);
+struct steely_thread_personality *steely_push_personality(int xid);
 
-void steely_pop_personality(struct xnthread_personality *prev);
+void steely_pop_personality(struct steely_thread_personality *prev);
 
 int steely_bind_core(int ufeatures);
 
 int steely_bind_personality(unsigned int magic);
 
 struct steely_process *steely_search_process(struct mm_struct *mm);
-
-int steely_map_user(struct xnthread *thread, __u32 __user *u_winoff);
 
 void *steely_get_context(int xid);
 
@@ -144,8 +142,12 @@ void steely_del_resource(struct steely_resnode *node)
 	list_del(&node->next);
 }
 
-extern struct xnthread_personality *steely_personalities[];
+void steely_process_detach(void *arg);
 
-extern struct xnthread_personality steely_interface_personality;
+void *steely_process_attach(void);
+
+extern struct steely_thread_personality *steely_personalities[];
+
+extern struct steely_thread_personality steely_interface_personality;
 
 #endif /* !_STEELY_POSIX_PROCESS_H */

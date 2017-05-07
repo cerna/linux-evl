@@ -22,11 +22,11 @@
 
 /* Regular (native) syscall handler implementation. */
 #define STEELY_SYSCALL(__name, __mode, __args)	\
-	long CoBaLt_ ## __name __args
+	long StEeLy_ ## __name __args
 
 /* Regular (native) syscall handler declaration. */
 #define STEELY_SYSCALL_DECL(__name, __args)	\
-	long CoBaLt_ ## __name __args
+	long StEeLy_ ## __name __args
 
 #include <asm/steely/syscall32.h>
 

@@ -191,12 +191,12 @@ STEELY_SYSCALL(select, primary,
 	struct restart_block *restart;
 	xntmode_t mode = XN_RELATIVE;
 	struct xnselector *selector;
-	struct xnthread *curr;
+	struct steely_thread *curr;
 	struct timeval tv;
 	size_t fds_size;
 	int i, err;
 
-	curr = xnthread_current();
+	curr = steely_current_thread();
 
 	if (u_tv) {
 		if (xnthread_test_localinfo(curr, XNSYSRST)) {

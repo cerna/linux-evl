@@ -336,7 +336,7 @@ EXPORT_SYMBOL_GPL(rtdm_fd_fcntl);
 
 static struct rtdm_fd *get_fd_fixup_mode(int ufd)
 {
-	struct xnthread *thread;
+	struct steely_thread *thread;
 	struct rtdm_fd *fd;
 	
 	fd = rtdm_fd_get(ufd, 0);
@@ -354,7 +354,7 @@ static struct rtdm_fd *get_fd_fixup_mode(int ufd)
 	 * - Regular threads (i.e. not bound to Steely) may only run
 	 * the syscall from secondary mode.
 	 */
-	thread = xnthread_current();
+	thread = steely_current_thread();
 	if (unlikely(on_root_stage())) {
 		if (thread == NULL ||
 		    xnthread_test_localinfo(thread, XNDESCENT))

@@ -28,20 +28,20 @@
 
 extern struct xnsched_class xnsched_class_idle;
 
-static inline bool __xnsched_idle_setparam(struct xnthread *thread,
+static inline bool __xnsched_idle_setparam(struct steely_thread *thread,
 					   const union xnsched_policy_param *p)
 {
 	xnthread_clear_state(thread, XNWEAK);
 	return xnsched_set_effective_priority(thread, p->idle.prio);
 }
 
-static inline void __xnsched_idle_getparam(struct xnthread *thread,
+static inline void __xnsched_idle_getparam(struct steely_thread *thread,
 					   union xnsched_policy_param *p)
 {
 	p->idle.prio = thread->cprio;
 }
 
-static inline void __xnsched_idle_trackprio(struct xnthread *thread,
+static inline void __xnsched_idle_trackprio(struct steely_thread *thread,
 					    const union xnsched_policy_param *p)
 {
 	if (p)
@@ -51,12 +51,12 @@ static inline void __xnsched_idle_trackprio(struct xnthread *thread,
 		thread->cprio = XNSCHED_IDLE_PRIO;
 }
 
-static inline void __xnsched_idle_protectprio(struct xnthread *thread, int prio)
+static inline void __xnsched_idle_protectprio(struct steely_thread *thread, int prio)
 {
 	STEELY_WARN_ON_ONCE(STEELY, 1);
 }
 
-static inline int xnsched_idle_init_thread(struct xnthread *thread)
+static inline int xnsched_idle_init_thread(struct steely_thread *thread)
 {
 	return 0;
 }

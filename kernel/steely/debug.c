@@ -191,7 +191,7 @@ DEFINE_PRIVATE_XNLOCK(relax_lock);
  * executable mappings that could be involved).
  */
 
-void xndebug_notify_relax(struct xnthread *thread, int reason)
+void xndebug_notify_relax(struct steely_thread *thread, int reason)
 {
 	xnthread_signal(thread, SIGSHADOW,
 			  sigshadow_int(SIGSHADOW_ACTION_BACKTRACE, reason));
@@ -202,7 +202,7 @@ void xndebug_trace_relax(int nr, unsigned long *backtrace,
 {
 	struct relax_record *p, **h;
 	struct vm_area_struct *vma;
-	struct xnthread *thread;
+	struct steely_thread *thread;
 	struct relax_spot spot;
 	struct mm_struct *mm;
 	struct file *file;
@@ -212,7 +212,7 @@ void xndebug_trace_relax(int nr, unsigned long *backtrace,
 	char *tmp;
 	u32 hash;
 
-	thread = xnthread_current();
+	thread = steely_current_thread();
 	if (thread == NULL)
 		return;		/* Can't be, right? What a mess. */
 
@@ -526,7 +526,7 @@ static inline void cleanup_trace_relax(void)
 {
 }
 
-static inline void init_thread_relax_trace(struct xnthread *thread)
+static inline void init_thread_relax_trace(struct steely_thread *thread)
 {
 }
 
@@ -598,7 +598,7 @@ EXPORT_SYMBOL_GPL(xnlock_dbg_release);
 
 #endif /* !STEELY_DEBUG(LOCKING) */
 
-void xndebug_shadow_init(struct xnthread *thread)
+void xndebug_shadow_init(struct steely_thread *thread)
 {
 	struct steely_ppd *sys_ppd;
 	size_t len;

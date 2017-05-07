@@ -75,7 +75,7 @@ struct steely_msg {
 };
 
 struct steely_mqwait_context {
-	struct xnthread_wait_context wc;
+	struct steely_wait_context wc;
 	struct steely_msg *msg;
 };
 
@@ -522,8 +522,8 @@ out:
 static void mq_release_msg(struct steely_mq *mq, struct steely_msg *msg)
 {
 	struct steely_mqwait_context *mwc;
-	struct xnthread_wait_context *wc;
-	struct xnthread *thread;
+	struct steely_wait_context *wc;
+	struct steely_thread *thread;
 
 	/*
 	 * Try passing the free message slot to a waiting sender, link
@@ -546,9 +546,9 @@ static int
 mq_finish_send(struct steely_mqd *mqd, struct steely_msg *msg)
 {
 	struct steely_mqwait_context *mwc;
-	struct xnthread_wait_context *wc;
+	struct steely_wait_context *wc;
 	struct steely_sigpending *sigp;
-	struct xnthread *thread;
+	struct steely_thread *thread;
 	struct steely_mq *mq;
 	spl_t s;
 

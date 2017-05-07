@@ -42,7 +42,7 @@ struct xnsched_weak {
 	xnsched_queue_t runnable;	/*!< Runnable thread queue. */
 };
 
-static inline int xnsched_weak_init_thread(struct xnthread *thread)
+static inline int xnsched_weak_init_thread(struct steely_thread *thread)
 {
 	return 0;
 }

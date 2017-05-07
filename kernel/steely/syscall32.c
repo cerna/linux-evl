@@ -688,12 +688,12 @@ STEELY_SYSCALL32emu(select, nonrestartable,
 	ktime_t timeout = XN_INFINITE, diff;
 	xntmode_t mode = XN_RELATIVE;
 	struct xnselector *selector;
-	struct xnthread *curr;
+	struct steely_thread *curr;
 	struct timeval tv;
 	size_t fds_size;
 	int i, err;
 
-	curr = xnthread_current();
+	curr = steely_current_thread();
 
 	if (u_tv) {
 		err = sys32_get_timeval(&tv, u_tv);

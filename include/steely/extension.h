@@ -15,8 +15,8 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  */
-#ifndef _STEELY_POSIX_EXTENSION_H
-#define _STEELY_POSIX_EXTENSION_H
+#ifndef _STEELY_EXTENSION_H
+#define _STEELY_EXTENSION_H
 
 #include <linux/time.h>
 #include <linux/list.h>
@@ -33,7 +33,7 @@ struct xnsched_class;
 union xnsched_policy_param;
 
 struct steely_extension {
-	struct xnthread_personality core;
+	struct steely_thread_personality core;
 	struct {
 		struct steely_thread *
 		(*timer_init)(struct steely_extref *reftimer, /* nklocked, IRQs off. */
@@ -128,4 +128,4 @@ static inline void steely_set_extref(struct steely_extref *ref,
 
 #endif /* !CONFIG_STEELY_EXTENSION */
 
-#endif /* !_STEELY_POSIX_EXTENSION_H */
+#endif /* !_STEELY_EXTENSION_H */

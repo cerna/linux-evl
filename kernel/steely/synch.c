@@ -81,14 +81,14 @@ EXPORT_SYMBOL_GPL(xnsynch_destroy);
 int xnsynch_sleep_on(struct xnsynch *synch, ktime_t timeout,
 		     xntmode_t timeout_mode)
 {
-	struct xnthread *thread;
+	struct steely_thread *thread;
 	spl_t s;
 
 	primary_mode_only();
 
 	STEELY_BUG_ON(STEELY, synch->status & XNSYNCH_OWNER);
 
-	thread = xnthread_current();
+	thread = steely_current_thread();
 
 	if (IS_ENABLED(CONFIG_STEELY_DEBUG_MUTEX_SLEEP) &&
 	    thread->res_count > 0 &&
@@ -112,9 +112,9 @@ int xnsynch_sleep_on(struct xnsynch *synch, ktime_t timeout,
 }
 EXPORT_SYMBOL_GPL(xnsynch_sleep_on);
 
-struct xnthread *xnsynch_wakeup_one_sleeper(struct xnsynch *synch)
+struct steely_thread *xnsynch_wakeup_one_sleeper(struct xnsynch *synch)
 {
-	struct xnthread *thread;
+	struct steely_thread *thread;
 	spl_t s;
 
 	STEELY_BUG_ON(STEELY, synch->status & XNSYNCH_OWNER);
@@ -127,7 +127,7 @@ struct xnthread *xnsynch_wakeup_one_sleeper(struct xnsynch *synch)
 	}
 
 	trace_steely_synch_wakeup(synch);
-	thread = list_first_entry(&synch->pendq, struct xnthread, plink);
+	thread = list_first_entry(&synch->pendq, struct steely_thread, plink);
 	list_del(&thread->plink);
 	thread->wchan = NULL;
 	xnthread_resume(thread, XNPEND);
@@ -140,7 +140,7 @@ EXPORT_SYMBOL_GPL(xnsynch_wakeup_one_sleeper);
 
 int xnsynch_wakeup_many_sleepers(struct xnsynch *synch, int nr)
 {
-	struct xnthread *thread, *tmp;
+	struct steely_thread *thread, *tmp;
 	int nwakeups = 0;
 	spl_t s;
 
@@ -167,7 +167,7 @@ out:
 }
 EXPORT_SYMBOL_GPL(xnsynch_wakeup_many_sleepers);
 
-void xnsynch_wakeup_this_sleeper(struct xnsynch *synch, struct xnthread *sleeper)
+void xnsynch_wakeup_this_sleeper(struct xnsynch *synch, struct steely_thread *sleeper)
 {
 	spl_t s;
 
@@ -184,7 +184,7 @@ void xnsynch_wakeup_this_sleeper(struct xnsynch *synch, struct xnthread *sleeper
 }
 EXPORT_SYMBOL_GPL(xnsynch_wakeup_this_sleeper);
 
-static inline void raise_boost_flag(struct xnthread *owner)
+static inline void raise_boost_flag(struct steely_thread *owner)
 {
 	/* Backup the base priority at first boost only. */
 	if (!xnthread_test_state(owner, XNBOOST)) {
@@ -193,8 +193,8 @@ static inline void raise_boost_flag(struct xnthread *owner)
 	}
 }
 
-static void inherit_thread_priority(struct xnthread *owner,
-				    struct xnthread *target)
+static void inherit_thread_priority(struct steely_thread *owner,
+				    struct steely_thread *target)
 {
 	if (xnthread_test_state(owner, XNZOMBIE))
 		return;
@@ -210,7 +210,7 @@ static void inherit_thread_priority(struct xnthread *owner,
 		xnsynch_requeue_sleeper(owner);
 }
 
-static void __ceil_owner_priority(struct xnthread *owner, int prio)
+static void __ceil_owner_priority(struct steely_thread *owner, int prio)
 {
 	if (xnthread_test_state(owner, XNZOMBIE))
 		return;
@@ -224,7 +224,7 @@ static void __ceil_owner_priority(struct xnthread *owner, int prio)
 		xnsynch_requeue_sleeper(owner);
 }
 
-static void adjust_boost(struct xnthread *owner, struct xnthread *target)
+static void adjust_boost(struct steely_thread *owner, struct steely_thread *target)
 {
 	struct xnsynch *synch;
 
@@ -245,14 +245,14 @@ static void adjust_boost(struct xnthread *owner, struct xnthread *target)
 		STEELY_BUG_ON(STEELY, list_empty(&synch->pendq));
 		if (target == NULL)
 			target = list_first_entry(&synch->pendq,
-						  struct xnthread, plink);
+						  struct steely_thread, plink);
 		inherit_thread_priority(owner, target);
 	}
 }
 
 static void ceil_owner_priority(struct xnsynch *synch)
 {
-	struct xnthread *owner = synch->owner;
+	struct steely_thread *owner = synch->owner;
 	int wprio;
 
 	/* PP ceiling values are implicitly based on the RT class. */
@@ -283,13 +283,13 @@ static void ceil_owner_priority(struct xnsynch *synch)
 }
 
 static inline
-void track_owner(struct xnsynch *synch, struct xnthread *owner)
+void track_owner(struct xnsynch *synch, struct steely_thread *owner)
 {
 	synch->owner = owner;
 }
 
 static inline  /* nklock held, irqs off */
-void set_current_owner_locked(struct xnsynch *synch, struct xnthread *owner)
+void set_current_owner_locked(struct xnsynch *synch, struct steely_thread *owner)
 {
 	/*
 	 * Update the owner information, and apply priority protection
@@ -302,7 +302,7 @@ void set_current_owner_locked(struct xnsynch *synch, struct xnthread *owner)
 }
 
 static inline
-void set_current_owner(struct xnsynch *synch, struct xnthread *owner)
+void set_current_owner(struct xnsynch *synch, struct steely_thread *owner)
 {
 	spl_t s;
 
@@ -329,7 +329,7 @@ xnhandle_t get_owner_handle(xnhandle_t ownerh, struct xnsynch *synch)
 	return ownerh;
 }
 
-static void commit_ceiling(struct xnsynch *synch, struct xnthread *curr)
+static void commit_ceiling(struct xnsynch *synch, struct steely_thread *curr)
 {
 	xnhandle_t oldh, h;
 	atomic_t *lockp;
@@ -347,7 +347,7 @@ static void commit_ceiling(struct xnsynch *synch, struct xnthread *curr)
 	} while (oldh != h);
 }
 
-void xnsynch_commit_ceiling(struct xnthread *curr)  /* nklock held, irqs off */
+void xnsynch_commit_ceiling(struct steely_thread *curr)  /* nklock held, irqs off */
 {
 	struct xnsynch *synch;
 	atomic_t *lockp;
@@ -406,7 +406,7 @@ out:
 
 int xnsynch_try_acquire(struct xnsynch *synch)
 {
-	struct xnthread *curr;
+	struct steely_thread *curr;
 	atomic_t *lockp;
 	xnhandle_t h;
 
@@ -414,7 +414,7 @@ int xnsynch_try_acquire(struct xnsynch *synch)
 
 	STEELY_BUG_ON(STEELY, (synch->status & XNSYNCH_OWNER) == 0);
 
-	curr = xnthread_current();
+	curr = steely_current_thread();
 	lockp = xnsynch_fastlock(synch);
 	trace_steely_synch_try_acquire(synch, curr);
 
@@ -434,7 +434,7 @@ EXPORT_SYMBOL_GPL(xnsynch_try_acquire);
 int xnsynch_acquire(struct xnsynch *synch, ktime_t timeout,
 		    xntmode_t timeout_mode)
 {
-	struct xnthread *curr, *owner;
+	struct steely_thread *curr, *owner;
 	xnhandle_t currh, h, oldh;
 	atomic_t *lockp;
 	spl_t s;
@@ -443,7 +443,7 @@ int xnsynch_acquire(struct xnsynch *synch, ktime_t timeout,
 
 	STEELY_BUG_ON(STEELY, (synch->status & XNSYNCH_OWNER) == 0);
 
-	curr = xnthread_current();
+	curr = steely_current_thread();
 	currh = curr->handle;
 	lockp = xnsynch_fastlock(synch);
 	trace_steely_synch_acquire(synch, curr);
@@ -593,7 +593,7 @@ out:
 }
 EXPORT_SYMBOL_GPL(xnsynch_acquire);
 
-static void drop_booster(struct xnsynch *synch, struct xnthread *owner)
+static void drop_booster(struct xnsynch *synch, struct steely_thread *owner)
 {
 	list_del(&synch->next);	/* owner->boosters */
 
@@ -605,23 +605,23 @@ static void drop_booster(struct xnsynch *synch, struct xnthread *owner)
 }
 
 static inline void clear_pi_boost(struct xnsynch *synch,
-				  struct xnthread *owner)
+				  struct steely_thread *owner)
 {	/* nklock held, irqs off */
 	synch->status &= ~XNSYNCH_CLAIMED;
 	drop_booster(synch, owner);
 }
 
 static inline void clear_pp_boost(struct xnsynch *synch,
-				  struct xnthread *owner)
+				  struct steely_thread *owner)
 {	/* nklock held, irqs off */
 	synch->status &= ~XNSYNCH_CEILING;
 	drop_booster(synch, owner);
 }
 
 static bool transfer_ownership(struct xnsynch *synch,
-			       struct xnthread *lastowner)
+			       struct steely_thread *lastowner)
 {				/* nklock held, irqs off */
-	struct xnthread *nextowner;
+	struct steely_thread *nextowner;
 	xnhandle_t nextownerh;
 	atomic_t *lockp;
 
@@ -637,7 +637,7 @@ static bool transfer_ownership(struct xnsynch *synch,
 		return false;
 	}
 
-	nextowner = list_first_entry(&synch->pendq, struct xnthread, plink);
+	nextowner = list_first_entry(&synch->pendq, struct steely_thread, plink);
 	list_del(&nextowner->plink);
 	nextowner->wchan = NULL;
 	nextowner->wwake = synch;
@@ -657,7 +657,7 @@ static bool transfer_ownership(struct xnsynch *synch,
 	return true;
 }
 
-bool xnsynch_release(struct xnsynch *synch, struct xnthread *curr)
+bool xnsynch_release(struct xnsynch *synch, struct steely_thread *curr)
 {
 	bool need_resched = false;
 	xnhandle_t currh, h;
@@ -704,10 +704,10 @@ bool xnsynch_release(struct xnsynch *synch, struct xnthread *curr)
 }
 EXPORT_SYMBOL_GPL(xnsynch_release);
 
-void xnsynch_requeue_sleeper(struct xnthread *thread)
+void xnsynch_requeue_sleeper(struct steely_thread *thread)
 {				/* nklock held, irqs off */
 	struct xnsynch *synch = thread->wchan;
-	struct xnthread *owner;
+	struct steely_thread *owner;
 
 	STEELY_BUG_ON(STEELY, !(synch->status & XNSYNCH_PRIO));
 
@@ -737,16 +737,16 @@ void xnsynch_requeue_sleeper(struct xnthread *thread)
 }
 EXPORT_SYMBOL_GPL(xnsynch_requeue_sleeper);
 
-struct xnthread *xnsynch_peek_pendq(struct xnsynch *synch)
+struct steely_thread *xnsynch_peek_pendq(struct xnsynch *synch)
 {
-	struct xnthread *thread = NULL;
+	struct steely_thread *thread = NULL;
 	spl_t s;
 
 	xnlock_get_irqsave(&nklock, s);
 
 	if (!list_empty(&synch->pendq))
 		thread = list_first_entry(&synch->pendq,
-					  struct xnthread, plink);
+					  struct steely_thread, plink);
 
 	xnlock_put_irqrestore(&nklock, s);
 
@@ -756,7 +756,7 @@ EXPORT_SYMBOL_GPL(xnsynch_peek_pendq);
 
 int xnsynch_flush(struct xnsynch *synch, int reason)
 {
-	struct xnthread *sleeper, *tmp;
+	struct steely_thread *sleeper, *tmp;
 	int ret;
 	spl_t s;
 
@@ -785,10 +785,10 @@ int xnsynch_flush(struct xnsynch *synch, int reason)
 }
 EXPORT_SYMBOL_GPL(xnsynch_flush);
 
-void xnsynch_forget_sleeper(struct xnthread *thread)
+void xnsynch_forget_sleeper(struct steely_thread *thread)
 {				/* nklock held, irqs off */
 	struct xnsynch *synch = thread->wchan;
-	struct xnthread *owner, *target;
+	struct steely_thread *owner, *target;
 
 	/*
 	 * Do all the necessary housekeeping chores to stop a thread
@@ -821,7 +821,7 @@ void xnsynch_forget_sleeper(struct xnthread *thread)
 	 * left the wait list, then set its priority to the new
 	 * required minimum required to prevent priority inversion.
 	 */
-	target = list_first_entry(&synch->pendq, struct xnthread, plink);
+	target = list_first_entry(&synch->pendq, struct steely_thread, plink);
 	synch->wprio = target->wprio;
 	list_del(&synch->next);	/* owner->boosters */
 	list_add_priff(synch, &owner->boosters, wprio, next);
@@ -836,7 +836,7 @@ EXPORT_SYMBOL_GPL(xnsynch_forget_sleeper);
  * object currently owned by someone running in secondary mode.
  */
 void xnsynch_detect_relaxed_owner(struct xnsynch *synch,
-				  struct xnthread *sleeper)
+				  struct steely_thread *sleeper)
 {
 	if (xnthread_test_state(sleeper, XNWARN) &&
 	    !xnthread_test_info(sleeper, XNPIALERT) &&
@@ -854,9 +854,9 @@ void xnsynch_detect_relaxed_owner(struct xnsynch *synch,
  * priority inversion. In such an event, any sleeper bearing the
  * XNWARN bit will receive a SIGDEBUG notification.
  */
-void xnsynch_detect_boosted_relax(struct xnthread *owner)
+void xnsynch_detect_boosted_relax(struct steely_thread *owner)
 {
-	struct xnthread *sleeper;
+	struct steely_thread *sleeper;
 	struct xnsynch *synch;
 	spl_t s;
 

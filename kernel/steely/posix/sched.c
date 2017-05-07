@@ -194,7 +194,7 @@ STEELY_SYSCALL(sched_yield, primary, (void))
   	if (steely_call_extension(sched_yield, &curr->extref, ret) && ret)
 		return ret > 0 ? 0 : ret;
 
-	xnthread_resume(&curr->threadbase, 0);
+	xnthread_resume(curr, 0);
 	if (xnsched_run())
 		return 0;
 

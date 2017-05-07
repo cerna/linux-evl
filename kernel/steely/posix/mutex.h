@@ -40,7 +40,7 @@ int __steely_mutex_timedlock_break(struct steely_mutex_shadow __user *u_mx,
 				   int (*fetch_timeout)(struct timespec *ts,
 							const void __user *u_ts));
 
-int __steely_mutex_acquire_unchecked(struct xnthread *cur,
+int __steely_mutex_acquire_unchecked(struct steely_thread *cur,
 				     struct steely_mutex *mutex,
 				     const struct timespec *ts);
 
@@ -67,7 +67,7 @@ STEELY_SYSCALL_DECL(mutex_timedlock,
 STEELY_SYSCALL_DECL(mutex_unlock,
 		    (struct steely_mutex_shadow __user *u_mx));
 
-int steely_mutex_release(struct xnthread *cur,
+int steely_mutex_release(struct steely_thread *cur,
 			 struct steely_mutex *mutex);
 
 void steely_mutex_reclaim(struct steely_resnode *node,

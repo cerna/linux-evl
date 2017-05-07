@@ -43,7 +43,7 @@
 #define XNSYNCH_WAIT    1	/* Calling thread blocked -- start rescheduling */
 #define XNSYNCH_RESCHED 2	/* Force rescheduling */
 
-struct xnthread;
+struct steely_thread;
 struct xnsynch;
 
 struct xnsynch {
@@ -61,7 +61,7 @@ struct xnsynch {
 	/* Pending threads */
 	struct list_head pendq;
 	/* Thread which owns the resource */
-	struct xnthread *owner;
+	struct steely_thread *owner;
 	 /* Pointer to fast lock word */
 	atomic_t *fastlock;
 	/* Cleanup handler */
@@ -101,7 +101,7 @@ static inline int xnsynch_pended_p(struct xnsynch *synch)
 	return !list_empty(&synch->pendq);
 }
 
-static inline struct xnthread *xnsynch_owner(struct xnsynch *synch)
+static inline struct steely_thread *xnsynch_owner(struct xnsynch *synch)
 {
 	return synch->owner;
 }
@@ -114,16 +114,16 @@ static inline struct xnthread *xnsynch_owner(struct xnsynch *synch)
 #if STEELY_DEBUG(MUTEX_RELAXED)
 
 void xnsynch_detect_relaxed_owner(struct xnsynch *synch,
-				  struct xnthread *sleeper);
+				  struct steely_thread *sleeper);
 
-void xnsynch_detect_boosted_relax(struct xnthread *owner);
+void xnsynch_detect_boosted_relax(struct steely_thread *owner);
 
 #else /* !STEELY_DEBUG(MUTEX_RELAXED) */
 
 static inline void xnsynch_detect_relaxed_owner(struct xnsynch *synch,
-				  struct xnthread *sleeper) { }
+				  struct steely_thread *sleeper) { }
 
-static inline void xnsynch_detect_boosted_relax(struct xnthread *owner) { }
+static inline void xnsynch_detect_boosted_relax(struct steely_thread *owner) { }
 
 #endif /* !STEELY_DEBUG(MUTEX_RELAXED) */
 
@@ -135,7 +135,7 @@ void xnsynch_init_protect(struct xnsynch *synch, int flags,
 
 int xnsynch_destroy(struct xnsynch *synch);
 
-void xnsynch_commit_ceiling(struct xnthread *curr);
+void xnsynch_commit_ceiling(struct steely_thread *curr);
 
 static inline void xnsynch_register_cleanup(struct xnsynch *synch,
 					    void (*handler)(struct xnsynch *))
@@ -147,12 +147,12 @@ int __must_check xnsynch_sleep_on(struct xnsynch *synch,
 				  ktime_t timeout,
 				  xntmode_t timeout_mode);
 
-struct xnthread *xnsynch_wakeup_one_sleeper(struct xnsynch *synch);
+struct steely_thread *xnsynch_wakeup_one_sleeper(struct xnsynch *synch);
 
 int xnsynch_wakeup_many_sleepers(struct xnsynch *synch, int nr);
 
 void xnsynch_wakeup_this_sleeper(struct xnsynch *synch,
-				 struct xnthread *sleeper);
+				 struct steely_thread *sleeper);
 
 int __must_check xnsynch_acquire(struct xnsynch *synch,
 				 ktime_t timeout,
@@ -160,14 +160,14 @@ int __must_check xnsynch_acquire(struct xnsynch *synch,
 
 int __must_check xnsynch_try_acquire(struct xnsynch *synch);
 
-bool xnsynch_release(struct xnsynch *synch, struct xnthread *thread);
+bool xnsynch_release(struct xnsynch *synch, struct steely_thread *thread);
 
-struct xnthread *xnsynch_peek_pendq(struct xnsynch *synch);
+struct steely_thread *xnsynch_peek_pendq(struct xnsynch *synch);
 
 int xnsynch_flush(struct xnsynch *synch, int reason);
 
-void xnsynch_requeue_sleeper(struct xnthread *thread);
+void xnsynch_requeue_sleeper(struct steely_thread *thread);
 
-void xnsynch_forget_sleeper(struct xnthread *thread);
+void xnsynch_forget_sleeper(struct steely_thread *thread);
 
 #endif /* !_STEELY_KERNEL_SYNCH_H_ */
