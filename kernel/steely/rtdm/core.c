@@ -26,10 +26,9 @@
 #include <linux/anon_inodes.h>
 #include <steely/ppd.h>
 #include <steely/heap.h>
-#include "rtdm/internal.h"
-#define CREATE_TRACE_POINTS
-#include <trace/events/steely-rtdm.h>
-#include "posix/process.h"
+#include <steely/posix/process.h>
+#include "internal.h"
+#include <trace/events/steely.h>
 
 static void cleanup_instance(struct rtdm_device *dev,
 			     struct rtdm_dev_context *context)

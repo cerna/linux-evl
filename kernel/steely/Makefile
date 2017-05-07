@@ -1,5 +1,7 @@
 obj-$(CONFIG_STEELY) += steely.o rtdm/ posix/
 
+ccflags-y += -Ikernel
+
 steely-y :=	arith.o 	\
 		bufd.o		\
 		clock.o		\

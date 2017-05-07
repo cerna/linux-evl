@@ -24,7 +24,7 @@
 #include "internal.h"
 #include "sem.h"
 #include "thread.h"
-#include <trace/events/steely-posix.h>
+#include <trace/events/steely.h>
 
 DEFINE_PRIVATE_XNLOCK(named_sem_lock);
 

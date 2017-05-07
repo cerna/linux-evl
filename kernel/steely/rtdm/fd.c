@@ -29,11 +29,11 @@
 #include <steely/registry.h>
 #include <steely/lock.h>
 #include <steely/ppd.h>
-#include <trace/events/steely-rtdm.h>
+#include <trace/events/steely.h>
 #include <steely/fd.h>
+#include <steely/posix/process.h>
+#include <steely/posix/syscall.h>
 #include "internal.h"
-#include "posix/process.h"
-#include "posix/syscall.h"
 
 #define RTDM_SETFL_MASK (O_NONBLOCK)
 

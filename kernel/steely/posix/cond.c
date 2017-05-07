@@ -21,7 +21,7 @@
 #include "mutex.h"
 #include "cond.h"
 #include "clock.h"
-#include <trace/events/steely-posix.h>
+#include <trace/events/steely.h>
 
 static inline int
 pthread_cond_init(struct steely_cond_shadow *cnd, const struct steely_condattr *attr)

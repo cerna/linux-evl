@@ -24,7 +24,7 @@
 #include "internal.h"
 #include "thread.h"
 #include "clock.h"
-#include <trace/events/steely-posix.h>
+#include <trace/events/steely.h>
 
 static struct xnclock *external_clocks[STEELY_MAX_EXTCLOCKS];
 

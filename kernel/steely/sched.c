@@ -27,10 +27,8 @@
 #include <steely/intr.h>
 #include <steely/heap.h>
 #include <steely/coreclk.h>
-#include <steely/trace.h>
 #include <uapi/steely/signal.h>
-#define CREATE_TRACE_POINTS
-#include <trace/events/steely-core.h>
+#include <trace/events/steely.h>
 
 DEFINE_PER_CPU(struct xnsched, nksched);
 EXPORT_PER_CPU_SYMBOL_GPL(nksched);

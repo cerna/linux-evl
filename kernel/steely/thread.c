@@ -36,12 +36,11 @@
 #include <steely/registry.h>
 #include <steely/clock.h>
 #include <steely/stat.h>
-#include <steely/trace.h>
 #include <steely/assert.h>
 #include <steely/select.h>
 #include <steely/lock.h>
 #include <steely/thread.h>
-#include <trace/events/steely-core.h>
+#include <trace/events/steely.h>
 #include <asm-generic/steely/mayday.h>
 #include "debug.h"
 

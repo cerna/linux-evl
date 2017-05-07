@@ -23,7 +23,7 @@
 #include <steely/thread.h>
 #include <steely/clock.h>
 #include <uapi/steely/signal.h>
-#include <trace/events/steely-core.h>
+#include <trace/events/steely.h>
 
 #define PP_CEILING_MASK 0xff
 

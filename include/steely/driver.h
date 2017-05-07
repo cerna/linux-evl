@@ -46,7 +46,6 @@
 
 /* debug support */
 #include <steely/assert.h>
-#include <trace/events/steely-rtdm.h>
 #ifdef CONFIG_PCI
 #include <asm-generic/steely/pci_ids.h>
 #endif /* CONFIG_PCI */

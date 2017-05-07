@@ -29,7 +29,7 @@
 #include <steely/stat.h>
 #include <steely/clock.h>
 #include <steely/assert.h>
-#include <trace/events/steely-core.h>
+#include <trace/events/steely.h>
 
 static irqreturn_t xnintr_irq_handler(int irq, void *dev_id);
 

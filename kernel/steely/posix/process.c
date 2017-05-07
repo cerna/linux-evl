@@ -49,7 +49,7 @@
 #include <steely/thread.h>
 #include <uapi/steely/signal.h>
 #include <uapi/steely/syscall.h>
-#include <trace/events/steely-core.h>
+#include <trace/events/steely.h>
 #include <steely/driver.h>
 #include <asm/steely/features.h>
 #include <asm/steely/syscall.h>

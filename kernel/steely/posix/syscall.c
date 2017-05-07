@@ -44,7 +44,7 @@
 #include "io.h"
 #include "corectl.h"
 #include "../debug.h"
-#include <trace/events/steely-posix.h>
+#include <trace/events/steely.h>
 
 /* Syscall must run into the Linux domain. */
 #define __xn_exec_lostage    0x1

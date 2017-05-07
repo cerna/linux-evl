@@ -23,7 +23,7 @@
 #include "thread.h"
 #include "clock.h"
 #include "sem.h"
-#include <trace/events/steely-posix.h>
+#include <trace/events/steely.h>
 
 static inline struct steely_resources *sem_kqueue(struct steely_sem *sem)
 {

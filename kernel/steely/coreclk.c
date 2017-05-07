@@ -31,7 +31,7 @@
 #include <steely/clock.h>
 #include <steely/coreclk.h>
 #include <asm/steely/calibration.h>
-#include <trace/events/steely-core.h>
+#include <trace/events/steely.h>
 
 unsigned int nkclock_lock;
 

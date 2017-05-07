@@ -25,9 +25,9 @@
 #include <linux/slab.h>
 #include <linux/device.h>
 #include <linux/notifier.h>
-#include "rtdm/internal.h"
+#include "internal.h"
 #include <steely/init.h>
-#include <trace/events/steely-rtdm.h>
+#include <trace/events/steely.h>
 
 #define RTDM_DEVICE_MAGIC	0x82846877
 

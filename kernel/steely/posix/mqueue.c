@@ -28,7 +28,7 @@
 #include "timer.h"
 #include "mqueue.h"
 #include "clock.h"
-#include <trace/events/steely-posix.h>
+#include <trace/events/steely.h>
 
 #define STEELY_MSGMAX		65536
 #define STEELY_MSGSIZEMAX	(16*1024*1024)

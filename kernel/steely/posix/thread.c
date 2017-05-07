@@ -30,8 +30,7 @@
 #include "timer.h"
 #include "clock.h"
 #include "sem.h"
-#define CREATE_TRACE_POINTS
-#include <trace/events/steely-posix.h>
+#include <trace/events/steely.h>
 
 ktime_t steely_time_slice = CONFIG_STEELY_RR_QUANTUM * 1000;
 

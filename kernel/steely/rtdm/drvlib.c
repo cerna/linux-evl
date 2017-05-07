@@ -32,7 +32,7 @@
 #include <asm/pgtable.h>
 #include <steely/driver.h>
 #include "internal.h"
-#include <trace/events/steely-rtdm.h>
+#include <trace/events/steely.h>
 
 int rtdm_task_init(rtdm_task_t *task, const char *name,
 		   rtdm_task_proc_t task_proc, void *arg,

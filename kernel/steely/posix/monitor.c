@@ -19,7 +19,7 @@
 #include "thread.h"
 #include "clock.h"
 #include "monitor.h"
-#include <trace/events/steely-posix.h>
+#include <trace/events/steely.h>
 
 /*
  * The Steely monitor is a double-wait condition object, serializing

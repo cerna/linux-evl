@@ -33,6 +33,8 @@
 #include "rtdm/internal.h"
 #include "posix/internal.h"
 #include "procfs.h"
+#define CREATE_TRACE_POINTS
+#include <trace/events/steely.h>
 
 #ifdef CONFIG_SMP
 static unsigned long supported_cpus_arg = -1;

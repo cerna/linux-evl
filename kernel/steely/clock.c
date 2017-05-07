@@ -29,7 +29,7 @@
 #include <steely/coreclk.h>
 #include <steely/vdso.h>
 #include <uapi/steely/time.h>
-#include <trace/events/steely-core.h>
+#include <trace/events/steely.h>
 
 static void adjust_timer(struct xntimer *timer, xntimerq_t *q,
 			 ktime_t delta)

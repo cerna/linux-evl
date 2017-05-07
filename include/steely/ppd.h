@@ -22,6 +22,7 @@
 #include <linux/types.h>
 #include <linux/atomic.h>
 #include <linux/rbtree.h>
+#include <linux/dovetail.h>
 #include <steely/heap.h>
 
 struct steely_umm {

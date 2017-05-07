@@ -20,7 +20,7 @@
 #include "thread.h"
 #include "sched.h"
 #include "clock.h"
-#include <trace/events/steely-posix.h>
+#include <trace/events/steely.h>
 
 struct xnsched_class *
 steely_sched_policy_param(union xnsched_policy_param *param,

@@ -17,18 +17,635 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  */
+#if !defined(_TRACE_STEELY_H) || defined(TRACE_HEADER_MULTI_READ)
+#define _TRACE_STEELY_H
+
 #undef TRACE_SYSTEM
-#define TRACE_SYSTEM steely_posix
-#undef TRACE_INCLUDE_FILE
-#define TRACE_INCLUDE_FILE steely-posix
+#define TRACE_SYSTEM steely
 
-#if !defined(_TRACE_STEELY_POSIX_H) || defined(TRACE_HEADER_MULTI_READ)
-#define _TRACE_STEELY_POSIX_H
-
-#include <linux/tracepoint.h>
+#include <linux/mman.h>
+#include <linux/sched.h>
+#include <steely/posix/mutex.h>
 #include <steely/posix/cond.h>
 #include <steely/posix/mqueue.h>
 #include <steely/posix/event.h>
+#include <steely/posix/sem.h>
+#include <linux/tracepoint.h>
+
+struct rtdm_fd;
+struct rtdm_event;
+struct rtdm_sem;
+struct rtdm_mutex;
+struct xnthread;
+struct rtdm_device;
+struct rtdm_dev_context;
+struct _rtdm_mmap_request;
+
+DECLARE_EVENT_CLASS(thread_event,
+	TP_PROTO(struct xnthread *thread),
+	TP_ARGS(thread),
+
+	TP_STRUCT__entry(
+		__field(struct xnthread *, thread)
+		__string(name, thread->name)
+		__field(pid_t, pid)
+		__field(unsigned long, state)
+		__field(unsigned long, info)
+	),
+
+	TP_fast_assign(
+		__entry->thread = thread;
+		__assign_str(name, thread->name);
+		__entry->state = thread->state;
+		__entry->info = thread->info;
+		__entry->pid = xnthread_host_pid(thread);
+	),
+
+	TP_printk("thread=%p(%s) pid=%d state=0x%lx info=0x%lx",
+		  __entry->thread, __get_str(name), __entry->pid,
+		  __entry->state, __entry->info)
+);
+
+DECLARE_EVENT_CLASS(synch_wait_event,
+	TP_PROTO(struct xnsynch *synch, struct xnthread *thread),
+	TP_ARGS(synch, thread),
+
+	TP_STRUCT__entry(
+		__field(struct xnthread *, thread)
+		__string(name, thread->name)
+		__field(struct xnsynch *, synch)
+	),
+
+	TP_fast_assign(
+		__entry->thread	= thread;
+		__assign_str(name, thread->name);
+		__entry->synch = synch;
+	),
+
+	TP_printk("synch=%p thread=%p(%s)",
+		  __entry->synch, __entry->thread, __get_str(name))
+);
+
+DECLARE_EVENT_CLASS(synch_post_event,
+	TP_PROTO(struct xnsynch *synch),
+	TP_ARGS(synch),
+
+	TP_STRUCT__entry(
+		__field(struct xnsynch *, synch)
+	),
+
+	TP_fast_assign(
+		__entry->synch = synch;
+	),
+
+	TP_printk("synch=%p", __entry->synch)
+);
+
+DECLARE_EVENT_CLASS(irq_event,
+	TP_PROTO(unsigned int irq),
+	TP_ARGS(irq),
+
+	TP_STRUCT__entry(
+		__field(unsigned int, irq)
+	),
+
+	TP_fast_assign(
+		__entry->irq = irq;
+	),
+
+	TP_printk("irq=%u", __entry->irq)
+);
+
+DECLARE_EVENT_CLASS(clock_event,
+	TP_PROTO(unsigned int irq),
+	TP_ARGS(irq),
+
+	TP_STRUCT__entry(
+		__field(unsigned int, irq)
+	),
+
+	TP_fast_assign(
+		__entry->irq = irq;
+	),
+
+	TP_printk("clock_irq=%u", __entry->irq)
+);
+
+DECLARE_EVENT_CLASS(thread_migrate,
+	TP_PROTO(struct xnthread *thread, unsigned int cpu),
+	TP_ARGS(thread, cpu),
+
+	TP_STRUCT__entry(
+		__field(struct xnthread *, thread)
+		__string(name, thread->name)
+		__field(unsigned int, cpu)
+	),
+
+	TP_fast_assign(
+		__entry->thread = thread;
+		__assign_str(name, thread->name);
+		__entry->cpu = cpu;
+	),
+
+	TP_printk("thread=%p(%s) cpu=%u",
+		  __entry->thread, __get_str(name), __entry->cpu)
+);
+
+DECLARE_EVENT_CLASS(timer_event,
+	TP_PROTO(struct xntimer *timer),
+	TP_ARGS(timer),
+
+	TP_STRUCT__entry(
+		__field(struct xntimer *, timer)
+	),
+
+	TP_fast_assign(
+		__entry->timer = timer;
+	),
+
+	TP_printk("timer=%p", __entry->timer)
+);
+
+TRACE_EVENT(steely_schedule,
+	TP_PROTO(struct xnsched *sched),
+	TP_ARGS(sched),
+
+	TP_STRUCT__entry(
+		__field(unsigned long, status)
+	),
+
+	TP_fast_assign(
+		__entry->status = sched->status;
+	),
+
+	TP_printk("status=0x%lx", __entry->status)
+);
+
+TRACE_EVENT(steely_schedule_remote,
+	TP_PROTO(struct xnsched *sched),
+	TP_ARGS(sched),
+
+	TP_STRUCT__entry(
+		__field(unsigned long, status)
+	),
+
+	TP_fast_assign(
+		__entry->status = sched->status;
+	),
+
+	TP_printk("status=0x%lx", __entry->status)
+);
+
+TRACE_EVENT(steely_switch_context,
+	TP_PROTO(struct xnthread *prev, struct xnthread *next),
+	TP_ARGS(prev, next),
+
+	TP_STRUCT__entry(
+		__field(struct xnthread *, prev)
+		__field(struct xnthread *, next)
+		__string(prev_name, prev->name)
+		__string(next_name, next->name)
+	),
+
+	TP_fast_assign(
+		__entry->prev = prev;
+		__entry->next = next;
+		__assign_str(prev_name, prev->name);
+		__assign_str(next_name, next->name);
+	),
+
+	TP_printk("prev=%p(%s) next=%p(%s)",
+		  __entry->prev, __get_str(prev_name),
+		  __entry->next, __get_str(next_name))
+);
+
+TRACE_EVENT(steely_thread_init,
+	TP_PROTO(struct xnthread *thread,
+		 const struct xnthread_init_attr *attr,
+		 struct xnsched_class *sched_class),
+	TP_ARGS(thread, attr, sched_class),
+
+	TP_STRUCT__entry(
+		__field(struct xnthread *, thread)
+		__string(thread_name, thread->name)
+		__string(class_name, sched_class->name)
+		__field(unsigned long, flags)
+		__field(int, cprio)
+	),
+
+	TP_fast_assign(
+		__entry->thread = thread;
+		__assign_str(thread_name, thread->name);
+		__entry->flags = attr->flags;
+		__assign_str(class_name, sched_class->name);
+		__entry->cprio = thread->cprio;
+	),
+
+	TP_printk("thread=%p(%s) flags=0x%lx class=%s prio=%d",
+		   __entry->thread, __get_str(thread_name), __entry->flags,
+		   __get_str(class_name), __entry->cprio)
+);
+
+TRACE_EVENT(steely_thread_suspend,
+	TP_PROTO(struct xnthread *thread, unsigned long mask, ktime_t timeout,
+		 xntmode_t timeout_mode, struct xnsynch *wchan),
+	TP_ARGS(thread, mask, timeout, timeout_mode, wchan),
+
+	TP_STRUCT__entry(
+		__field(struct xnthread *, thread)
+		__field(unsigned long, mask)
+		__field(ktime_t, timeout)
+		__field(xntmode_t, timeout_mode)
+		__field(struct xnsynch *, wchan)
+	),
+
+	TP_fast_assign(
+		__entry->thread = thread;
+		__entry->mask = mask;
+		__entry->timeout = timeout;
+		__entry->timeout_mode = timeout_mode;
+		__entry->wchan = wchan;
+	),
+
+	TP_printk("thread=%p mask=0x%lx timeout=%Lu timeout_mode=%d wchan=%p",
+		  __entry->thread, __entry->mask,
+		  ktime_to_ns(__entry->timeout), __entry->timeout_mode,
+		  __entry->wchan)
+);
+
+TRACE_EVENT(steely_thread_resume,
+	TP_PROTO(struct xnthread *thread, unsigned long mask),
+	TP_ARGS(thread, mask),
+
+	TP_STRUCT__entry(
+		__field(struct xnthread *, thread)
+		__field(unsigned long, mask)
+	),
+
+	TP_fast_assign(
+		__entry->thread = thread;
+		__entry->mask = mask;
+	),
+
+	TP_printk("thread=%p mask=0x%lx",
+		  __entry->thread, __entry->mask)
+);
+
+TRACE_EVENT(steely_thread_fault,
+	TP_PROTO(struct xnthread *thread, struct dovetail_trap_data *td),
+	TP_ARGS(thread, td),
+
+	TP_STRUCT__entry(
+		__field(struct xnthread *, thread)
+		__string(name, thread->name)
+		__field(void *,	ip)
+		__field(unsigned int, type)
+	),
+
+	TP_fast_assign(
+		__entry->thread = thread;
+		__assign_str(name, thread->name);
+		__entry->ip = (void *)xnarch_fault_pc(td);
+		__entry->type = xnarch_fault_trap(td);
+	),
+
+	TP_printk("thread=%p(%s) ip=%p type=%x",
+		  __entry->thread, __get_str(name), __entry->ip,
+		  __entry->type)
+);
+
+DEFINE_EVENT(thread_event, steely_thread_start,
+	TP_PROTO(struct xnthread *thread),
+	TP_ARGS(thread)
+);
+
+DEFINE_EVENT(thread_event, steely_thread_cancel,
+	TP_PROTO(struct xnthread *thread),
+	TP_ARGS(thread)
+);
+
+DEFINE_EVENT(thread_event, steely_thread_join,
+	TP_PROTO(struct xnthread *thread),
+	TP_ARGS(thread)
+);
+
+DEFINE_EVENT(thread_event, steely_thread_unblock,
+	TP_PROTO(struct xnthread *thread),
+	TP_ARGS(thread)
+);
+
+DEFINE_EVENT(thread_event, steely_thread_wait_period,
+	TP_PROTO(struct xnthread *thread),
+	TP_ARGS(thread)
+);
+
+DEFINE_EVENT(thread_event, steely_thread_missed_period,
+	TP_PROTO(struct xnthread *thread),
+	TP_ARGS(thread)
+);
+
+DEFINE_EVENT(thread_event, steely_thread_set_mode,
+	TP_PROTO(struct xnthread *thread),
+	TP_ARGS(thread)
+);
+
+DEFINE_EVENT(thread_migrate, steely_thread_migrate,
+	TP_PROTO(struct xnthread *thread, unsigned int cpu),
+	TP_ARGS(thread, cpu)
+);
+
+DEFINE_EVENT(thread_migrate, steely_thread_migrate_passive,
+	TP_PROTO(struct xnthread *thread, unsigned int cpu),
+	TP_ARGS(thread, cpu)
+);
+
+DEFINE_EVENT(thread_event, steely_shadow_gohard,
+	TP_PROTO(struct xnthread *thread),
+	TP_ARGS(thread)
+);
+
+DEFINE_EVENT(thread_event, steely_watchdog_signal,
+	TP_PROTO(struct xnthread *thread),
+	TP_ARGS(thread)
+);
+
+DEFINE_EVENT(thread_event, steely_shadow_hardened,
+	TP_PROTO(struct xnthread *thread),
+	TP_ARGS(thread)
+);
+
+#define steely_print_relax_reason(reason)				\
+	__print_symbolic(reason,					\
+			 { SIGDEBUG_UNDEFINED,		"undefined" },	\
+			 { SIGDEBUG_MIGRATE_SIGNAL,	"signal" },	\
+			 { SIGDEBUG_MIGRATE_SYSCALL,	"syscall" },	\
+			 { SIGDEBUG_MIGRATE_FAULT,	"fault" })
+
+TRACE_EVENT(steely_shadow_gorelax,
+	TP_PROTO(struct xnthread *thread, int reason),
+	TP_ARGS(thread, reason),
+
+	TP_STRUCT__entry(
+		__field(struct xnthread *, thread)
+		__field(int, reason)
+	),
+
+	TP_fast_assign(
+		__entry->thread = thread;
+		__entry->reason = reason;
+	),
+
+	TP_printk("thread=%p reason=%s",
+		  __entry->thread, steely_print_relax_reason(__entry->reason))
+);
+
+DEFINE_EVENT(thread_event, steely_shadow_relaxed,
+	TP_PROTO(struct xnthread *thread),
+	TP_ARGS(thread)
+);
+
+DEFINE_EVENT(thread_event, steely_shadow_entry,
+	TP_PROTO(struct xnthread *thread),
+	TP_ARGS(thread)
+);
+
+TRACE_EVENT(steely_shadow_map,
+	TP_PROTO(struct xnthread *thread),
+	TP_ARGS(thread),
+
+	TP_STRUCT__entry(
+		__field(struct xnthread *, thread)
+		__string(name, thread->name)
+		__field(int, prio)
+	),
+
+	TP_fast_assign(
+		__entry->thread	= thread;
+		__assign_str(name, thread->name);
+		__entry->prio = xnthread_base_priority(thread);
+	),
+
+	TP_printk("thread=%p(%s) prio=%d",
+		  __entry->thread, __get_str(name), __entry->prio)
+);
+
+DEFINE_EVENT(thread_event, steely_shadow_unmap,
+	TP_PROTO(struct xnthread *thread),
+	TP_ARGS(thread)
+);
+
+TRACE_EVENT(steely_lostage_request,
+        TP_PROTO(const char *type, struct task_struct *task),
+	TP_ARGS(type, task),
+
+	TP_STRUCT__entry(
+		__field(pid_t, pid)
+		__array(char, comm, TASK_COMM_LEN)
+		__field(const char *, type)
+	),
+
+	TP_fast_assign(
+		__entry->type = type;
+		__entry->pid = task_pid_nr(task);
+		memcpy(__entry->comm, task->comm, TASK_COMM_LEN);
+	),
+
+	TP_printk("request=%s pid=%d comm=%s",
+		  __entry->type, __entry->pid, __entry->comm)
+);
+
+TRACE_EVENT(steely_lostage_wakeup,
+	TP_PROTO(struct task_struct *task),
+	TP_ARGS(task),
+
+	TP_STRUCT__entry(
+		__field(pid_t, pid)
+		__array(char, comm, TASK_COMM_LEN)
+	),
+
+	TP_fast_assign(
+		__entry->pid = task_pid_nr(task);
+		memcpy(__entry->comm, task->comm, TASK_COMM_LEN);
+	),
+
+	TP_printk("pid=%d comm=%s",
+		  __entry->pid, __entry->comm)
+);
+
+TRACE_EVENT(steely_lostage_signal,
+	TP_PROTO(struct task_struct *task, int sig),
+	TP_ARGS(task, sig),
+
+	TP_STRUCT__entry(
+		__field(pid_t, pid)
+		__array(char, comm, TASK_COMM_LEN)
+		__field(int, sig)
+	),
+
+	TP_fast_assign(
+		__entry->pid = task_pid_nr(task);
+		__entry->sig = sig;
+		memcpy(__entry->comm, task->comm, TASK_COMM_LEN);
+	),
+
+	TP_printk("pid=%d comm=%s sig=%d",
+		  __entry->pid, __entry->comm, __entry->sig)
+);
+
+DEFINE_EVENT(irq_event, steely_irq_entry,
+	TP_PROTO(unsigned int irq),
+	TP_ARGS(irq)
+);
+
+DEFINE_EVENT(irq_event, steely_irq_exit,
+	TP_PROTO(unsigned int irq),
+	TP_ARGS(irq)
+);
+
+DEFINE_EVENT(irq_event, steely_irq_attach,
+	TP_PROTO(unsigned int irq),
+	TP_ARGS(irq)
+);
+
+DEFINE_EVENT(irq_event, steely_irq_detach,
+	TP_PROTO(unsigned int irq),
+	TP_ARGS(irq)
+);
+
+DEFINE_EVENT(irq_event, steely_irq_enable,
+	TP_PROTO(unsigned int irq),
+	TP_ARGS(irq)
+);
+
+DEFINE_EVENT(irq_event, steely_irq_disable,
+	TP_PROTO(unsigned int irq),
+	TP_ARGS(irq)
+);
+
+DEFINE_EVENT(clock_event, steely_clock_entry,
+	TP_PROTO(unsigned int irq),
+	TP_ARGS(irq)
+);
+
+DEFINE_EVENT(clock_event, steely_clock_exit,
+	TP_PROTO(unsigned int irq),
+	TP_ARGS(irq)
+);
+
+DEFINE_EVENT(timer_event, steely_timer_stop,
+	TP_PROTO(struct xntimer *timer),
+	TP_ARGS(timer)
+);
+
+DEFINE_EVENT(timer_event, steely_timer_expire,
+	TP_PROTO(struct xntimer *timer),
+	TP_ARGS(timer)
+);
+
+#define steely_print_timer_mode(mode)			\
+	__print_symbolic(mode,				\
+			 { XN_RELATIVE, "rel" },	\
+			 { XN_ABSOLUTE, "abs" },	\
+			 { XN_REALTIME, "rt" })
+
+TRACE_EVENT(steely_timer_start,
+	TP_PROTO(struct xntimer *timer, ktime_t value, ktime_t interval,
+		 xntmode_t mode),
+	TP_ARGS(timer, value, interval, mode),
+
+	TP_STRUCT__entry(
+		__field(struct xntimer *, timer)
+#ifdef CONFIG_STEELY_STATS
+		__string(name, timer->name)
+#endif
+		__field(ktime_t, value)
+		__field(ktime_t, interval)
+		__field(xntmode_t, mode)
+	),
+
+	TP_fast_assign(
+		__entry->timer = timer;
+#ifdef CONFIG_STEELY_STATS
+		__assign_str(name, timer->name);
+#endif
+		__entry->value = value;
+		__entry->interval = interval;
+		__entry->mode = mode;
+	),
+
+	TP_printk("timer=%p(%s) value=%Lu interval=%Lu mode=%s",
+		  __entry->timer,
+#ifdef CONFIG_STEELY_STATS
+		  __get_str(name),
+#else
+		  "(anon)",
+#endif
+		  ktime_to_ns(__entry->value),
+		  ktime_to_ns(__entry->interval),
+		  steely_print_timer_mode(__entry->mode))
+);
+
+#ifdef CONFIG_SMP
+
+TRACE_EVENT(steely_timer_migrate,
+	TP_PROTO(struct xntimer *timer, unsigned int cpu),
+	TP_ARGS(timer, cpu),
+
+	TP_STRUCT__entry(
+		__field(struct xntimer *, timer)
+		__field(unsigned int, cpu)
+	),
+
+	TP_fast_assign(
+		__entry->timer = timer;
+		__entry->cpu = cpu;
+	),
+
+	TP_printk("timer=%p cpu=%u",
+		  __entry->timer, __entry->cpu)
+);
+
+#endif /* CONFIG_SMP */
+
+DEFINE_EVENT(synch_wait_event, steely_synch_sleepon,
+	TP_PROTO(struct xnsynch *synch, struct xnthread *thread),
+	TP_ARGS(synch, thread)
+);
+
+DEFINE_EVENT(synch_wait_event, steely_synch_try_acquire,
+	TP_PROTO(struct xnsynch *synch, struct xnthread *thread),
+	TP_ARGS(synch, thread)
+);
+
+DEFINE_EVENT(synch_wait_event, steely_synch_acquire,
+	TP_PROTO(struct xnsynch *synch, struct xnthread *thread),
+	TP_ARGS(synch, thread)
+);
+
+DEFINE_EVENT(synch_post_event, steely_synch_release,
+	TP_PROTO(struct xnsynch *synch),
+	TP_ARGS(synch)
+);
+
+DEFINE_EVENT(synch_post_event, steely_synch_wakeup,
+	TP_PROTO(struct xnsynch *synch),
+	TP_ARGS(synch)
+);
+
+DEFINE_EVENT(synch_post_event, steely_synch_wakeup_many,
+	TP_PROTO(struct xnsynch *synch),
+	TP_ARGS(synch)
+);
+
+DEFINE_EVENT(synch_post_event, steely_synch_flush,
+	TP_PROTO(struct xnsynch *synch),
+	TP_ARGS(synch)
+);
+
+DEFINE_EVENT(synch_post_event, steely_synch_forget,
+	TP_PROTO(struct xnsynch *synch),
+	TP_ARGS(synch)
+);
 
 #define __timespec_fields(__name)				\
 	__field(__kernel_time_t, tv_sec_##__name)		\
@@ -1061,7 +1678,488 @@ DEFINE_EVENT(steely_event_ident, steely_event_inquire,
 	TP_ARGS(u_event)
 );
 
-#endif /* _TRACE_STEELY_POSIX_H */
+DECLARE_EVENT_CLASS(fd_event,
+	TP_PROTO(struct rtdm_fd *fd, int ufd),
+	TP_ARGS(fd, ufd),
+
+	TP_STRUCT__entry(
+		__field(struct rtdm_device *, dev)
+		__field(int, ufd)
+	),
+
+	TP_fast_assign(
+		__entry->dev = rtdm_fd_to_context(fd)->device;
+		__entry->ufd = ufd;
+	),
+
+	TP_printk("device=%p fd=%d",
+		  __entry->dev, __entry->ufd)
+);
+
+DECLARE_EVENT_CLASS(fd_request,
+	TP_PROTO(struct task_struct *task,
+		 struct rtdm_fd *fd, int ufd, unsigned long arg),
+	TP_ARGS(task, fd, ufd, arg),
+
+	TP_STRUCT__entry(
+		__array(char, comm, TASK_COMM_LEN)
+		__field(pid_t, pid)
+		__field(struct rtdm_device *, dev)
+		__field(int, ufd)
+		__field(unsigned long, arg)
+	),
+
+	TP_fast_assign(
+		memcpy(__entry->comm, task->comm, TASK_COMM_LEN);
+		__entry->pid = task_pid_nr(task);
+		__entry->dev = rtdm_fd_to_context(fd)->device;
+		__entry->ufd = ufd;
+		__entry->arg = arg;
+	),
+
+	TP_printk("device=%p fd=%d arg=%#lx pid=%d comm=%s",
+		  __entry->dev, __entry->ufd, __entry->arg,
+		  __entry->pid, __entry->comm)
+);
+
+DECLARE_EVENT_CLASS(fd_request_status,
+	TP_PROTO(struct task_struct *task,
+		 struct rtdm_fd *fd, int ufd, int status),
+	TP_ARGS(task, fd, ufd, status),
+
+	TP_STRUCT__entry(
+		__array(char, comm, TASK_COMM_LEN)
+		__field(pid_t, pid)
+		__field(struct rtdm_device *, dev)
+		__field(int, ufd)
+	),
+
+	TP_fast_assign(
+		memcpy(__entry->comm, task->comm, TASK_COMM_LEN);
+		__entry->pid = task_pid_nr(task);
+		__entry->dev =
+			!IS_ERR(fd) ? rtdm_fd_to_context(fd)->device : NULL;
+		__entry->ufd = ufd;
+	),
+
+	TP_printk("device=%p fd=%d pid=%d comm=%s",
+		  __entry->dev, __entry->ufd, __entry->pid, __entry->comm)
+);
+
+DECLARE_EVENT_CLASS(task_op,
+	TP_PROTO(struct xnthread *task),
+	TP_ARGS(task),
+
+	TP_STRUCT__entry(
+		__field(struct xnthread *, task)
+		__string(task_name, task->name)
+	),
+
+	TP_fast_assign(
+		__entry->task = task;
+		__assign_str(task_name, task->name);
+	),
+
+	TP_printk("task %p(%s)", __entry->task, __get_str(task_name))
+);
+
+DECLARE_EVENT_CLASS(event_op,
+	TP_PROTO(struct rtdm_event *ev),
+	TP_ARGS(ev),
+
+	TP_STRUCT__entry(
+		__field(struct rtdm_event *, ev)
+	),
+
+	TP_fast_assign(
+		__entry->ev = ev;
+	),
+
+	TP_printk("event=%p", __entry->ev)
+);
+
+DECLARE_EVENT_CLASS(sem_op,
+	TP_PROTO(struct rtdm_sem *sem),
+	TP_ARGS(sem),
+
+	TP_STRUCT__entry(
+		__field(struct rtdm_sem *, sem)
+	),
+
+	TP_fast_assign(
+		__entry->sem = sem;
+	),
+
+	TP_printk("sem=%p", __entry->sem)
+);
+
+DECLARE_EVENT_CLASS(mutex_op,
+	TP_PROTO(struct rtdm_mutex *mutex),
+	TP_ARGS(mutex),
+
+	TP_STRUCT__entry(
+		__field(struct rtdm_mutex *, mutex)
+	),
+
+	TP_fast_assign(
+		__entry->mutex = mutex;
+	),
+
+	TP_printk("mutex=%p", __entry->mutex)
+);
+
+TRACE_EVENT(steely_device_register,
+	TP_PROTO(struct rtdm_device *dev),
+	TP_ARGS(dev),
+
+	TP_STRUCT__entry(
+		__field(struct rtdm_device *, dev)
+		__string(device_name, dev->name)
+		__field(int, flags)
+		__field(int, class_id)
+		__field(int, subclass_id)
+		__field(int, profile_version)
+	),
+
+	TP_fast_assign(
+		__entry->dev	= dev;
+		__assign_str(device_name, dev->name);
+		__entry->flags = dev->driver->device_flags;
+		__entry->class_id = dev->driver->profile_info.class_id;
+		__entry->subclass_id = dev->driver->profile_info.subclass_id;
+		__entry->profile_version = dev->driver->profile_info.version;
+	),
+
+	TP_printk("%s device %s=%p flags=0x%x, class=%d.%d profile=%d",
+		  (__entry->flags & RTDM_DEVICE_TYPE_MASK)
+		  == RTDM_NAMED_DEVICE ? "named" : "protocol",
+		  __get_str(device_name), __entry->dev,
+		  __entry->flags, __entry->class_id, __entry->subclass_id,
+		  __entry->profile_version)
+);
+
+TRACE_EVENT(steely_device_unregister,
+	TP_PROTO(struct rtdm_device *dev),
+	TP_ARGS(dev),
+
+	TP_STRUCT__entry(
+		__field(struct rtdm_device *, dev)
+		__string(device_name, dev->name)
+	),
+
+	TP_fast_assign(
+		__entry->dev	= dev;
+		__assign_str(device_name, dev->name);
+	),
+
+	TP_printk("device %s=%p",
+		  __get_str(device_name), __entry->dev)
+);
+
+DEFINE_EVENT(fd_event, steely_fd_created,
+	TP_PROTO(struct rtdm_fd *fd, int ufd),
+	TP_ARGS(fd, ufd)
+);
+
+DEFINE_EVENT(fd_request, steely_fd_open,
+	TP_PROTO(struct task_struct *task,
+		 struct rtdm_fd *fd, int ufd,
+		 unsigned long oflags),
+	TP_ARGS(task, fd, ufd, oflags)
+);
+
+DEFINE_EVENT(fd_request, steely_fd_close,
+	TP_PROTO(struct task_struct *task,
+		 struct rtdm_fd *fd, int ufd,
+		 unsigned long lock_count),
+	TP_ARGS(task, fd, ufd, lock_count)
+);
+
+DEFINE_EVENT(fd_request, steely_fd_socket,
+	TP_PROTO(struct task_struct *task,
+		 struct rtdm_fd *fd, int ufd,
+		 unsigned long protocol_family),
+	TP_ARGS(task, fd, ufd, protocol_family)
+);
+
+DEFINE_EVENT(fd_request, steely_fd_read,
+	TP_PROTO(struct task_struct *task,
+		 struct rtdm_fd *fd, int ufd,
+		 unsigned long len),
+	TP_ARGS(task, fd, ufd, len)
+);
+
+DEFINE_EVENT(fd_request, steely_fd_write,
+	TP_PROTO(struct task_struct *task,
+		 struct rtdm_fd *fd, int ufd,
+		 unsigned long len),
+	TP_ARGS(task, fd, ufd, len)
+);
+
+DEFINE_EVENT(fd_request, steely_fd_ioctl,
+	TP_PROTO(struct task_struct *task,
+		 struct rtdm_fd *fd, int ufd,
+		 unsigned long request),
+	TP_ARGS(task, fd, ufd, request)
+);
+
+DEFINE_EVENT(fd_request, steely_fd_sendmsg,
+	TP_PROTO(struct task_struct *task,
+		 struct rtdm_fd *fd, int ufd,
+		 unsigned long flags),
+	TP_ARGS(task, fd, ufd, flags)
+);
+
+DEFINE_EVENT(fd_request, steely_fd_recvmsg,
+	TP_PROTO(struct task_struct *task,
+		 struct rtdm_fd *fd, int ufd,
+		 unsigned long flags),
+	TP_ARGS(task, fd, ufd, flags)
+);
+
+#define steely_print_protbits(__prot)		\
+	__print_flags(__prot,  "|", 		\
+		      {PROT_EXEC, "exec"},	\
+		      {PROT_READ, "read"},	\
+		      {PROT_WRITE, "write"})
+
+#define steely_print_mapbits(__flags)		\
+	__print_flags(__flags,  "|", 		\
+		      {MAP_SHARED, "shared"},	\
+		      {MAP_PRIVATE, "private"},	\
+		      {MAP_ANONYMOUS, "anon"},	\
+		      {MAP_FIXED, "fixed"},	\
+		      {MAP_HUGETLB, "huge"},	\
+		      {MAP_NONBLOCK, "nonblock"},	\
+		      {MAP_NORESERVE, "noreserve"},	\
+		      {MAP_POPULATE, "populate"},	\
+		      {MAP_UNINITIALIZED, "uninit"})
+
+TRACE_EVENT(steely_fd_mmap,
+	TP_PROTO(struct task_struct *task,
+		 struct rtdm_fd *fd, int ufd, struct _rtdm_mmap_request *rma),
+        TP_ARGS(task, fd, ufd, rma),
+
+	TP_STRUCT__entry(
+		__array(char, comm, TASK_COMM_LEN)
+		__field(pid_t, pid)
+		__field(struct rtdm_device *, dev)
+		__field(int, ufd)
+		__field(size_t, length)
+		__field(off_t, offset)
+		__field(int, prot)
+		__field(int, flags)
+	),
+
+	TP_fast_assign(
+		memcpy(__entry->comm, task->comm, TASK_COMM_LEN);
+		__entry->pid = task_pid_nr(task);
+		__entry->dev = rtdm_fd_to_context(fd)->device;
+		__entry->ufd = ufd;
+		__entry->length = rma->length;
+		__entry->offset = rma->offset;
+		__entry->prot = rma->prot;
+		__entry->flags = rma->flags;
+	),
+
+	TP_printk("device=%p fd=%d area={ len:%Zu, off:%Lu }"
+		  " prot=%#x(%s) flags=%#x(%s) pid=%d comm=%s",
+		  __entry->dev, __entry->ufd, __entry->length,
+		  (unsigned long long)__entry->offset,
+		  __entry->prot, steely_print_protbits(__entry->prot),
+		  __entry->flags, steely_print_mapbits(__entry->flags),
+		  __entry->pid, __entry->comm)
+);
+
+DEFINE_EVENT(fd_request_status, steely_fd_ioctl_status,
+	TP_PROTO(struct task_struct *task,
+		 struct rtdm_fd *fd, int ufd,
+		 int status),
+	TP_ARGS(task, fd, ufd, status)
+);
+
+DEFINE_EVENT(fd_request_status, steely_fd_read_status,
+	TP_PROTO(struct task_struct *task,
+		 struct rtdm_fd *fd, int ufd,
+		 int status),
+	TP_ARGS(task, fd, ufd, status)
+);
+
+DEFINE_EVENT(fd_request_status, steely_fd_write_status,
+	TP_PROTO(struct task_struct *task,
+		 struct rtdm_fd *fd, int ufd,
+		 int status),
+	TP_ARGS(task, fd, ufd, status)
+);
+
+DEFINE_EVENT(fd_request_status, steely_fd_recvmsg_status,
+	TP_PROTO(struct task_struct *task,
+		 struct rtdm_fd *fd, int ufd,
+		 int status),
+	TP_ARGS(task, fd, ufd, status)
+);
+
+DEFINE_EVENT(fd_request_status, steely_fd_sendmsg_status,
+	TP_PROTO(struct task_struct *task,
+		 struct rtdm_fd *fd, int ufd,
+		 int status),
+	TP_ARGS(task, fd, ufd, status)
+);
+
+DEFINE_EVENT(fd_request_status, steely_fd_mmap_status,
+	TP_PROTO(struct task_struct *task,
+		 struct rtdm_fd *fd, int ufd,
+		 int status),
+	TP_ARGS(task, fd, ufd, status)
+);
+
+DEFINE_EVENT(task_op, steely_driver_task_join,
+	TP_PROTO(struct xnthread *task),
+	TP_ARGS(task)
+);
+
+TRACE_EVENT(steely_driver_event_init,
+	TP_PROTO(struct rtdm_event *ev, unsigned long pending),
+	TP_ARGS(ev, pending),
+
+	TP_STRUCT__entry(
+		__field(struct rtdm_event *, ev)
+		__field(unsigned long,	pending)
+	),
+
+	TP_fast_assign(
+		__entry->ev = ev;
+		__entry->pending = pending;
+	),
+
+	TP_printk("event=%p pending=%#lx",
+		  __entry->ev, __entry->pending)
+);
+
+TRACE_EVENT(steely_driver_event_wait,
+	TP_PROTO(struct rtdm_event *ev, struct xnthread *task),
+	TP_ARGS(ev, task),
+
+	TP_STRUCT__entry(
+		__field(struct xnthread *, task)
+		__string(task_name, task->name)
+		__field(struct rtdm_event *, ev)
+	),
+
+	TP_fast_assign(
+		__entry->task = task;
+		__assign_str(task_name, task->name);
+		__entry->ev = ev;
+	),
+
+	TP_printk("event=%p task=%p(%s)",
+		  __entry->ev, __entry->task, __get_str(task_name))
+);
+
+DEFINE_EVENT(event_op, steely_driver_event_signal,
+	TP_PROTO(struct rtdm_event *ev),
+	TP_ARGS(ev)
+);
+
+DEFINE_EVENT(event_op, steely_driver_event_clear,
+	TP_PROTO(struct rtdm_event *ev),
+	TP_ARGS(ev)
+);
+
+DEFINE_EVENT(event_op, steely_driver_event_pulse,
+	TP_PROTO(struct rtdm_event *ev),
+	TP_ARGS(ev)
+);
+
+DEFINE_EVENT(event_op, steely_driver_event_destroy,
+	TP_PROTO(struct rtdm_event *ev),
+	TP_ARGS(ev)
+);
+
+TRACE_EVENT(steely_driver_sem_init,
+	TP_PROTO(struct rtdm_sem *sem, unsigned long value),
+	TP_ARGS(sem, value),
+
+	TP_STRUCT__entry(
+		__field(struct rtdm_sem *, sem)
+		__field(unsigned long, value)
+	),
+
+	TP_fast_assign(
+		__entry->sem = sem;
+		__entry->value = value;
+	),
+
+	TP_printk("sem=%p value=%lu",
+		  __entry->sem, __entry->value)
+);
+
+TRACE_EVENT(steely_driver_sem_wait,
+	TP_PROTO(struct rtdm_sem *sem, struct xnthread *task),
+	TP_ARGS(sem, task),
+
+	TP_STRUCT__entry(
+		__field(struct xnthread *, task)
+		__string(task_name, task->name)
+		__field(struct rtdm_sem *, sem)
+	),
+
+	TP_fast_assign(
+		__entry->task = task;
+		__assign_str(task_name, task->name);
+		__entry->sem = sem;
+	),
+
+	TP_printk("sem=%p task=%p(%s)",
+		  __entry->sem, __entry->task, __get_str(task_name))
+);
+
+DEFINE_EVENT(sem_op, steely_driver_sem_up,
+	TP_PROTO(struct rtdm_sem *sem),
+	TP_ARGS(sem)
+);
+
+DEFINE_EVENT(sem_op, steely_driver_sem_destroy,
+	TP_PROTO(struct rtdm_sem *sem),
+	TP_ARGS(sem)
+);
+
+DEFINE_EVENT(mutex_op, steely_driver_mutex_init,
+	TP_PROTO(struct rtdm_mutex *mutex),
+	TP_ARGS(mutex)
+);
+
+DEFINE_EVENT(mutex_op, steely_driver_mutex_release,
+	TP_PROTO(struct rtdm_mutex *mutex),
+	TP_ARGS(mutex)
+);
+
+DEFINE_EVENT(mutex_op, steely_driver_mutex_destroy,
+	TP_PROTO(struct rtdm_mutex *mutex),
+	TP_ARGS(mutex)
+);
+
+TRACE_EVENT(steely_driver_mutex_wait,
+	TP_PROTO(struct rtdm_mutex *mutex, struct xnthread *task),
+	TP_ARGS(mutex, task),
+
+	TP_STRUCT__entry(
+		__field(struct xnthread *, task)
+		__string(task_name, task->name)
+		__field(struct rtdm_mutex *, mutex)
+	),
+
+	TP_fast_assign(
+		__entry->task = task;
+		__assign_str(task_name, task->name);
+		__entry->mutex = mutex;
+	),
+
+	TP_printk("mutex=%p task=%p(%s)",
+		  __entry->mutex, __entry->task, __get_str(task_name))
+);
+
+#endif /* _TRACE_STEELY_H */
 
 /* This part must be outside protection */
 #include <trace/define_trace.h>

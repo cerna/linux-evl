@@ -19,7 +19,7 @@
 #include "thread.h"
 #include "clock.h"
 #include "event.h"
-#include <trace/events/steely-posix.h>
+#include <trace/events/steely.h>
 
 /*
  * Steely event notification services

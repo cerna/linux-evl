@@ -24,7 +24,7 @@
 #include <steely/intr.h>
 #include <steely/clock.h>
 #include <asm/div64.h>
-#include <trace/events/steely-core.h>
+#include <trace/events/steely.h>
 
 bool xntimer_is_heading(struct xntimer *timer)
 {
