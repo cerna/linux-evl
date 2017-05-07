@@ -27,6 +27,7 @@
 #include <steely/intr.h>
 #include <steely/heap.h>
 #include <steely/coreclk.h>
+#include <steely/trace.h>
 #include <uapi/steely/signal.h>
 #define CREATE_TRACE_POINTS
 #include <trace/events/steely-core.h>
@@ -798,8 +799,6 @@ int ___xnsched_run(struct xnsched *sched)
 	 * leave_root() may not still be the current one. Use
 	 * "current" for disambiguating.
 	 */
-	xntrace_pid(task_pid_nr(current), xnthread_current_priority(curr));
-
 	if (xnthread_test_state(curr, XNUSER))
 		do_lazy_user_work(curr);
 
@@ -868,7 +867,6 @@ int ___xnsched_run(struct xnsched *sched)
 	 * because of relaxed/hardened transitions.
 	 */
 	curr = sched->curr;
-	xntrace_pid(task_pid_nr(current), xnthread_current_priority(curr));
 out:
 	xnlock_put_irqrestore(&nklock, s);
 

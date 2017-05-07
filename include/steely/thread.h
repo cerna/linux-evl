@@ -27,7 +27,6 @@
 #include <steely/timer.h>
 #include <steely/registry.h>
 #include <steely/schedparam.h>
-#include <steely/trace.h>
 #include <steely/synch.h>
 #include <uapi/steely/kernel/thread.h>
 #include <uapi/steely/signal.h>

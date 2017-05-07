@@ -21,7 +21,6 @@
 #include <steely/sched.h>
 #include <steely/synch.h>
 #include <steely/thread.h>
-#include <steely/trace.h>
 #include <rtdm/testing.h>
 #include <steely/driver.h>
 #include <asm/steely/fptest.h>

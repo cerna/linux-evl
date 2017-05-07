@@ -776,8 +776,6 @@ void xnthread_resume(struct xnthread *thread, int mask)
 
 	trace_steely_thread_resume(thread, mask);
 
-	xntrace_pid(xnthread_host_pid(thread), xnthread_current_priority(thread));
-
 	sched = thread->sched;
 	oldstate = thread->state;
 
@@ -1960,9 +1958,6 @@ int xnthread_map(struct xnthread *thread, struct completion *done)
 	xnlock_put_irqrestore(&nklock, s);
 
 	xnthread_test_cancel();
-
-	xntrace_pid(xnthread_host_pid(thread),
-		    xnthread_current_priority(thread));
 
 	return ret;
 }

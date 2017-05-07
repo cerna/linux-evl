@@ -23,7 +23,6 @@
 #include <steely/timer.h>
 #include <steely/intr.h>
 #include <steely/clock.h>
-#include <steely/trace.h>
 #include <asm/div64.h>
 #include <trace/events/steely-core.h>
 

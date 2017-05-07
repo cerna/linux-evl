@@ -146,43 +146,7 @@ static STEELY_SYSCALL(trace, current,
 		      (int op, unsigned long a1,
 		       unsigned long a2, unsigned long a3))
 {
-	int ret = -EINVAL;
-
-	switch (op) {
-	case __xntrace_op_max_begin:
-		ret = xntrace_max_begin(a1);
-		break;
-
-	case __xntrace_op_max_end:
-		ret = xntrace_max_end(a1);
-		break;
-
-	case __xntrace_op_max_reset:
-		ret = xntrace_max_reset();
-		break;
-
-	case __xntrace_op_user_start:
-		ret = xntrace_user_start();
-		break;
-
-	case __xntrace_op_user_stop:
-		ret = xntrace_user_stop(a1);
-		break;
-
-	case __xntrace_op_user_freeze:
-		ret = xntrace_user_freeze(a1, a2);
-		break;
-
-	case __xntrace_op_special:
-		ret = xntrace_special(a1 & 0xFF, a2);
-		break;
-
-	case __xntrace_op_special_u64:
-		ret = xntrace_special_u64(a1 & 0xFF,
-					  (((u64) a2) << 32) | a3);
-		break;
-	}
-	return ret;
+	return -EINVAL;
 }
 
 static STEELY_SYSCALL(archcall, current,

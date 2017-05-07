@@ -20,7 +20,6 @@
 #define _STEELY_KERNEL_ASSERT_H
 
 #include <linux/kconfig.h>
-#include <steely/trace.h>
 #include <steely/ancillaries.h>
 
 #define STEELY_INFO	KERN_INFO    "[Steely] "

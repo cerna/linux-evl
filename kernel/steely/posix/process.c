@@ -43,7 +43,6 @@
 #include <steely/synch.h>
 #include <steely/clock.h>
 #include <steely/ppd.h>
-#include <steely/trace.h>
 #include <steely/stat.h>
 #include <steely/ppd.h>
 #include <steely/vdso.h>
@@ -610,9 +609,6 @@ int steely_map_user(struct xnthread *thread, __u32 __user *u_winoff)
 
 	xnthread_sync_window(thread);
 
-	xntrace_pid(xnthread_host_pid(thread),
-		    xnthread_current_priority(thread));
-
 	return 0;
 }
 
@@ -637,14 +633,12 @@ void dovetail_trap_hook(struct dovetail_trap_data *d)
 	 */
 #if STEELY_DEBUG(STEELY) || STEELY_DEBUG(USER)
 	if (!user_mode(d->regs)) {
-		xntrace_panic_freeze();
 		printk(STEELY_WARNING
 		       "switching %s to secondary mode after exception #%u in "
 		       "kernel-space at 0x%lx (pid %d)\n", thread->name,
 		       xnarch_fault_trap(d),
 		       xnarch_fault_pc(d),
 		       xnthread_host_pid(thread));
-		xntrace_panic_dump();
 	} else if (xnarch_fault_notify(d)) /* Don't report debug traps */
 		printk(STEELY_WARNING
 		       "switching %s to secondary mode after exception #%u from "
