@@ -31,23 +31,48 @@
 #include <steely/assert.h>
 #include <asm/steely/machine.h>
 
-/* Sched status flags */
-#define XNRESCHED	0x10000000	/* Needs rescheduling */
-#define XNINTCK		0x20000000	/* In master tick handler context */
+/** Shared scheduler status flags **/
 
-/* Sched local flags */
-#define XNHTICK		0x00008000	/* Host tick pending  */
-#define XNINIRQ		0x00004000	/* In IRQ handling context */
-#define XNHDEFER	0x00002000	/* Host tick deferred */
+/*
+ * A rescheduling call is pending.
+ */
+#define XNRESCHED	0x10000000
+/*
+ * Currently running in tick handler context.
+ */
+#define XNINTCK		0x20000000
+
+/** Private scheduler flags **/
+
+/*
+ * A proxy tick is being processed, i.e. matching an earlier timing
+ * request from the regular kernel.
+ */
+#define XNHTICK		0x00008000
+/*
+ * Currently running in IRQ handling context.
+ */
+#define XNINIRQ		0x00004000
+/*
+ * Proxy tick is deferred, because we have more urgent real-time
+ * duties to carry out first.
+ */
+#define XNHDEFER	0x00002000
+/*
+ * Idle state: there is no outstanding timer, or the leading one is
+ * the proxy tick. We check this flag to know whether we may allow the
+ * regular kernel to enter the idle state.
+ */
+#define XNIDLE		0x00001000
 
 struct xnsched_rt {
 	xnsched_queue_t runnable;	/* Runnable thread queue. */
 };
 
 struct xnsched {
-	/* Scheduler specific status bitmask. */
+	/* Shared status bitmask. */
 	unsigned long status;
-	/* Scheduler specific local flags bitmask. */
+	/* Private status bitmask. */
 	unsigned long lflags;
 	/* Current thread. */
 	struct xnthread *curr;

@@ -303,8 +303,10 @@ void xnclock_core_local_shot(struct xnsched *sched)
 
 	tmd = xnclock_this_timerdata(&nkclock);
 	h = xntimerq_head(&tmd->q);
-	if (h == NULL)
+	if (h == NULL) {
+		sched->lflags |= XNIDLE;
 		return;
+	}
 
 	/*
 	 * Here we try to defer the host tick heading the timer queue,
@@ -326,9 +328,10 @@ void xnclock_core_local_shot(struct xnsched *sched)
 	 * or a timer with an earlier timeout date is scheduled,
 	 * whichever comes first.
 	 */
-	sched->lflags &= ~XNHDEFER;
+	sched->lflags &= ~(XNHDEFER|XNIDLE);
 	timer = container_of(h, struct xntimer, aplink);
-	if (unlikely(timer == &sched->htimer)) {
+	if (timer == &sched->htimer) {
+		sched->lflags |= XNIDLE;
 		if (xnsched_resched_p(sched) ||
 		    !xnthread_test_state(sched->curr, XNROOT)) {
 			h = xntimerq_second(&tmd->q, h);
@@ -363,14 +366,20 @@ bool dovetail_enter_idle(void)	/* root stage, hard_irqs_disabled() */
 	struct xnsched *sched = xnsched_current();
 
 	/*
-	 * Should we allow CPUIDLE to enter the idle state on the
-	 * current CPU? We can figure this out easily by checking the
-	 * host tick deferral flag (XNHDEFER): if set, then we have
-	 * more urgent tasks to deliver than processing host ticks, so
-	 * we don't want to enter the idle state.
+	 * We allow CPUIDLE to enter the idle state on the current CPU
+	 * only if we are idle too.
+	 *
+	 * Rationale: the regular kernel may switch to a broadcast
+	 * timer when entering the idle state if the current clockchip
+	 * suffers the C3STOP braindamage. In such a case, the proxy
+	 * timer would be shut down temporarily in the process,
+	 * forwarding this request to the real hardware timer we
+	 * use. This is important to prevent such entry unless we can
+	 * expect a regular timing event to come next, resuming
+	 * ticking.
 	 */
 	
-	return !!(sched->lflags & XNHDEFER);
+	return !!(sched->lflags & XNIDLE);
 }
 
 #ifdef CONFIG_SMP
