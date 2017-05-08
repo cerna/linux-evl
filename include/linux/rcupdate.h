@@ -45,6 +45,7 @@
 #include <linux/compiler.h>
 #include <linux/ktime.h>
 #include <linux/irqflags.h>
+#include <linux/irqstage.h>
 
 #include <asm/barrier.h>
 
@@ -504,7 +505,7 @@ static inline int rcu_read_lock_bh_held(void)
 
 static inline int rcu_read_lock_sched_held(void)
 {
-	return !preemptible();
+	return !on_root_stage() || !preemptible();
 }
 #endif /* #else #ifdef CONFIG_DEBUG_LOCK_ALLOC */
 
