@@ -27,24 +27,24 @@
 #include <steely/tree.h>
 #include <steely/vdso.h>
 #include <steely/init.h>
+#include <steely/thread.h>
+#include <steely/mutex.h>
+#include <steely/cond.h>
+#include <steely/mqueue.h>
+#include <steely/sem.h>
+#include <steely/signal.h>
+#include <steely/timer.h>
+#include <steely/monitor.h>
+#include <steely/clock.h>
+#include <steely/sched.h>
+#include <steely/event.h>
+#include <steely/timerfd.h>
+#include <steely/io.h>
+#include <steely/corectl.h>
 #include <asm-generic/steely/mayday.h>
-#include "posix/internal.h"
-#include "posix/thread.h"
-#include "posix/sched.h"
-#include "posix/mutex.h"
-#include "posix/cond.h"
-#include "posix/mqueue.h"
-#include "posix/sem.h"
-#include "posix/signal.h"
-#include "posix/timer.h"
-#include "posix/monitor.h"
-#include "posix/clock.h"
-#include "posix/event.h"
-#include "posix/timerfd.h"
-#include "posix/io.h"
-#include "posix/corectl.h"
-#include "debug.h"
 #include <trace/events/steely.h>
+#include "debug.h"
+#include "internal.h"
 
 /* Syscall must run into the Linux domain. */
 #define __xn_exec_lostage    0x1
@@ -419,7 +419,7 @@ static int StEeLy_ni(void)
 	[sc_steely_ ## __name] = __xn_exec_##__mode,
 
 #ifdef CONFIG_STEELY_ARCH_SYS3264
-#include "syscall32.h"
+#include <steely/syscall32.h>
 #endif
 
 #include "syscall_entries.h"

@@ -17,8 +17,8 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  */
-#ifndef _STEELY_KERNEL_STAT_H
-#define _STEELY_KERNEL_STAT_H
+#ifndef _STEELY_STAT_H
+#define _STEELY_STAT_H
 
 #include <steely/clock.h>
 
@@ -139,4 +139,4 @@ typedef struct xnstat_counter {
 	xnstat_exectime_set_current(sched, new_account); \
 })
 
-#endif /* !_STEELY_KERNEL_STAT_H */
+#endif /* !_STEELY_STAT_H */

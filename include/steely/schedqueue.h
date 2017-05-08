@@ -16,8 +16,8 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  */
-#ifndef _STEELY_KERNEL_SCHEDQUEUE_H
-#define _STEELY_KERNEL_SCHEDQUEUE_H
+#ifndef _STEELY_SCHEDQUEUE_H
+#define _STEELY_SCHEDQUEUE_H
 
 #include <steely/list.h>
 
@@ -96,4 +96,4 @@ typedef struct list_head xnsched_queue_t;
 
 struct steely_thread *xnsched_findq(xnsched_queue_t *q, int prio);
 
-#endif /* !_STEELY_KERNEL_SCHEDQUEUE_H */
+#endif /* !_STEELY_SCHEDQUEUE_H */

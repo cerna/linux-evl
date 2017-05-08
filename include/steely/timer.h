@@ -17,13 +17,19 @@
  * 02111-1307, USA.
  */
 
-#ifndef _STEELY_KERNEL_TIMER_H
-#define _STEELY_KERNEL_TIMER_H
+#ifndef _STEELY_TIMER_H
+#define _STEELY_TIMER_H
 
+#include <linux/types.h>
+#include <linux/time.h>
+#include <linux/list.h>
 #include <steely/clock.h>
 #include <steely/stat.h>
 #include <steely/list.h>
+#include <steely/syscall.h>
 #include <steely/assert.h>
+#include <steely/extension.h>
+#include <steely/signal.h>
 #include <steely/ancillaries.h>
 
 /*
@@ -549,4 +555,61 @@ static inline bool xntimer_set_sched(struct xntimer *timer,
 
 char *xntimer_format_time(ktime_t t, char *buf, size_t bufsz);
 
-#endif /* !_STEELY_KERNEL_TIMER_H */
+struct steely_timer {
+	struct xntimer timerbase;
+	timer_t id;
+	unsigned long overruns;
+	clockid_t clockid;
+	pid_t target;
+	struct steely_sigpending sigp;
+	struct steely_extref extref;
+};
+
+int steely_timer_deliver(timer_t timerid);
+
+void steely_timer_reclaim(struct steely_process *p);
+
+static inline timer_t steely_timer_id(const struct steely_timer *timer)
+{
+	return timer->id;
+}
+
+struct steely_timer *
+steely_timer_by_id(struct steely_process *p, timer_t timer_id);
+
+void steely_timer_handler(struct xntimer *xntimer);
+
+void __steely_timer_getval(struct xntimer *__restrict__ timer, 
+			   struct itimerspec *__restrict__ value);
+
+int __steely_timer_setval(struct xntimer *__restrict__ timer, int clock_flag, 
+			  const struct itimerspec *__restrict__ value);
+
+int __steely_timer_create(clockid_t clock,
+			  const struct sigevent *sev,
+			  timer_t __user *u_tm);
+
+int __steely_timer_settime(timer_t timerid, int flags,
+			   const struct itimerspec *__restrict__ value,
+			   struct itimerspec *__restrict__ ovalue);
+
+int __steely_timer_gettime(timer_t timerid, struct itimerspec *value);
+
+STEELY_SYSCALL_DECL(timer_create,
+		    (clockid_t clock,
+		     const struct sigevent __user *u_sev,
+		     timer_t __user *u_tm));
+
+STEELY_SYSCALL_DECL(timer_delete, (timer_t tm));
+
+STEELY_SYSCALL_DECL(timer_settime,
+		    (timer_t tm, int flags,
+		     const struct itimerspec __user *u_newval,
+		     struct itimerspec __user *u_oldval));
+
+STEELY_SYSCALL_DECL(timer_gettime,
+		    (timer_t tm, struct itimerspec __user *u_val));
+
+STEELY_SYSCALL_DECL(timer_getoverrun, (timer_t tm));
+
+#endif /* !_STEELY_TIMER_H */

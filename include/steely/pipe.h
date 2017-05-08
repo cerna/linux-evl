@@ -16,8 +16,8 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  */
-#ifndef _STEELY_KERNEL_PIPE_H
-#define _STEELY_KERNEL_PIPE_H
+#ifndef _STEELY_PIPE_H
+#define _STEELY_PIPE_H
 
 #include <linux/types.h>
 #include <linux/poll.h>
@@ -133,4 +133,4 @@ static inline char *xnpipe_m_data(struct xnpipe_mh *mh)
 
 #define xnpipe_m_rdoff(mh) ((mh)->rdoff)
 
-#endif /* !_STEELY_KERNEL_PIPE_H */
+#endif /* !_STEELY_PIPE_H */

@@ -16,8 +16,8 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  */
-#ifndef _STEELY_KERNEL_SCHEDPARAM_H
-#define _STEELY_KERNEL_SCHEDPARAM_H
+#ifndef _STEELY_SCHEDPARAM_H
+#define _STEELY_SCHEDPARAM_H
 
 struct xnsched_idle_param {
 	int prio;
@@ -67,4 +67,4 @@ union xnsched_policy_param {
 #endif
 };
 
-#endif /* !_STEELY_KERNEL_SCHEDPARAM_H */
+#endif /* !_STEELY_SCHEDPARAM_H */

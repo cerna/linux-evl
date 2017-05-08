@@ -16,8 +16,8 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  */
-#ifndef _STEELY_KERNEL_LIST_H
-#define _STEELY_KERNEL_LIST_H
+#ifndef _STEELY_LIST_H
+#define _STEELY_LIST_H
 
 #include <linux/list.h>
 
@@ -54,4 +54,4 @@ do {										\
 	list_entry((__item)->__member.next, typeof(*(__item)), __member)
 #endif
 
-#endif /* !_STEELY_KERNEL_LIST_H_ */
+#endif /* !_STEELY_LIST_H_ */

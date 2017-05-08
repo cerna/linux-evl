@@ -24,17 +24,17 @@
 #include <steely/timer.h>
 #include <steely/heap.h>
 #include <steely/intr.h>
-#include <steely/ppd.h>
+#include <steely/process.h>
 #include <steely/pipe.h>
 #include <steely/select.h>
 #include <steely/vdso.h>
 #include <steely/coreclk.h>
 #include <steely/fd.h>
-#include "rtdm/internal.h"
-#include "posix/internal.h"
-#include "procfs.h"
 #define CREATE_TRACE_POINTS
 #include <trace/events/steely.h>
+#include "rtdm/internal.h"
+#include "internal.h"
+#include "procfs.h"
 
 #ifdef CONFIG_SMP
 static unsigned long supported_cpus_arg = -1;

@@ -17,8 +17,8 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  */
-#ifndef _STEELY_KERNEL_FD_H
-#define _STEELY_KERNEL_FD_H
+#ifndef _STEELY_FD_H
+#define _STEELY_FD_H
 
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -195,4 +195,4 @@ void rtdm_fd_cleanup(struct steely_ppd *p);
 
 void rtdm_fd_init(void);
 
-#endif /* _STEELY_KERNEL_FD_H */
+#endif /* _STEELY_FD_H */

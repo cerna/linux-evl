@@ -16,8 +16,8 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  */
-#ifndef _STEELY_KERNEL_SELECT_H
-#define _STEELY_KERNEL_SELECT_H
+#ifndef _STEELY_SELECT_H
+#define _STEELY_SELECT_H
 
 #include <steely/list.h>
 #include <steely/thread.h>
@@ -127,4 +127,4 @@ int xnselect_mount(void);
 
 int xnselect_umount(void);
 
-#endif /* _STEELY_KERNEL_SELECT_H */
+#endif /* _STEELY_SELECT_H */

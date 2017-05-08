@@ -19,6 +19,7 @@
 #define _STEELY_UAPI_MUTEX_H
 
 #include <uapi/steely/kernel/types.h>
+#include <uapi/steely/thread.h>
 
 #define STEELY_MUTEX_MAGIC  0x86860303
 

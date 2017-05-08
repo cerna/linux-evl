@@ -16,10 +16,10 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  */
-#ifndef _STEELY_KERNEL_SCHED_QUOTA_H
-#define _STEELY_KERNEL_SCHED_QUOTA_H
+#ifndef _STEELY_SCHED_QUOTA_H
+#define _STEELY_SCHED_QUOTA_H
 
-#ifndef _STEELY_KERNEL_SCHED_H
+#ifndef _STEELY_SCHED_H
 #error "please don't include steely/sched-quota.h directly"
 #endif
 
@@ -83,4 +83,4 @@ int xnsched_quota_sum_all(struct xnsched *sched);
 
 #endif /* !CONFIG_STEELY_SCHED_QUOTA */
 
-#endif /* !_STEELY_KERNEL_SCHED_QUOTA_H */
+#endif /* !_STEELY_SCHED_QUOTA_H */

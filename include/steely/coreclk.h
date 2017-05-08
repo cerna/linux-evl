@@ -16,8 +16,8 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  */
-#ifndef _STEELY_KERNEL_CORECLK_H
-#define _STEELY_KERNEL_CORECLK_H
+#ifndef _STEELY_CORECLK_H
+#define _STEELY_CORECLK_H
 
 #include <linux/ktime.h>
 #include <linux/timekeeping.h>
@@ -63,4 +63,4 @@ extern struct xnclock nkclock;
 
 extern unsigned int nkclock_lock;
 
-#endif /* !_STEELY_KERNEL_CORECLK_H */
+#endif /* !_STEELY_CORECLK_H */

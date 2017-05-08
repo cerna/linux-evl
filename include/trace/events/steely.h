@@ -25,11 +25,12 @@
 
 #include <linux/mman.h>
 #include <linux/sched.h>
-#include <steely/posix/mutex.h>
-#include <steely/posix/cond.h>
-#include <steely/posix/mqueue.h>
-#include <steely/posix/event.h>
-#include <steely/posix/sem.h>
+#include <steely/mutex.h>
+#include <steely/cond.h>
+#include <steely/mqueue.h>
+#include <steely/event.h>
+#include <steely/sem.h>
+#include <steely/driver.h>
 #include <linux/tracepoint.h>
 
 struct rtdm_fd;

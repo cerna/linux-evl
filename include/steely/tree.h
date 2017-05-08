@@ -15,8 +15,8 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  */
-#ifndef _STEELY_KERNEL_TREE_H
-#define _STEELY_KERNEL_TREE_H
+#ifndef _STEELY_TREE_H
+#define _STEELY_TREE_H
 
 #include <linux/errno.h>
 #include <linux/rbtree.h>
@@ -91,4 +91,4 @@ static inline int xnid_remove(struct rb_root *t, struct xnid *xnid)
 	return 0;
 }
 
-#endif /* _STEELY_KERNEL_TREE_H */
+#endif /* _STEELY_TREE_H */

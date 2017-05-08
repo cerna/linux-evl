@@ -17,8 +17,8 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  */
-#ifndef _STEELY_KERNEL_LOCK_H
-#define _STEELY_KERNEL_LOCK_H
+#ifndef _STEELY_LOCK_H
+#define _STEELY_LOCK_H
 
 #include <linux/irq_pipeline.h>
 #include <linux/percpu.h>
@@ -240,4 +240,4 @@ static inline void __xnlock_put(struct xnlock *lock /*, */ XNLOCK_DBG_CONTEXT_AR
 
 DECLARE_EXTERN_XNLOCK(nklock);
 
-#endif /* !_STEELY_KERNEL_LOCK_H */
+#endif /* !_STEELY_LOCK_H */

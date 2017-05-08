@@ -16,8 +16,8 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  */
-#ifndef _STEELY_KERNEL_VDSO_H
-#define _STEELY_KERNEL_VDSO_H
+#ifndef _STEELY_VDSO_H
+#define _STEELY_VDSO_H
 
 #include <linux/time.h>
 #include <asm/barrier.h>
@@ -33,4 +33,4 @@
 
 extern struct xnvdso *nkvdso;
 
-#endif /* _STEELY_KERNEL_VDSO_H */
+#endif /* _STEELY_VDSO_H */

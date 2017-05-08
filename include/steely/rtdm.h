@@ -24,7 +24,6 @@
 #include <linux/ioctl.h>
 #include <linux/sched.h>
 #include <linux/socket.h>
-#include <steely/ppd.h>
 #include <steely/fd.h>
 
 typedef __u32 socklen_t;

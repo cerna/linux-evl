@@ -16,10 +16,10 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  */
-#ifndef _STEELY_KERNEL_SCHED_IDLE_H
-#define _STEELY_KERNEL_SCHED_IDLE_H
+#ifndef _STEELY_SCHED_IDLE_H
+#define _STEELY_SCHED_IDLE_H
 
-#ifndef _STEELY_KERNEL_SCHED_H
+#ifndef _STEELY_SCHED_H
 #error "please don't include steely/sched-idle.h directly"
 #endif
 
@@ -61,4 +61,4 @@ static inline int xnsched_idle_init_thread(struct steely_thread *thread)
 	return 0;
 }
 
-#endif /* !_STEELY_KERNEL_SCHED_IDLE_H */
+#endif /* !_STEELY_SCHED_IDLE_H */

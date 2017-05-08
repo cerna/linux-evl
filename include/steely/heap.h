@@ -16,8 +16,8 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  */
-#ifndef _STEELY_KERNEL_HEAP_H
-#define _STEELY_KERNEL_HEAP_H
+#ifndef _STEELY_HEAP_H
+#define _STEELY_HEAP_H
 
 #include <linux/string.h>
 #include <steely/lock.h>
@@ -150,4 +150,4 @@ static inline char *xnstrdup(const char *s)
 	return strcpy(p, s);
 }
 
-#endif /* !_STEELY_KERNEL_HEAP_H */
+#endif /* !_STEELY_HEAP_H */

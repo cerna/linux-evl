@@ -1,0 +1,118 @@
+/*
+ * Copyright (C) 2013 Philippe Gerum <rpm@xenomai.org>.
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation; either version 2 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+ */
+#ifndef _STEELY_SIGNAL_H
+#define _STEELY_SIGNAL_H
+
+#include <linux/signal.h>
+#include <steely/list.h>
+#include <steely/extension.h>
+#include <uapi/steely/signal.h>
+#include <steely/syscall.h>
+
+struct steely_thread;
+enum xntmode;
+
+struct steely_sigpending {
+	struct siginfo si;
+	struct list_head next;
+};
+
+static inline
+void steely_copy_siginfo(int code,
+			 struct siginfo *__restrict__ dst,
+			 const struct siginfo *__restrict__ src)
+{
+	dst->si_signo = src->si_signo;
+	dst->si_errno = src->si_errno;
+	dst->si_code = code;
+
+	switch (code) {
+	case SI_TIMER:
+		dst->si_tid = src->si_tid;
+		dst->si_overrun = src->si_overrun;
+		dst->si_value = src->si_value;
+		break;
+	case SI_QUEUE:
+	case SI_MESGQ:
+		dst->si_value = src->si_value;
+		/* falldown wanted. */
+	case SI_USER:
+		dst->si_pid = src->si_pid;
+		dst->si_uid = src->si_uid;
+	}
+}
+
+int __steely_sigwait(sigset_t *set);
+
+int __steely_sigtimedwait(sigset_t *set,
+			  const struct timespec *timeout,
+			  void __user *u_si,
+			  int (*put_siginfo)(void __user *u_si,
+					     const struct siginfo *si,
+					     int overrun));
+
+int __steely_sigwaitinfo(sigset_t *set,
+			 void __user *u_si,
+			 int (*put_siginfo)(void __user *u_si,
+					    const struct siginfo *si,
+					    int overrun));
+
+int __steely_sigqueue(pid_t pid, int sig, const union sigval *value);
+
+int steely_signal_send(struct steely_thread *thread,
+		       struct steely_sigpending *sigp,
+		       int group);
+
+int steely_signal_send_pid(pid_t pid,
+			   struct steely_sigpending *sigp);
+
+struct steely_sigpending *steely_signal_alloc(void);
+
+void steely_signal_free(struct steely_sigpending *sigp);
+
+void steely_signal_flush(struct steely_thread *thread);
+
+int steely_signal_wait(sigset_t *set, struct siginfo *si,
+		       ktime_t timeout, enum xntmode tmode);
+
+int __steely_kill(struct steely_thread *thread,
+		  int sig, int group);
+
+STEELY_SYSCALL_DECL(sigwait,
+		    (const sigset_t __user *u_set, int __user *u_sig));
+
+STEELY_SYSCALL_DECL(sigtimedwait,
+		    (const sigset_t __user *u_set,
+		     struct siginfo __user *u_si,
+		     const struct timespec __user *u_timeout));
+
+STEELY_SYSCALL_DECL(sigwaitinfo,
+		    (const sigset_t __user *u_set,
+		     struct siginfo __user *u_si));
+
+STEELY_SYSCALL_DECL(sigpending,
+		    (old_sigset_t __user *u_set));
+
+STEELY_SYSCALL_DECL(kill, (pid_t pid, int sig));
+
+STEELY_SYSCALL_DECL(sigqueue,
+		    (pid_t pid, int sig, const union sigval __user *u_value));
+
+int steely_signal_init(void);
+
+#endif /* !_STEELY_SIGNAL_H */

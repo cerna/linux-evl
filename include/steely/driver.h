@@ -43,6 +43,7 @@
 #include <steely/tree.h>
 #include <steely/fd.h>
 #include <steely/rtdm.h>
+#include <steely/process.h>
 
 /* debug support */
 #include <steely/assert.h>

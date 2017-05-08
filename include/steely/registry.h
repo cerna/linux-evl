@@ -15,8 +15,8 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  */
-#ifndef _STEELY_KERNEL_REGISTRY_H
-#define _STEELY_KERNEL_REGISTRY_H
+#ifndef _STEELY_REGISTRY_H
+#define _STEELY_REGISTRY_H
 
 #include <steely/list.h>
 #include <steely/synch.h>
@@ -189,4 +189,4 @@ extern struct xnpnode_ops xnregistry_vfsnap_ops;
 
 extern struct xnpnode_ops xnregistry_vlink_ops;
 
-#endif /* !_STEELY_KERNEL_REGISTRY_H */
+#endif /* !_STEELY_REGISTRY_H */

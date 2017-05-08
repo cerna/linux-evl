@@ -16,8 +16,8 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  */
-#ifndef _STEELY_KERNEL_INIT_H
-#define _STEELY_KERNEL_INIT_H
+#ifndef _STEELY_INIT_H
+#define _STEELY_INIT_H
 
 #include <linux/atomic.h>
 #include <linux/notifier.h>
@@ -51,4 +51,4 @@ void steely_remove_state_chain(struct notifier_block *nb);
 
 void steely_call_state_chain(enum steely_run_states newstate);
 
-#endif /* !_STEELY_KERNEL_INIT_H_ */
+#endif /* !_STEELY_INIT_H_ */

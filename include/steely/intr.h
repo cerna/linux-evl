@@ -16,8 +16,8 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  */
-#ifndef _STEELY_KERNEL_INTR_H
-#define _STEELY_KERNEL_INTR_H
+#ifndef _STEELY_INTR_H
+#define _STEELY_INTR_H
 
 #include <linux/spinlock.h>
 #include <linux/list.h>
@@ -150,4 +150,4 @@ void *steely_alloc_irq_work(size_t size);
 
 void steely_free_irq_work(void *p);
 
-#endif /* !_STEELY_KERNEL_INTR_H */
+#endif /* !_STEELY_INTR_H */

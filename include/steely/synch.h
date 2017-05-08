@@ -16,8 +16,8 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  */
-#ifndef _STEELY_KERNEL_SYNCH_H
-#define _STEELY_KERNEL_SYNCH_H
+#ifndef _STEELY_SYNCH_H
+#define _STEELY_SYNCH_H
 
 #include <steely/list.h>
 #include <steely/assert.h>
@@ -170,4 +170,4 @@ void xnsynch_requeue_sleeper(struct steely_thread *thread);
 
 void xnsynch_forget_sleeper(struct steely_thread *thread);
 
-#endif /* !_STEELY_KERNEL_SYNCH_H_ */
+#endif /* !_STEELY_SYNCH_H_ */

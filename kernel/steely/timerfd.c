@@ -1,0 +1,331 @@
+/*
+ * Copyright (C) 2013 Gilles Chanteperdrix <gilles.chanteperdrix@xenomai.org>.
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation; either version 2 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+ */
+
+#include <linux/timerfd.h>
+#include <linux/err.h>
+#include <steely/timer.h>
+#include <steely/select.h>
+#include <steely/fd.h>
+#include <steely/clock.h>
+#include <steely/timerfd.h>
+#include "internal.h"
+
+struct steely_tfd {
+	int flags;
+	clockid_t clockid;
+	struct rtdm_fd fd;
+	struct xntimer timer;
+	DECLARE_XNSELECT(read_select);
+	struct itimerspec value;
+	struct xnsynch readers;
+	struct steely_thread *target;
+};
+
+#define STEELY_TFD_TICKED	(1 << 2)
+
+#define STEELY_TFD_SETTIME_FLAGS (TFD_TIMER_ABSTIME | TFD_WAKEUP)
+
+static ssize_t timerfd_read(struct rtdm_fd *fd, void __user *buf, size_t size)
+{
+	struct steely_tfd *tfd;
+	__u64 __user *u_ticks;
+	__u64 ticks = 0;
+	bool aligned;
+	spl_t s;
+	int err;
+
+	if (size < sizeof(ticks))
+		return -EINVAL;
+
+	u_ticks = buf;
+	if (!access_wok(u_ticks, sizeof(*u_ticks)))
+		return -EFAULT;
+
+	aligned = (((unsigned long)buf) & (sizeof(ticks) - 1)) == 0;
+
+	tfd = container_of(fd, struct steely_tfd, fd);
+
+	xnlock_get_irqsave(&nklock, s);
+	if (tfd->flags & STEELY_TFD_TICKED) {
+		err = 0;
+		goto out;
+	}
+	if (rtdm_fd_flags(fd) & O_NONBLOCK) {
+		err = -EAGAIN;
+		goto out;
+	}
+
+	do {
+		err = xnsynch_sleep_on(&tfd->readers, XN_INFINITE, XN_RELATIVE);
+	} while (err == 0 && (tfd->flags & STEELY_TFD_TICKED) == 0);
+
+	if (err & XNBREAK)
+		err = -EINTR;
+  out:
+	if (err == 0) {
+		ktime_t now;
+
+		if (xntimer_periodic_p(&tfd->timer)) {
+			now = xnclock_read_monotonic(xntimer_clock(&tfd->timer));
+			ticks = 1 + xntimer_get_overruns(&tfd->timer, now);
+		} else
+			ticks = 1;
+
+		tfd->flags &= ~STEELY_TFD_TICKED;
+		xnselect_signal(&tfd->read_select, 0);
+	}
+	xnlock_put_irqrestore(&nklock, s);
+
+	if (err == 0) {
+		err = aligned ? __xn_put_user(ticks, u_ticks) :
+			__xn_copy_to_user(buf, &ticks, sizeof(ticks));
+		if (err)
+			err =-EFAULT;
+	}
+
+	return err ?: sizeof(ticks);
+}
+
+static int
+timerfd_select(struct rtdm_fd *fd, struct xnselector *selector,
+	       unsigned type, unsigned index)
+{
+	struct steely_tfd *tfd = container_of(fd, struct steely_tfd, fd);
+	struct xnselect_binding *binding;
+	spl_t s;
+	int err;
+
+	if (type != XNSELECT_READ)
+		return -EBADF;
+
+	binding = xnmalloc(sizeof(*binding));
+	if (binding == NULL)
+		return -ENOMEM;
+
+	xnlock_get_irqsave(&nklock, s);
+	xntimer_set_sched(&tfd->timer, xnsched_current());
+	err = xnselect_bind(&tfd->read_select, binding, selector, type,
+			index, tfd->flags & STEELY_TFD_TICKED);
+	xnlock_put_irqrestore(&nklock, s);
+
+	return err;
+}
+
+static void timerfd_close(struct rtdm_fd *fd)
+{
+	struct steely_tfd *tfd = container_of(fd, struct steely_tfd, fd);
+	int resched;
+	spl_t s;
+
+	xnlock_get_irqsave(&nklock, s);
+	xntimer_destroy(&tfd->timer);
+	resched = xnsynch_destroy(&tfd->readers) == XNSYNCH_RESCHED;
+	xnlock_put_irqrestore(&nklock, s);
+	xnselect_destroy(&tfd->read_select);
+	xnfree(tfd);
+
+	if (resched)
+		xnsched_run();
+}
+
+static struct rtdm_fd_ops timerfd_ops = {
+	.read_rt = timerfd_read,
+	.select = timerfd_select,
+	.close = timerfd_close,
+};
+
+static void timerfd_handler(struct xntimer *xntimer)
+{
+	struct steely_tfd *tfd;
+
+	tfd = container_of(xntimer, struct steely_tfd, timer);
+	tfd->flags |= STEELY_TFD_TICKED;
+	xnselect_signal(&tfd->read_select, 1);
+	xnsynch_wakeup_one_sleeper(&tfd->readers);
+	if (tfd->target)
+		xnthread_unblock(tfd->target);
+}
+
+STEELY_SYSCALL(timerfd_create, lostage, (int clockid, int flags))
+{
+	struct steely_tfd *tfd;
+	struct steely_thread *curr;
+	struct xnclock *clock;
+	int ret, ufd;
+
+	if (flags & ~TFD_CREATE_FLAGS)
+		return -EINVAL;
+
+	clock = steely_clock_find(clockid);
+	if (clock == NULL)
+		return -EINVAL;
+
+	tfd = xnmalloc(sizeof(*tfd));
+	if (tfd == NULL)
+		return -ENOMEM;
+
+	ufd = __rtdm_anon_getfd("[steely-timerfd]",
+				O_RDWR | (flags & TFD_SHARED_FCNTL_FLAGS));
+	if (ufd < 0) {
+		ret = ufd;
+		goto fail_getfd;
+	}
+
+	tfd->flags = flags & ~TFD_NONBLOCK;
+	tfd->fd.oflags = (flags & TFD_NONBLOCK) ? O_NONBLOCK : 0;
+	tfd->clockid = clockid;
+	curr = steely_current_thread();
+	xntimer_init(&tfd->timer, clock, timerfd_handler,
+		     curr ? curr->sched : NULL, XNTIMER_UGRAVITY);
+	xnsynch_init(&tfd->readers, XNSYNCH_PRIO, NULL);
+	xnselect_init(&tfd->read_select);
+	tfd->target = NULL;
+
+	ret = rtdm_fd_enter(&tfd->fd, ufd, STEELY_TIMERFD_MAGIC, &timerfd_ops);
+	if (ret < 0)
+		goto fail;
+
+	return ufd;
+fail:
+	xnselect_destroy(&tfd->read_select);
+	xnsynch_destroy(&tfd->readers);
+	xntimer_destroy(&tfd->timer);
+	__rtdm_anon_putfd(ufd);
+fail_getfd:
+	xnfree(tfd);
+
+	return ret;
+}
+
+static inline struct steely_tfd *tfd_get(int ufd)
+{
+	struct rtdm_fd *fd;
+
+	fd = rtdm_fd_get(ufd, STEELY_TIMERFD_MAGIC);
+	if (IS_ERR(fd)) {
+		int err = PTR_ERR(fd);
+		if (err == -EBADF && steely_current_process() == NULL)
+			err = -EPERM;
+		return ERR_PTR(err);
+	}
+
+	return container_of(fd, struct steely_tfd, fd);
+}
+
+static inline void tfd_put(struct steely_tfd *tfd)
+{
+	rtdm_fd_put(&tfd->fd);
+}
+
+int __steely_timerfd_settime(int fd, int flags,
+			     const struct itimerspec *value,
+			     struct itimerspec *ovalue)
+{
+	struct steely_tfd *tfd;
+	int cflag, ret;
+	spl_t s;
+
+	if (flags & ~STEELY_TFD_SETTIME_FLAGS)
+		return -EINVAL;
+
+	tfd = tfd_get(fd);
+	if (IS_ERR(tfd))
+		return PTR_ERR(tfd);
+
+	cflag = (flags & TFD_TIMER_ABSTIME) ? TIMER_ABSTIME : 0;
+
+	xnlock_get_irqsave(&nklock, s);
+
+	tfd->target = NULL;
+	if (flags & TFD_WAKEUP) {
+		tfd->target = steely_current_thread();
+		if (tfd->target == NULL) {
+			ret = -EPERM;
+			goto out;
+		}
+	}
+
+	if (ovalue)
+		__steely_timer_getval(&tfd->timer, ovalue);
+
+	xntimer_set_sched(&tfd->timer, xnsched_current());
+
+	ret = __steely_timer_setval(&tfd->timer,
+				    clock_flag(cflag, tfd->clockid), value);
+out:
+	xnlock_put_irqrestore(&nklock, s);
+
+	tfd_put(tfd);
+
+	return ret;
+}
+
+STEELY_SYSCALL(timerfd_settime, primary,
+	       (int fd, int flags,
+		const struct itimerspec __user *new_value,
+		struct itimerspec __user *old_value))
+{
+	struct itimerspec ovalue, value;
+	int ret;
+
+	ret = steely_copy_from_user(&value, new_value, sizeof(value));
+	if (ret)
+		return ret;
+
+	ret = __steely_timerfd_settime(fd, flags, &value, &ovalue);
+	if (ret)
+		return ret;
+
+	if (old_value) {
+		ret = steely_copy_to_user(old_value, &ovalue, sizeof(ovalue));
+		value.it_value.tv_sec = 0;
+		value.it_value.tv_nsec = 0;
+		__steely_timerfd_settime(fd, flags, &value, NULL);
+	}
+
+	return ret;
+}
+
+int __steely_timerfd_gettime(int fd, struct itimerspec *value)
+{
+	struct steely_tfd *tfd;
+	spl_t s;
+
+	tfd = tfd_get(fd);
+	if (IS_ERR(tfd))
+		return PTR_ERR(tfd);
+
+	xnlock_get_irqsave(&nklock, s);
+	__steely_timer_getval(&tfd->timer, value);
+	xnlock_put_irqrestore(&nklock, s);
+
+	tfd_put(tfd);
+
+	return 0;
+}
+
+STEELY_SYSCALL(timerfd_gettime, current,
+	       (int fd, struct itimerspec __user *curr_value))
+{
+	struct itimerspec value;
+	int ret;
+
+	ret = __steely_timerfd_gettime(fd, &value);
+
+	return ret ?: steely_copy_to_user(curr_value, &value, sizeof(value));
+}

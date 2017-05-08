@@ -16,8 +16,8 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  */
-#ifndef _STEELY_KERNEL_MAP_H
-#define _STEELY_KERNEL_MAP_H
+#ifndef _STEELY_MAP_H
+#define _STEELY_MAP_H
 
 #include <asm/bitsperlong.h>
 
@@ -64,4 +64,4 @@ static inline void *xnmap_fetch(struct xnmap *map, int key)
 	return map->objarray[ofkey];
 }
 
-#endif /* !_STEELY_KERNEL_MAP_H */
+#endif /* !_STEELY_MAP_H */

@@ -16,10 +16,10 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  */
-#ifndef _STEELY_KERNEL_SCHED_WEAK_H
-#define _STEELY_KERNEL_SCHED_WEAK_H
+#ifndef _STEELY_SCHED_WEAK_H
+#define _STEELY_SCHED_WEAK_H
 
-#ifndef _STEELY_KERNEL_SCHED_H
+#ifndef _STEELY_SCHED_H
 #error "please don't include steely/sched-weak.h directly"
 #endif
 
@@ -49,4 +49,4 @@ static inline int xnsched_weak_init_thread(struct steely_thread *thread)
 
 #endif /* CONFIG_STEELY_SCHED_WEAK */
 
-#endif /* !_STEELY_KERNEL_SCHED_WEAK_H */
+#endif /* !_STEELY_SCHED_WEAK_H */

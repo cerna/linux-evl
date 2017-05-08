@@ -24,9 +24,8 @@
 #include <linux/fs.h>
 #include <linux/fdtable.h>
 #include <linux/anon_inodes.h>
-#include <steely/ppd.h>
 #include <steely/heap.h>
-#include <steely/posix/process.h>
+#include <steely/process.h>
 #include "internal.h"
 #include <trace/events/steely.h>
 

@@ -19,7 +19,7 @@
 #include <linux/module.h>
 #include <steely/compat.h>
 #include <asm/steely/syscall.h>
-#include <steely/posix/mqueue.h>
+#include <steely/mqueue.h>
 
 int sys32_get_timespec(struct timespec *ts,
 		       const struct compat_timespec __user *cts)

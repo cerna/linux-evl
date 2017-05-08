@@ -16,8 +16,8 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  */
-#ifndef _STEELY_KERNEL_ASSERT_H
-#define _STEELY_KERNEL_ASSERT_H
+#ifndef _STEELY_ASSERT_H
+#define _STEELY_ASSERT_H
 
 #include <linux/kconfig.h>
 #include <steely/ancillaries.h>
@@ -70,4 +70,4 @@
 #define preemptible_only()	STEELY_BUG_ON(CONTEXT, hard_irqs_disabled() != 0)
 #endif
 
-#endif /* !_STEELY_KERNEL_ASSERT_H */
+#endif /* !_STEELY_ASSERT_H */

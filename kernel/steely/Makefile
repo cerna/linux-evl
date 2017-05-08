@@ -1,25 +1,37 @@
-obj-$(CONFIG_STEELY) += steely.o rtdm/ posix/
+obj-$(CONFIG_STEELY) += steely.o rtdm/
 
 ccflags-y += -Ikernel
 
-steely-y :=	arith.o 	\
-		bufd.o		\
-		clock.o		\
-		coreclk.o	\
-		heap.o		\
-		init.o		\
-		intr.o		\
-		lock.o		\
-		registry.o	\
-		sched-idle.o	\
-		sched-rt.o	\
-		sched.o		\
-		select.o	\
-		synch.o		\
-		syscall.o	\
-		thread.o	\
-		timer.o		\
-		tree.o
+steely-y :=		\
+	bufd.o		\
+	clock.o		\
+	cond.o		\
+	coreclk.o	\
+	corectl.o	\
+	event.o		\
+	heap.o		\
+	init.o		\
+	intr.o		\
+	io.o		\
+	lock.o		\
+	memory.o	\
+	monitor.o	\
+	mqueue.o	\
+	mutex.o		\
+	process.o	\
+	registry.o	\
+	sched.o		\
+	sched-rt.o	\
+	sched-idle.o	\
+	select.o	\
+	sem.o		\
+	signal.o	\
+	synch.o		\
+	syscall.o	\
+	thread.o	\
+	timer.o		\
+	timerfd.o	\
+	tree.o
 
 steely-$(CONFIG_STEELY_SCHED_QUOTA) += sched-quota.o
 steely-$(CONFIG_STEELY_SCHED_WEAK) += sched-weak.o

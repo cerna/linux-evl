@@ -16,8 +16,8 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  */
-#ifndef _STEELY_KERNEL_BUFD_H
-#define _STEELY_KERNEL_BUFD_H
+#ifndef _STEELY_BUFD_H
+#define _STEELY_BUFD_H
 
 #include <linux/types.h>
 
@@ -83,4 +83,4 @@ static inline void xnbufd_reset(struct xnbufd *bufd)
 	bufd->b_off = 0;
 }
 
-#endif /* !_STEELY_KERNEL_BUFD_H */
+#endif /* !_STEELY_BUFD_H */

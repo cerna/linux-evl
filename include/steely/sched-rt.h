@@ -16,10 +16,10 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  */
-#ifndef _STEELY_KERNEL_SCHED_RT_H
-#define _STEELY_KERNEL_SCHED_RT_H
+#ifndef _STEELY_SCHED_RT_H
+#define _STEELY_SCHED_RT_H
 
-#ifndef _STEELY_KERNEL_SCHED_H
+#ifndef _STEELY_SCHED_H
 #error "please don't include steely/sched-rt.h directly"
 #endif
 
@@ -140,4 +140,4 @@ static inline struct steely_thread *xnsched_rt_pick(struct xnsched *sched)
 
 void xnsched_rt_tick(struct xnsched *sched);
 
-#endif /* !_STEELY_KERNEL_SCHED_RT_H */
+#endif /* !_STEELY_SCHED_RT_H */

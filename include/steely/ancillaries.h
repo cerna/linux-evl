@@ -16,8 +16,8 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  */
-#ifndef _STEELY_KERNEL_ANCILLARIES_H
-#define _STEELY_KERNEL_ANCILLARIES_H
+#ifndef _STEELY_ANCILLARIES_H
+#define _STEELY_ANCILLARIES_H
 
 #include <linux/kernel.h>
 #include <linux/string.h>
@@ -65,4 +65,4 @@ void __knamecpy_requires_character_array_as_destination(void);
 
 #define get_current_uuid() from_kuid_munged(current_user_ns(), current_uid())
 
-#endif /* !_STEELY_KERNEL_ANCILLARIES_H */
+#endif /* !_STEELY_ANCILLARIES_H */

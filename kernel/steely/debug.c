@@ -25,13 +25,12 @@
 #include <linux/vmalloc.h>
 #include <linux/sched/debug.h>
 #include <linux/sched/mm.h>
+#include <steely/process.h>
 #include <steely/sched.h>
 #include <steely/heap.h>
 #include <steely/clock.h>
-#include <steely/ppd.h>
 #include <uapi/steely/signal.h>
 #include <asm/steely/syscall.h>
-#include "posix/process.h"
 #include "debug.h"
 
 struct xnvfile_directory steely_debug_vfroot;

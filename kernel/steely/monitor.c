@@ -1,0 +1,418 @@
+/*
+ * Copyright (C) 2011 Philippe Gerum <rpm@xenomai.org>
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation; either version 2 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+ */
+#include <steely/thread.h>
+#include <steely/clock.h>
+#include <steely/monitor.h>
+#include <trace/events/steely.h>
+#include "internal.h"
+
+/*
+ * The Steely monitor is a double-wait condition object, serializing
+ * accesses through a gate. It behaves like a mutex + two condition
+ * variables combo with extended signaling logic. Folding several
+ * conditions and the serialization support into a single object
+ * performs better on low end hw caches and allows for specific
+ * optimizations, compared to using separate general-purpose mutex and
+ * condvars.
+ *
+ * Threads can wait for some resource(s) to be granted (consumer
+ * side), or wait for the available resource(s) to drain (producer
+ * side).  Therefore, signals are thread-directed for the grant side,
+ * and monitor-directed for the drain side.
+ *
+ * Typically, a consumer would wait for the GRANT condition to be
+ * satisfied, signaling the DRAINED condition when more resources
+ * could be made available if the protocol implements output
+ * contention (e.g. the write side of a message queue waiting for the
+ * consumer to release message slots). Conversely, a producer would
+ * wait for the DRAINED condition to be satisfied, issuing GRANT
+ * signals once more resources have been made available to the
+ * consumer.
+ */
+STEELY_SYSCALL(monitor_init, current,
+	       (struct steely_monitor_shadow __user *u_mon,
+		clockid_t clk_id, int flags))
+{
+	struct steely_monitor_shadow shadow;
+	struct steely_monitor_state *state;
+	struct steely_monitor *mon;
+	int pshared, tmode, ret;
+	struct steely_umm *umm;
+	unsigned long stateoff;
+	spl_t s;
+
+	tmode = clock_flag(TIMER_ABSTIME, clk_id);
+	if (tmode < 0)
+		return -EINVAL;
+
+	mon = xnmalloc(sizeof(*mon));
+	if (mon == NULL)
+		return -ENOMEM;
+
+	pshared = (flags & STEELY_MONITOR_SHARED) != 0;
+	umm = &steely_ppd_get(pshared)->umm;
+	state = steely_umm_alloc(umm, sizeof(*state));
+	if (state == NULL) {
+		xnfree(mon);
+		return -EAGAIN;
+	}
+
+	ret = xnregistry_enter_anon(mon, &mon->resnode.handle);
+	if (ret) {
+		steely_umm_free(umm, state);
+		xnfree(mon);
+		return ret;
+	}
+
+	mon->state = state;
+	xnsynch_init(&mon->gate, XNSYNCH_PI, &state->owner);
+	xnsynch_init(&mon->drain, XNSYNCH_PRIO, NULL);
+	mon->flags = flags;
+	mon->tmode = tmode;
+	INIT_LIST_HEAD(&mon->waiters);
+
+	xnlock_get_irqsave(&nklock, s);
+	steely_add_resource(&mon->resnode, monitor, pshared);
+	mon->magic = STEELY_MONITOR_MAGIC;
+	xnlock_put_irqrestore(&nklock, s);
+
+	state->flags = 0;
+	stateoff = steely_umm_offset(umm, state);
+	STEELY_BUG_ON(STEELY, stateoff != (__u32)stateoff);
+	shadow.flags = flags;
+	shadow.handle = mon->resnode.handle;
+	shadow.state_offset = (__u32)stateoff;
+
+	return steely_copy_to_user(u_mon, &shadow, sizeof(*u_mon));
+}
+
+/* nklock held, irqs off */
+static int monitor_enter(xnhandle_t handle, struct steely_thread *curr)
+{
+	struct steely_monitor *mon;
+	int info;
+
+	mon = xnregistry_lookup(handle, NULL); /* (Re)validate. */
+	if (mon == NULL || mon->magic != STEELY_MONITOR_MAGIC)
+		return -EINVAL;
+
+	info = xnsynch_acquire(&mon->gate, XN_INFINITE, XN_RELATIVE);
+	if (info)
+		/* Break or error, no timeout possible. */
+		return info & XNBREAK ? -EINTR : -EINVAL;
+
+	mon->state->flags &= ~(STEELY_MONITOR_SIGNALED|STEELY_MONITOR_BROADCAST);
+
+	return 0;
+}
+
+STEELY_SYSCALL(monitor_enter, primary,
+	       (struct steely_monitor_shadow __user *u_mon))
+{
+	struct steely_thread *curr = steely_current_thread();
+	xnhandle_t handle;
+	int ret;
+	spl_t s;
+
+	handle = steely_get_handle_from_user(&u_mon->handle);
+
+	xnlock_get_irqsave(&nklock, s);
+	ret = monitor_enter(handle, curr);
+	xnlock_put_irqrestore(&nklock, s);
+
+	return ret;
+}
+
+/* nklock held, irqs off */
+static void monitor_wakeup(struct steely_monitor *mon)
+{
+	struct steely_monitor_state *state = mon->state;
+	struct steely_thread *thread, *tmp;
+	int bcast;
+
+	/*
+	 * Having the GRANT signal pending does not necessarily mean
+	 * that somebody is actually waiting for it, so we have to
+	 * check both conditions below.
+	 */
+	bcast = (state->flags & STEELY_MONITOR_BROADCAST) != 0;
+	if ((state->flags & STEELY_MONITOR_GRANTED) == 0 ||
+	    list_empty(&mon->waiters))
+		goto drain;
+
+	/*
+	 * Unblock waiters requesting a grant, either those who
+	 * received it only or all of them, depending on the broadcast
+	 * bit.
+	 *
+	 * We update the PENDED flag to inform userland about the
+	 * presence of waiters, so that it may decide not to issue any
+	 * syscall for exiting the monitor if nobody else is waiting
+	 * at the gate.
+	 */
+	list_for_each_entry_safe(thread, tmp, &mon->waiters, monitor_link) {
+		/*
+		 * A thread might receive a grant signal albeit it
+		 * does not wait on a monitor, or it might have timed
+		 * out before we got there, so we really have to check
+		 * that ->wchan does match our sleep queue.
+		 */
+		if (bcast ||
+		    (thread->u_window->grant_value &&
+		     thread->wchan == &thread->monitor_synch)) {
+			xnsynch_wakeup_this_sleeper(&thread->monitor_synch, thread);
+			list_del_init(&thread->monitor_link);
+		}
+	}
+drain:
+	/*
+	 * Unblock threads waiting for a drain event if that signal is
+	 * pending, either one or all, depending on the broadcast
+	 * flag.
+	 */
+	if ((state->flags & STEELY_MONITOR_DRAINED) != 0 &&
+	    xnsynch_pended_p(&mon->drain)) {
+		if (bcast)
+			xnsynch_flush(&mon->drain, 0);
+		else
+			xnsynch_wakeup_one_sleeper(&mon->drain);
+	}
+
+	if (list_empty(&mon->waiters) && !xnsynch_pended_p(&mon->drain))
+		state->flags &= ~STEELY_MONITOR_PENDED;
+}
+
+int __steely_monitor_wait(struct steely_monitor_shadow __user *u_mon,
+			  int event, const struct timespec *ts,
+			  int __user *u_ret)
+{
+	struct steely_thread *curr = steely_current_thread();
+	struct steely_monitor_state *state;
+	ktime_t timeout = XN_INFINITE;
+	int ret = 0, opret = 0, info;
+	struct steely_monitor *mon;
+	struct xnsynch *synch;
+	xnhandle_t handle;
+	xntmode_t tmode;
+	spl_t s;
+
+	handle = steely_get_handle_from_user(&u_mon->handle);
+
+	if (ts)
+		timeout = ktime_add_ns(timespec_to_ktime(*ts), 1);
+
+	xnlock_get_irqsave(&nklock, s);
+
+	mon = xnregistry_lookup(handle, NULL);
+	if (mon == NULL || mon->magic != STEELY_MONITOR_MAGIC) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	/*
+	 * The current thread might have sent signals to the monitor
+	 * it wants to sleep on: wake up satisfied waiters before
+	 * going to sleep.
+	 */
+	state = mon->state;
+	if (state->flags & STEELY_MONITOR_SIGNALED)
+		monitor_wakeup(mon);
+
+	/* Release the gate prior to waiting, all atomically. */
+	xnsynch_release(&mon->gate, curr);
+
+	synch = &curr->monitor_synch;
+	if (event & STEELY_MONITOR_WAITDRAIN)
+		synch = &mon->drain;
+	else {
+		curr->u_window->grant_value = 0;
+		list_add_tail(&curr->monitor_link, &mon->waiters);
+	}
+	state->flags |= STEELY_MONITOR_PENDED;
+
+	tmode = ts ? mon->tmode : XN_RELATIVE;
+	info = xnsynch_sleep_on(synch, timeout, tmode);
+	if (info) {
+		if ((event & STEELY_MONITOR_WAITDRAIN) == 0 &&
+		    !list_empty(&curr->monitor_link))
+			list_del_init(&curr->monitor_link);
+
+		if (list_empty(&mon->waiters) && !xnsynch_pended_p(&mon->drain))
+			state->flags &= ~STEELY_MONITOR_PENDED;
+
+		if (info & XNBREAK) {
+			opret = -EINTR;
+			goto out;
+		}
+		if (info & XNTIMEO)
+			opret = -ETIMEDOUT;
+	}
+
+	ret = monitor_enter(handle, curr);
+out:
+	xnlock_put_irqrestore(&nklock, s);
+
+	__xn_put_user(opret, u_ret);
+
+	return ret;
+}
+
+STEELY_SYSCALL(monitor_wait, nonrestartable,
+	       (struct steely_monitor_shadow __user *u_mon,
+	       int event, const struct timespec __user *u_ts,
+	       int __user *u_ret))
+{
+	struct timespec ts, *tsp = NULL;
+	int ret;
+
+	if (u_ts) {
+		tsp = &ts;
+		ret = steely_copy_from_user(&ts, u_ts, sizeof(ts));
+		if (ret)
+			return ret;
+	}
+
+	return __steely_monitor_wait(u_mon, event, tsp, u_ret);
+}
+
+STEELY_SYSCALL(monitor_sync, nonrestartable,
+	       (struct steely_monitor_shadow __user *u_mon))
+{
+	struct steely_monitor *mon;
+	struct steely_thread *curr;
+	xnhandle_t handle;
+	int ret = 0;
+	spl_t s;
+
+	handle = steely_get_handle_from_user(&u_mon->handle);
+	curr = steely_current_thread();
+
+	xnlock_get_irqsave(&nklock, s);
+
+	mon = xnregistry_lookup(handle, NULL);
+	if (mon == NULL || mon->magic != STEELY_MONITOR_MAGIC)
+		ret = -EINVAL;
+	else if (mon->state->flags & STEELY_MONITOR_SIGNALED) {
+		monitor_wakeup(mon);
+		xnsynch_release(&mon->gate, curr);
+		xnsched_run();
+		ret = monitor_enter(handle, curr);
+	}
+
+	xnlock_put_irqrestore(&nklock, s);
+
+	return ret;
+}
+
+STEELY_SYSCALL(monitor_exit, primary,
+	       (struct steely_monitor_shadow __user *u_mon))
+{
+	struct steely_monitor *mon;
+	struct steely_thread *curr;
+	xnhandle_t handle;
+	int ret = 0;
+	spl_t s;
+
+	handle = steely_get_handle_from_user(&u_mon->handle);
+	curr = steely_current_thread();
+
+	xnlock_get_irqsave(&nklock, s);
+
+	mon = xnregistry_lookup(handle, NULL);
+	if (mon == NULL || mon->magic != STEELY_MONITOR_MAGIC)
+		ret = -EINVAL;
+	else {
+		if (mon->state->flags & STEELY_MONITOR_SIGNALED)
+			monitor_wakeup(mon);
+
+		xnsynch_release(&mon->gate, curr);
+		xnsched_run();
+	}
+
+	xnlock_put_irqrestore(&nklock, s);
+
+	return ret;
+}
+
+STEELY_SYSCALL(monitor_destroy, primary,
+	       (struct steely_monitor_shadow __user *u_mon))
+{
+	struct steely_monitor_state *state;
+	struct steely_monitor *mon;
+	struct steely_thread *curr;
+	xnhandle_t handle;
+	int ret = 0;
+	spl_t s;
+
+	handle = steely_get_handle_from_user(&u_mon->handle);
+	curr = steely_current_thread();
+
+	xnlock_get_irqsave(&nklock, s);
+
+	mon = xnregistry_lookup(handle, NULL);
+	if (mon == NULL || mon->magic != STEELY_MONITOR_MAGIC) {
+		ret = -EINVAL;
+		goto fail;
+	}
+
+	state = mon->state;
+	if ((state->flags & STEELY_MONITOR_PENDED) != 0 ||
+	    xnsynch_pended_p(&mon->drain) || !list_empty(&mon->waiters)) {
+		ret = -EBUSY;
+		goto fail;
+	}
+
+	/*
+	 * A monitor must be destroyed by the thread currently holding
+	 * its gate lock.
+	 */
+	if (xnsynch_owner_check(&mon->gate, curr)) {
+		ret = -EPERM;
+		goto fail;
+	}
+
+	steely_monitor_reclaim(&mon->resnode, s); /* drops lock */
+
+	xnsched_run();
+
+	return 0;
+ fail:
+	xnlock_put_irqrestore(&nklock, s);
+	
+	return ret;
+}
+
+void steely_monitor_reclaim(struct steely_resnode *node, spl_t s)
+{
+	struct steely_monitor *mon;
+	struct steely_umm *umm;
+	int pshared;
+
+	mon = container_of(node, struct steely_monitor, resnode);
+	pshared = (mon->flags & STEELY_MONITOR_SHARED) != 0;
+	xnsynch_destroy(&mon->gate);
+	xnsynch_destroy(&mon->drain);
+	xnregistry_remove(node->handle);
+	steely_del_resource(node);
+	steely_mark_deleted(mon);
+	xnlock_put_irqrestore(&nklock, s);
+
+	umm = &steely_ppd_get(pshared)->umm;
+	steely_umm_free(umm, mon->state);
+	xnfree(mon);
+}

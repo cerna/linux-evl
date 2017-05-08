@@ -16,8 +16,8 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  */
 
-#ifndef _STEELY_KERNEL_VFILE_H
-#define _STEELY_KERNEL_VFILE_H
+#ifndef _STEELY_VFILE_H
+#define _STEELY_VFILE_H
 
 #ifdef CONFIG_STEELY_VFILE
 
@@ -269,4 +269,4 @@ void xnvfile_destroy_link(struct xnvfile_link *vlink)
 
 #endif /* !CONFIG_STEELY_VFILE */
 
-#endif /* !_STEELY_KERNEL_VFILE_H */
+#endif /* !_STEELY_VFILE_H */

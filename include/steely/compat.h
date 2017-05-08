@@ -15,8 +15,8 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  */
-#ifndef _STEELY_KERNEL_COMPAT_H
-#define _STEELY_KERNEL_COMPAT_H
+#ifndef _STEELY_COMPAT_H
+#define _STEELY_COMPAT_H
 
 #ifdef CONFIG_STEELY_ARCH_SYS3264
 
@@ -199,4 +199,4 @@ int sys32_put_iovec(struct compat_iovec __user *u_ciov,
 
 #define COMPAT_CASE(__op)	case __op __COMPAT_CASE(__op  ## _COMPAT)
 
-#endif /* !_STEELY_KERNEL_COMPAT_H */
+#endif /* !_STEELY_COMPAT_H */

@@ -16,10 +16,11 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  */
-#ifndef _STEELY_KERNEL_SCHED_H
-#define _STEELY_KERNEL_SCHED_H
+#ifndef _STEELY_SCHED_H
+#define _STEELY_SCHED_H
 
 #include <linux/percpu.h>
+#include <linux/list.h>
 #include <steely/lock.h>
 #include <steely/thread.h>
 #include <steely/schedqueue.h>
@@ -29,6 +30,7 @@
 #include <steely/sched-quota.h>
 #include <steely/vfile.h>
 #include <steely/assert.h>
+#include <steely/syscall.h>
 #include <asm/steely/machine.h>
 
 /** Shared scheduler status flags **/
@@ -653,4 +655,88 @@ static inline void xnsched_kick(struct steely_thread *thread)
 
 #endif /* !CONFIG_STEELY_SCHED_CLASSES */
 
-#endif /* !_STEELY_KERNEL_SCHED_H */
+struct steely_resources;
+struct steely_process;
+
+struct steely_sched_group {
+#ifdef CONFIG_STEELY_SCHED_QUOTA
+	struct xnsched_quota_group quota;
+#endif
+	struct steely_resources *scope;
+	int pshared;
+	struct list_head next;
+};
+
+int __steely_sched_weightprio(int policy,
+			      const struct sched_param_ex *param_ex);
+
+int __steely_sched_setconfig_np(int cpu, int policy,
+				void __user *u_config,
+				size_t len,
+				union sched_config *(*fetch_config)
+				(int policy, const void __user *u_config,
+				 size_t *len),
+				int (*ack_config)(int policy,
+						  const union sched_config *config,
+						  void __user *u_config));
+
+ssize_t __steely_sched_getconfig_np(int cpu, int policy,
+				    void __user *u_config,
+				    size_t len,
+				    union sched_config *(*fetch_config)
+				    (int policy, const void __user *u_config,
+				     size_t *len),
+				    ssize_t (*put_config)(int policy,
+							  void __user *u_config, size_t u_len,
+							  const union sched_config *config,
+							  size_t len));
+int steely_sched_setscheduler_ex(pid_t pid,
+				 int policy,
+				 const struct sched_param_ex *param_ex,
+				 __u32 __user *u_winoff,
+				 int __user *u_promoted);
+
+int steely_sched_getscheduler_ex(pid_t pid,
+				 int *policy_r,
+				 struct sched_param_ex *param_ex);
+
+struct xnsched_class *
+steely_sched_policy_param(union xnsched_policy_param *param,
+			  int u_policy, const struct sched_param_ex *param_ex,
+			  ktime_t *tslice_r);
+
+STEELY_SYSCALL_DECL(sched_yield, (void));
+
+STEELY_SYSCALL_DECL(sched_weightprio,
+		    (int policy, const struct sched_param_ex __user *u_param));
+
+STEELY_SYSCALL_DECL(sched_minprio, (int policy));
+
+STEELY_SYSCALL_DECL(sched_maxprio, (int policy));
+
+STEELY_SYSCALL_DECL(sched_setconfig_np,
+		    (int cpu,
+		     int policy,
+		     union sched_config __user *u_config,
+		     size_t len));
+
+STEELY_SYSCALL_DECL(sched_getconfig_np,
+		    (int cpu, int policy,
+		     union sched_config __user *u_config,
+		     size_t len));
+
+STEELY_SYSCALL_DECL(sched_setscheduler_ex,
+		    (pid_t pid,
+		     int policy,
+		     const struct sched_param_ex __user *u_param,
+		     __u32 __user *u_winoff,
+		     int __user *u_promoted));
+
+STEELY_SYSCALL_DECL(sched_getscheduler_ex,
+		    (pid_t pid,
+		     int __user *u_policy,
+		     struct sched_param_ex __user *u_param));
+
+void steely_sched_reclaim(struct steely_process *process);
+
+#endif /* !_STEELY_SCHED_H */

@@ -45,15 +45,12 @@
 #include <steely/select.h>
 #include <steely/lock.h>
 #include <steely/thread.h>
+#include <steely/sched.h>
+#include <steely/signal.h>
+#include <steely/sem.h>
 #include <trace/events/steely.h>
 #include <asm-generic/steely/mayday.h>
-#include "posix/internal.h"
-#include "posix/thread.h"
-#include "posix/sched.h"
-#include "posix/signal.h"
-#include "posix/timer.h"
-#include "posix/clock.h"
-#include "posix/sem.h"
+#include "internal.h"
 #include "debug.h"
 
 static int steely_map_kernel(struct steely_thread *thread, struct completion *done);
