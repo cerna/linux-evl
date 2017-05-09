@@ -142,6 +142,16 @@ static STEELY_SYSCALL(migrate, current, (int domain))
 	return 0;
 }
 
+void noinline steely_snapshot_trace(void)
+{
+	/*
+	 * Issuing a steely_trace() call for entering this function
+	 * will trigger a snapshot if the trace filter below is set:
+	 *
+	 * echo 'steely_snapshot_trace:snapshot' > tracing/set_ftrace_filter
+	 */
+}
+
 static STEELY_SYSCALL(trace, current,
 		      (int op, unsigned long a1,
 		       unsigned long a2, unsigned long a3))
