@@ -43,7 +43,6 @@
 #include <steely/synch.h>
 #include <steely/clock.h>
 #include <steely/stat.h>
-#include <steely/vdso.h>
 #include <steely/thread.h>
 #include <uapi/steely/signal.h>
 #include <uapi/steely/syscall.h>

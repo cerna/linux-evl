@@ -27,7 +27,6 @@
 #include <steely/process.h>
 #include <steely/pipe.h>
 #include <steely/select.h>
-#include <steely/vdso.h>
 #include <steely/coreclk.h>
 #include <steely/fd.h>
 #define CREATE_TRACE_POINTS

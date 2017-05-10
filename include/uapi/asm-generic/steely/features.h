@@ -23,8 +23,6 @@
 #define XNFEAT_STRING_LEN 64
 
 struct steely_featinfo {
-	/* Offset of nkvdso in the sem heap. */
-	__u32 vdso_offset;
 	/* ABI revision level. */
 	__u32 feat_abirev;
 	/* Available feature set. */

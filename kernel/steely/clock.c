@@ -31,7 +31,6 @@
 #include <steely/timer.h>
 #include <steely/clock.h>
 #include <steely/coreclk.h>
-#include <steely/vdso.h>
 #include <steely/thread.h>
 #include <uapi/steely/time.h>
 #include <trace/events/steely.h>

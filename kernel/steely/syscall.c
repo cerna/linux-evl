@@ -25,7 +25,6 @@
 #include <linux/sched/signal.h>
 #include <uapi/steely/corectl.h>
 #include <steely/tree.h>
-#include <steely/vdso.h>
 #include <steely/init.h>
 #include <steely/thread.h>
 #include <steely/mutex.h>
@@ -320,8 +319,6 @@ static STEELY_SYSCALL(bind, lostage,
 			      sizeof(f->feat_req_s));
 	f->feat_abirev = STEELY_ABI_REV;
 	collect_arch_features(f);
-
-	f->vdso_offset = steely_umm_offset(&steely_ppd_get(1)->umm, nkvdso);
 
 	if (steely_copy_to_user(u_breq, &breq, sizeof(breq)))
 		return -EFAULT;

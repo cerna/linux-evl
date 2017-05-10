@@ -23,16 +23,12 @@
 #include <linux/gfp.h>
 #include <linux/vmalloc.h>
 #include <steely/driver.h>
-#include <steely/vdso.h>
 #include <steely/process.h>
 #include <steely/memory.h>
 
 #define UMM_PRIVATE  0	/* Per-process user-mapped memory heap */
 #define UMM_SHARED   1	/* Shared user-mapped memory heap */
 #define SYS_GLOBAL   2	/* System heap (not mmapped) */
-
-struct xnvdso *nkvdso;
-EXPORT_SYMBOL_GPL(nkvdso);
 
 static void umm_vmopen(struct vm_area_struct *vma)
 {
@@ -252,11 +248,6 @@ static struct rtdm_device sysmem_device = {
 	.label = STEELY_MEMDEV_SYS,
 };
 
-static inline void init_vdso(void)
-{
-	nkvdso->features = XNVDSO_FEATURES;
-}
-
 int steely_memdev_init(void)
 {
 	int ret;
@@ -267,14 +258,6 @@ int steely_memdev_init(void)
 		return ret;
 
 	steely_umm_set_name(&steely_kernel_ppd.umm, "shared heap");
-
-	nkvdso = steely_umm_alloc(&steely_kernel_ppd.umm, sizeof(*nkvdso));
-	if (nkvdso == NULL) {
-		ret = -ENOMEM;
-		goto fail_vdso;
-	}
-
-	init_vdso();
 
 	ret = rtdm_dev_register(umm_devices + UMM_PRIVATE);
 	if (ret)
@@ -295,8 +278,6 @@ fail_sysmem:
 fail_shared:
 	rtdm_dev_unregister(umm_devices + UMM_PRIVATE);
 fail_private:
-	steely_umm_free(&steely_kernel_ppd.umm, nkvdso);
-fail_vdso:
 	steely_umm_destroy(&steely_kernel_ppd.umm);
 
 	return ret;
@@ -307,7 +288,6 @@ void steely_memdev_cleanup(void)
 	rtdm_dev_unregister(&sysmem_device);
 	rtdm_dev_unregister(umm_devices + UMM_SHARED);
 	rtdm_dev_unregister(umm_devices + UMM_PRIVATE);
-	steely_umm_free(&steely_kernel_ppd.umm, nkvdso);
 	steely_umm_destroy(&steely_kernel_ppd.umm);
 }
 
