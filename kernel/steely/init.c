@@ -23,7 +23,6 @@
 #include <steely/clock.h>
 #include <steely/timer.h>
 #include <steely/heap.h>
-#include <steely/intr.h>
 #include <steely/process.h>
 #include <steely/pipe.h>
 #include <steely/select.h>
@@ -319,8 +318,6 @@ static int __init steely_init(void)
 	ret = mach_setup();
 	if (ret)
 		goto cleanup_proc;
-
-	xnintr_mount();
 
 	ret = xnpipe_mount();
 	if (ret)

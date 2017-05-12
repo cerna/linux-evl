@@ -19,11 +19,9 @@
  * You should have received a copy of the GNU General Public License
  * along with Xenomai; if not, write to the Free Software Foundation,
  * Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
- *
- * @ingroup driverapi
  */
-#ifndef _STEELY_RTDM_DRIVER_H
-#define _STEELY_RTDM_DRIVER_H
+#ifndef _STEELY_DRIVER_H
+#define _STEELY_DRIVER_H
 
 #include <asm/atomic.h>
 #include <linux/list.h>
@@ -31,10 +29,10 @@
 #include <linux/cdev.h>
 #include <linux/wait.h>
 #include <linux/notifier.h>
+#include <linux/interrupt.h>
 #include <steely/version.h>
 #include <steely/heap.h>
 #include <steely/sched.h>
-#include <steely/intr.h>
 #include <steely/synch.h>
 #include <steely/select.h>
 #include <steely/clock.h>
@@ -505,22 +503,17 @@ static inline int __rtdm_timedwait(struct rtdm_waitqueue *wq,
 #define rtdm_for_each_waiter_safe(__pos, __tmp, __wq)	\
 	xnsynch_for_each_sleeper_safe(__pos, __tmp, &(__wq)->wait)
 
-typedef struct xnintr rtdm_irq_t;
+typedef struct rtdm_irq {
+	unsigned int irq;
+	void *dev_id;
+} rtdm_irq_t;
 
-/* Enable IRQ-sharing with other real-time drivers */
-#define RTDM_IRQTYPE_SHARED		XN_IRQTYPE_SHARED
-/* Mark IRQ as edge-triggered, relevant for correct handling of shared
- *  edge-triggered IRQs */
-#define RTDM_IRQTYPE_EDGE		XN_IRQTYPE_EDGE
-
-typedef int (*rtdm_irq_handler_t)(rtdm_irq_t *irq_handle);
+typedef irq_handler_t rtdm_irq_handler_t;
 
 /* Unhandled interrupt */
-#define RTDM_IRQ_NONE			XN_IRQ_NONE
+#define RTDM_IRQ_NONE			IRQ_NONE
 /* Denote handled interrupt */
-#define RTDM_IRQ_HANDLED		XN_IRQ_HANDLED
-/* Request interrupt disabling on exit */
-#define RTDM_IRQ_DISABLE		XN_IRQ_DISABLE
+#define RTDM_IRQ_HANDLED		IRQ_HANDLED
 
 #define rtdm_irq_get_arg(irq_handle, type)	((type *)irq_handle->dev_id)
 
@@ -532,19 +525,19 @@ static inline int rtdm_irq_free(rtdm_irq_t *irq_handle)
 {
 	if (!STEELY_ASSERT(STEELY, xnsched_root_p()))
 		return -EPERM;
-	xnintr_detach(irq_handle);
+	free_irq(irq_handle->irq, irq_handle);
 	return 0;
 }
 
 static inline int rtdm_irq_enable(rtdm_irq_t *irq_handle)
 {
-	xnintr_enable(irq_handle);
+	enable_irq(irq_handle->irq);
 	return 0;
 }
 
 static inline int rtdm_irq_disable(rtdm_irq_t *irq_handle)
 {
-	xnintr_disable(irq_handle);
+	disable_irq(irq_handle->irq);
 	return 0;
 }
 
@@ -942,4 +935,4 @@ static inline int rtdm_in_rt_context(void)
 	return current_irq_stage != &root_irq_stage;
 }
 
-#endif /* _STEELY_RTDM_DRIVER_H */
+#endif /* _STEELY_DRIVER_H */

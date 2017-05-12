@@ -25,7 +25,6 @@
 #include <steely/sched.h>
 #include <steely/thread.h>
 #include <steely/timer.h>
-#include <steely/intr.h>
 #include <steely/heap.h>
 #include <steely/clock.h>
 #include <uapi/steely/signal.h>
@@ -173,9 +172,8 @@ void xnsched_init(struct xnsched *sched, int cpu)
 			sched, &xnsched_class_idle, &param);
 
 	/*
-	 * No direct handler here since the host timer processing is
-	 * postponed to xnintr_irq_handler(), as part of the interrupt
-	 * exit code.
+	 * No direct handler here since proxy timer events are handled
+	 * specifically by the generic timer code.
 	 */
 	xntimer_init(&sched->htimer, &nkclock, NULL,
 		     sched, XNTIMER_IGRAVITY);
@@ -1025,7 +1023,6 @@ static spl_t vfile_schedstat_lock_s;
 
 static int vfile_schedstat_get_lock(struct xnvfile *vfile)
 {
-	xnintr_list_lock();
 	xnlock_get_irqsave(&nklock, vfile_schedstat_lock_s);
 
 	return 0;
@@ -1034,7 +1031,6 @@ static int vfile_schedstat_get_lock(struct xnvfile *vfile)
 static void vfile_schedstat_put_lock(struct xnvfile *vfile)
 {
 	xnlock_put_irqrestore(&nklock, vfile_schedstat_lock_s);
-	xnintr_list_unlock();
 }
 
 static struct xnvfile_lock_ops vfile_schedstat_lockops = {
@@ -1044,7 +1040,6 @@ static struct xnvfile_lock_ops vfile_schedstat_lockops = {
 
 struct vfile_schedstat_priv {
 	struct steely_thread *curr;
-	struct xnintr_iterator intr_it;
 };
 
 struct vfile_schedstat_data {
@@ -1077,16 +1072,10 @@ static struct xnvfile_snapshot schedstat_vfile = {
 static int vfile_schedstat_rewind(struct xnvfile_snapshot_iterator *it)
 {
 	struct vfile_schedstat_priv *priv = xnvfile_iterator_priv(it);
-	int irqnr;
 
-	/*
-	 * The activity numbers on each valid interrupt descriptor are
-	 * grouped under a pseudo-thread.
-	 */
 	priv->curr = list_first_entry(&nkthreadq, struct steely_thread, glink);
-	irqnr = xnintr_query_init(&priv->intr_it) * NR_CPUS;
 
-	return irqnr + steely_nrthreads;
+	return steely_nrthreads;
 }
 
 static int vfile_schedstat_next(struct xnvfile_snapshot_iterator *it,
@@ -1097,15 +1086,11 @@ static int vfile_schedstat_next(struct xnvfile_snapshot_iterator *it,
 	struct steely_thread *thread;
 	struct xnsched *sched;
 	ktime_t period;
-	int ret;
-
-	/*
-	 * When done with actual threads, scan interrupt descriptors.
-	 */
-	if (priv->curr == NULL)
-		goto scan_irqs;
 
 	thread = priv->curr;
+	if (thread == NULL)
+		return 0;
+
 	if (list_is_last(&thread->glink, &nkthreadq))
 		priv->curr = NULL;
 	else
@@ -1140,35 +1125,6 @@ static int vfile_schedstat_next(struct xnvfile_snapshot_iterator *it,
 	p->exectime_total = thread->stat.account.total;
 	thread->stat.lastperiod.total = thread->stat.account.total;
 	thread->stat.lastperiod.start = sched->last_account_switch;
-
-	return 1;
-
-scan_irqs:
-	ret = xnintr_query_next(&priv->intr_it, p->name);
-	if (ret) {
-		if (ret == -EAGAIN) {
-			xnvfile_touch(it->vfile); /* force rewind. */
-			return VFILE_SEQ_SKIP;
-		}
-		return 0;  /* Done. */
-	}
-
-	if (!xnsched_supported_cpu(priv->intr_it.cpu))
-		return VFILE_SEQ_SKIP;
-
-	p->cpu = priv->intr_it.cpu;
-	p->csw = priv->intr_it.hits;
-	p->exectime_period = priv->intr_it.exectime_period;
-	p->account_period = priv->intr_it.account_period;
-	p->exectime_total = priv->intr_it.exectime_total;
-	p->pid = 0;
-	p->state =  0;
-	p->ssw = 0;
-	p->xsc = 0;
-	p->pf = 0;
-	p->sched_class = &xnsched_class_idle;
-	p->cprio = 0;
-	p->period = 0;
 
 	return 1;
 }

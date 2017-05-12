@@ -19,7 +19,6 @@
 #include <steely/lock.h>
 #include <steely/clock.h>
 #include <steely/vfile.h>
-#include <steely/intr.h>
 #include <steely/heap.h>
 #include <steely/timer.h>
 #include <steely/sched.h>
@@ -183,7 +182,6 @@ void xnprocfs_cleanup_tree(void)
 	xnvfile_destroy_regular(&faults_vfile);
 	xnvfile_destroy_regular(&version_vfile);
 	xnvfile_destroy_regular(&latency_vfile);
-	xnintr_cleanup_proc();
 	xnheap_cleanup_proc();
 	xnclock_cleanup_proc();
 	xnsched_cleanup_proc();
@@ -204,7 +202,6 @@ int __init xnprocfs_init_tree(void)
 
 	xnclock_init_proc();
 	xnheap_init_proc();
-	xnintr_init_proc();
 	xnvfile_init_regular("latency", &latency_vfile, &steely_vfroot);
 	xnvfile_init_regular("version", &version_vfile, &steely_vfroot);
 	xnvfile_init_regular("faults", &faults_vfile, &steely_vfroot);

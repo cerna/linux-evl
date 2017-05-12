@@ -150,4 +150,8 @@ static inline char *xnstrdup(const char *s)
 	return strcpy(p, s);
 }
 
+void *steely_alloc_irq_work(size_t size);
+
+void steely_free_irq_work(void *p);
+
 #endif /* !_STEELY_HEAP_H */

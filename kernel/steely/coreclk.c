@@ -27,15 +27,12 @@
 #include <linux/slab.h>
 #include <steely/sched.h>
 #include <steely/timer.h>
-#include <steely/intr.h>
 #include <steely/clock.h>
 #include <steely/coreclk.h>
 #include <asm/steely/calibration.h>
 #include <trace/events/steely.h>
 
 unsigned int nkclock_lock;
-
-static inline xnstat_exectime_t *switch_stats(struct xnsched *sched);
 
 /*
  * This is our high-precision clock tick device, which operates the
@@ -109,11 +106,8 @@ static void proxy_device_unregister(struct clock_event_device *proxy_ced,
 static void core_clock_tick_handler(unsigned int irq)
 {
 	struct xnsched *sched = xnsched_current();
-	xnstat_exectime_t *prev;
 
 	STEELY_BUG_ON(STEELY, !xnsched_supported_cpu(xnsched_cpu(sched)));
-
-	prev = switch_stats(sched);
 
 	trace_steely_clock_entry(irq);
 
@@ -128,7 +122,6 @@ static void core_clock_tick_handler(unsigned int irq)
 	release_irq(irq);
 
 	trace_steely_clock_exit(irq);
-	xnstat_exectime_switch(sched, prev);
 
 	if (--sched->inesting == 0) {
 		sched->lflags &= ~XNINIRQ;
@@ -151,26 +144,6 @@ static void core_clock_event_handler(struct clock_event_device *real_ced)
 {
 	core_clock_tick_handler(real_ced->irq);
 }
-
-#ifdef CONFIG_STEELY_STATS
-static inline xnstat_exectime_t *switch_stats(struct xnsched *sched)
-{
-	struct xnirqstat *statp;
-	xnstat_exectime_t *prev;
-
-	statp = xnstat_percpu_data;
-	prev = xnstat_exectime_switch(sched, &statp->account);
-	xnstat_counter_inc(&statp->hits);
-
-	return prev;
-}
-
-#else	/* !CONFIG_STEELY_STATS */
-static inline xnstat_exectime_t *switch_stats(struct xnsched *sched)
-{
-	return NULL;
-}
-#endif	/* CONFIG_STEELY_STATS */
 
 void xnclock_core_notify_root(struct xnsched *sched) /* hw IRQs off. */
 {
@@ -219,10 +192,6 @@ int xnclock_core_takeover(void)
 		return ret;
 #endif
 
-#ifdef CONFIG_STEELY_STATS
-	xnintr_init(&nktimer, "Core timer", -1, NULL, 0);
-#endif /* CONFIG_STEELY_STATS */
-
 	/*
 	 * CAUTION:
 	 *
@@ -265,9 +234,6 @@ void xnclock_core_release(void)
 #ifdef CONFIG_SMP
 	free_percpu_irq(IPIPE_HRTIMER_IPI, &steely_machine_cpudata);
 #endif
-#ifdef CONFIG_STEELY_STATS
-	xnintr_destroy(&nktimer);
-#endif /* CONFIG_STEELY_STATS */
 	/*
 	 * When the kernel is swapping clock event devices on behalf
 	 * of enable_clock_devices(), it may end up calling

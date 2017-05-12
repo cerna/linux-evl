@@ -587,3 +587,22 @@ void xnheap_vfree(void *p)
 	vfree(p);
 }
 EXPORT_SYMBOL_GPL(xnheap_vfree);
+
+/*
+ * FIXME: we should have a dedicated heap for all irq_works, to avoid
+ * serialization with operations on the system heap. In addition, we
+ * should deal with transient lack of storage in this pool, on a
+ * real-time event signaling availability of memory in the pool
+ * (i.e. cleared when depleted). Per-cpu irq_work storage would be
+ * nice too (i.e. per-cpu heaps).
+ */
+
+void *steely_alloc_irq_work(size_t size)
+{
+	return xnmalloc(size);
+}
+
+void steely_free_irq_work(void *p)
+{
+	xnfree(p);
+}

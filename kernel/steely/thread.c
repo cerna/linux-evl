@@ -37,7 +37,6 @@
 #include <steely/timer.h>
 #include <steely/synch.h>
 #include <steely/heap.h>
-#include <steely/intr.h>
 #include <steely/registry.h>
 #include <steely/clock.h>
 #include <steely/stat.h>

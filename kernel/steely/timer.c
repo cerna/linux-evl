@@ -23,7 +23,6 @@
 #include <steely/sched.h>
 #include <steely/thread.h>
 #include <steely/timer.h>
-#include <steely/intr.h>
 #include <steely/clock.h>
 #include <steely/signal.h>
 #include <asm/div64.h>

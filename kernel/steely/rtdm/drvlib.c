@@ -562,26 +562,21 @@ out:
 
 EXPORT_SYMBOL_GPL(rtdm_mutex_timedlock);
 
-int rtdm_irq_request(rtdm_irq_t *irq_handle, unsigned int irq_no,
+int rtdm_irq_request(rtdm_irq_t *irq_handle, unsigned int irq,
 		     rtdm_irq_handler_t handler, unsigned long flags,
 		     const char *device_name, void *arg)
 {
-	int err;
-
 	if (!STEELY_ASSERT(STEELY, xnsched_root_p()))
 		return -EPERM;
 
-	err = xnintr_init(irq_handle, device_name, irq_no, handler, flags);
-	if (err)
-		return err;
+#ifdef CONFIG_SMP
+	irq_set_affinity(irq, &steely_cpu_affinity);
+#endif /* CONFIG_SMP */
 
-	err = xnintr_attach(irq_handle, arg);
-	if (err) {
-		xnintr_destroy(irq_handle);
-		return err;
-	}
+	irq_handle->irq = irq;
+	irq_handle->dev_id = arg;
 
-	return 0;
+	return request_irq(irq, handler, IRQF_PIPELINED, device_name, irq_handle);
 }
 
 EXPORT_SYMBOL_GPL(rtdm_irq_request);

@@ -11,7 +11,6 @@ steely-y :=		\
 	event.o		\
 	heap.o		\
 	init.o		\
-	intr.o		\
 	io.o		\
 	lock.o		\
 	memory.o	\
