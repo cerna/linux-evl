@@ -246,10 +246,12 @@ void root_irq_enable(void)
 	p = irq_root_this_context();
 	trace_hardirqs_on();
 	__clear_bit(IPIPE_STALL_FLAG, &p->status);
-	if (unlikely(irq_staged_waiting(p)))
+	if (unlikely(irq_staged_waiting(p))) {
 		irq_stage_sync_current();
-
-	hard_local_irq_enable();
+		hard_local_irq_enable();
+		preempt_check_resched();
+	} else
+		hard_local_irq_enable();
 }
 EXPORT_SYMBOL(root_irq_enable);
 
@@ -749,7 +751,7 @@ static void dispatch_irq_head(unsigned int irq, struct irq_desc *desc)
 	p = irq_head_this_context();
 	__clear_bit(IPIPE_STALL_FLAG, &p->status);
 
-	/* Are we still running in the head stage? */
+	/* Are we still running over the head stage? */
 	if (likely(irq_current_context == p)) {
 		/* Did we enter this code over the head stage? */
 		if (old->stage == head) {
