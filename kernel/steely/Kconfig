@@ -428,12 +428,6 @@ config STEELY_DEBUG_POSIX_SYNCHRO
 
 	  This option has negligible overhead.
  
-config STEELY_DEBUG_LEGACY
-        bool "Detect usage of legacy constructs/features"
-	default n
-	help
-	    Turns on detection of legacy API usage.
-
 endif # STEELY_DEBUG_USER
 
 config STEELY_DEBUG_TRACE_RELAX
