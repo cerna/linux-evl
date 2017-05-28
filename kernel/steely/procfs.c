@@ -135,42 +135,6 @@ static struct xnvfile_regular version_vfile = {
 	.ops = &version_vfile_ops,
 };
 
-static int faults_vfile_show(struct xnvfile_regular_iterator *it, void *data)
-{
-	int cpu, trap;
-
-	xnvfile_puts(it, "TRAP ");
-
-	for_each_realtime_cpu(cpu)
-		xnvfile_printf(it, "        CPU%d", cpu);
-
-	for (trap = 0; steely_machine.fault_labels[trap]; trap++) {
-		if (*steely_machine.fault_labels[trap] == '\0')
-			continue;
-
-		xnvfile_printf(it, "\n%3d: ", trap);
-
-		for_each_realtime_cpu(cpu)
-			xnvfile_printf(it, "%12u",
-				       per_cpu(steely_machine_cpudata, cpu).faults[trap]);
-
-		xnvfile_printf(it, "    (%s)",
-			       steely_machine.fault_labels[trap]);
-	}
-
-	xnvfile_putc(it, '\n');
-
-	return 0;
-}
-
-static struct xnvfile_regular_ops faults_vfile_ops = {
-	.show = faults_vfile_show,
-};
-
-static struct xnvfile_regular faults_vfile = {
-	.ops = &faults_vfile_ops,
-};
-
 void xnprocfs_cleanup_tree(void)
 {
 #if STEELY_DEBUG(STEELY)
@@ -179,7 +143,6 @@ void xnprocfs_cleanup_tree(void)
 #endif
 	xnvfile_destroy_dir(&steely_debug_vfroot);
 #endif /* STEELY_DEBUG(STEELY) */
-	xnvfile_destroy_regular(&faults_vfile);
 	xnvfile_destroy_regular(&version_vfile);
 	xnvfile_destroy_regular(&latency_vfile);
 	xnheap_cleanup_proc();
@@ -204,7 +167,6 @@ int __init xnprocfs_init_tree(void)
 	xnheap_init_proc();
 	xnvfile_init_regular("latency", &latency_vfile, &steely_vfroot);
 	xnvfile_init_regular("version", &version_vfile, &steely_vfroot);
-	xnvfile_init_regular("faults", &faults_vfile, &steely_vfroot);
 #ifdef CONFIG_STEELY_DEBUG
 	xnvfile_init_dir("debug", &steely_debug_vfroot, &steely_vfroot);
 #if STEELY_DEBUG(LOCKING)

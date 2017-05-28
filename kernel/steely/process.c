@@ -515,39 +515,23 @@ void arch_dovetail_init_task(struct task_struct *tsk)
 void dovetail_trap_hook(struct dovetail_trap_data *d)
 {
 	struct steely_thread *thread;
-	struct xnsched *sched;
 
-	raw_cpu_ptr(&steely_machine_cpudata)->faults[d->exception]++;
-	sched = xnsched_current();
-	thread = sched->curr;
+	primary_mode_only();
 
-	if (xnthread_test_state(thread, XNROOT))
-		return;
-
+	thread = xnsched_current_thread();
 	trace_steely_thread_fault(thread, d);
 
-	/*
-	 * If we experienced a trap on behalf of a shadow thread
-	 * running in primary mode, move it to the Linux domain,
-	 * leaving the kernel process the exception.
-	 */
 #if STEELY_DEBUG(STEELY) || STEELY_DEBUG(USER)
-	if (!user_mode(d->regs)) {
+	if (xnarch_fault_notify(d))
 		printk(STEELY_WARNING
 		       "switching %s to secondary mode after exception #%u in "
-		       "kernel-space at 0x%lx (pid %d)\n", thread->name,
+		       "%s context at %#lx (pid %d)\n",
+		       thread->name,
 		       xnarch_fault_trap(d),
-		       xnarch_fault_pc(d),
-		       xnthread_host_pid(thread));
-	} else if (xnarch_fault_notify(d)) /* Don't report debug traps */
-		printk(STEELY_WARNING
-		       "switching %s to secondary mode after exception #%u from "
-		       "user-space at 0x%lx (pid %d)\n", thread->name,
-		       xnarch_fault_trap(d),
+		       user_mode(d->regs) ? "user" : "kernel",
 		       xnarch_fault_pc(d),
 		       xnthread_host_pid(thread));
 #endif
-
 	if (xnarch_fault_pf_p(d))
 		/*
 		 * The page fault counter is not SMP-safe, but it's a
@@ -556,6 +540,11 @@ void dovetail_trap_hook(struct dovetail_trap_data *d)
 		 */
 		xnstat_counter_inc(&thread->stat.pf);
 
+	/*
+	 * We received a trap over the Steely context, switch back
+	 * Linux context so that the regular kernel can process the
+	 * exception.
+	 */
 	xnthread_relax(xnarch_fault_notify(d), SIGDEBUG_MIGRATE_FAULT);
 }
 
