@@ -37,26 +37,10 @@ static void mach_arm_prefault(struct vm_area_struct *vma)
 	}
 }
 
-static const char *const fault_labels[] = {
-	[IPIPE_TRAP_ACCESS] = "Data or instruction access",
-	[IPIPE_TRAP_SECTION] = "Section fault",
-	[IPIPE_TRAP_DABT] = "Generic data abort",
-	[IPIPE_TRAP_UNKNOWN] = "Unknown exception",
-	[IPIPE_TRAP_BREAK] = "Instruction breakpoint",
-	[IPIPE_TRAP_FPU] = "Floating point exception",
-	[IPIPE_TRAP_VFP] = "VFP Floating point exception",
-	[IPIPE_TRAP_UNDEFINSTR] = "Undefined instruction",
-#ifdef IPIPE_TRAP_ALIGNMENT
-	[IPIPE_TRAP_ALIGNMENT] = "Unaligned access exception",
-#endif /* IPIPE_TRAP_ALIGNMENT */
-	[IPIPE_NR_FAULTS] = NULL
-};
-
 struct steely_machine steely_machine = {
 	.name = "arm",
 	.init = NULL,
 	.late_init = NULL,
 	.cleanup = NULL,
 	.prefault = mach_arm_prefault,
-	.fault_labels = fault_labels,
 };

@@ -31,13 +31,11 @@ struct steely_machine {
 	int (*late_init)(void);
 	void (*cleanup)(void);
 	void (*prefault)(struct vm_area_struct *vma);
-	const char *const *fault_labels;
 };
 
 extern struct steely_machine steely_machine;
 
 struct steely_machine_cpudata {
-	unsigned int faults[IPIPE_NR_FAULTS];
 };
 
 DECLARE_PER_CPU(struct steely_machine_cpudata, steely_machine_cpudata);
