@@ -68,6 +68,8 @@ bool dovetail_enter_idle(void);
 
 void dovetail_exit_idle(void);
 
+void dovetail_clock_set(void);
+
 #ifdef CONFIG_DOVETAIL_TRACK_VM_GUEST
 void dovetail_hypervisor_stall(void);
 #else
@@ -263,6 +265,8 @@ static inline bool dovetail_enter_idle(void)
 }
 
 static inline void dovetail_exit_idle(void) { }
+
+static inline void dovetail_clock_set(void) { }
 
 #endif	/* !CONFIG_DOVETAIL */
 
