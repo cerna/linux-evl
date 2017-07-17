@@ -318,6 +318,10 @@ int dovetail_inband_switch_tail(void)
 	return !on_root;
 }
 
+void __weak dovetail_clock_set(void)
+{
+}
+
 int dovetail_start(void)
 {
 	check_root_stage();
