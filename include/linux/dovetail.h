@@ -42,6 +42,8 @@ void dovetail_handle_trap(unsigned int trapnr,
 
 void dovetail_handle_kevent(int event, void *data);
 
+void dovetail_clock_set(void);
+
 static inline void dovetail_signal_task(struct task_struct *p)
 {
 	if (test_ti_local_flags(task_thread_info(p), _TLF_DOVETAIL))
@@ -188,6 +190,8 @@ static inline int dovetail_context_switch_tail(void)
 
 #define dovetail_switch_mm_exit(flags)	\
   do { (void)(flags); } while (0)
+
+static inline void dovetail_clock_set(void) { }
 
 #endif	/* !CONFIG_DOVETAIL */
 
