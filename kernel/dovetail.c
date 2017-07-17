@@ -344,6 +344,8 @@ void dovetail_hypervisor_stall(void)
 EXPORT_SYMBOL_GPL(dovetail_hypervisor_stall);
 #endif
 
+void __weak dovetail_clock_set(void) { }
+
 void dovetail_host_events(struct irq_stage *stage, int event_mask)
 {
 	struct irq_stage_data *p;
