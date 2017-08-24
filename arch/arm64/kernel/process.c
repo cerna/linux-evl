@@ -83,8 +83,12 @@ void arch_cpu_idle(void)
 	 * tricks
 	 */
 	trace_cpu_idle_rcuidle(1, smp_processor_id());
+	/*
+	 * Turn on irqs only virtually, the idling op will turn them
+	 * on in the CPU upon return from interrupt.
+	 */
+	root_irq_enable_nosync();
 	cpu_do_idle();
-	local_irq_enable();
 	trace_cpu_idle_rcuidle(PWR_EVENT_EXIT, smp_processor_id());
 }
 

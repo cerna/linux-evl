@@ -912,6 +912,8 @@ static void do_signal(struct pt_regs *regs)
 asmlinkage void do_notify_resume(struct pt_regs *regs,
 				 unsigned int thread_flags)
 {
+	bool stalled = irqs_disabled();
+	
 	/*
 	 * The assembly code enters us with IRQs off, but it hasn't
 	 * informed the tracing code of that for efficiency reasons.
@@ -925,11 +927,21 @@ asmlinkage void do_notify_resume(struct pt_regs *regs,
 
 		if (thread_flags & _TIF_NEED_RESCHED) {
 			/* Unmask Debug and SError for the next task */
-			local_daif_restore(DAIF_PROCCTX_NOIRQ);
+			if (irqs_pipelined()) {
+				local_irq_disable();
+				hard_local_irq_enable();
+			} else
+				local_daif_restore(DAIF_PROCCTX_NOIRQ);
 
 			schedule();
+
+			if (irqs_pipelined())
+				local_irq_enable();
 		} else {
-			local_daif_restore(DAIF_PROCCTX);
+			if (irqs_pipelined())
+				local_irq_enable_full();
+			else
+				local_daif_restore(DAIF_PROCCTX);
 
 			if (thread_flags & _TIF_UPROBE)
 				uprobe_notify_resume(regs);
@@ -949,6 +961,9 @@ asmlinkage void do_notify_resume(struct pt_regs *regs,
 		local_daif_mask();
 		thread_flags = READ_ONCE(current_thread_info()->flags);
 	} while (thread_flags & _TIF_WORK_MASK);
+
+	if (irqs_pipelined() && stalled)
+		local_irq_disable();
 }
 
 unsigned long __ro_after_init signal_minsigstksz;
