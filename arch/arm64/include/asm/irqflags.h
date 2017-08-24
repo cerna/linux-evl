@@ -20,6 +20,10 @@
 
 #include <asm/ptrace.h>
 
+#define IRQMASK_I_BIT	PSR_I_BIT
+#define IRQMASK_I_POS	7
+#define IRQMASK_i_POS	31
+
 /*
  * Aarch64 has flags for masking: Debug, Asynchronous (serror), Interrupts and
  * FIQ exceptions, in the 'daif' register. We mask and unmask them in 'dai'
@@ -36,11 +40,11 @@
 /*
  * CPU interrupt mask handling.
  */
-static inline unsigned long arch_local_irq_save(void)
+static inline unsigned long native_irq_save(void)
 {
 	unsigned long flags;
 	asm volatile(
-		"mrs	%0, daif		// arch_local_irq_save\n"
+		"mrs	%0, daif		// native_irq_save\n"
 		"msr	daifset, #2"
 		: "=r" (flags)
 		:
@@ -48,19 +52,19 @@ static inline unsigned long arch_local_irq_save(void)
 	return flags;
 }
 
-static inline void arch_local_irq_enable(void)
+static inline void native_irq_enable(void)
 {
 	asm volatile(
-		"msr	daifclr, #2		// arch_local_irq_enable"
+		"msr	daifclr, #2		// native_irq_enable"
 		:
 		:
 		: "memory");
 }
 
-static inline void arch_local_irq_disable(void)
+static inline void native_irq_disable(void)
 {
 	asm volatile(
-		"msr	daifset, #2		// arch_local_irq_disable"
+		"msr	daifset, #2		// native_irq_disable"
 		:
 		:
 		: "memory");
@@ -69,11 +73,11 @@ static inline void arch_local_irq_disable(void)
 /*
  * Save the current interrupt enable state.
  */
-static inline unsigned long arch_local_save_flags(void)
+static inline unsigned long native_save_flags(void)
 {
 	unsigned long flags;
 	asm volatile(
-		"mrs	%0, daif		// arch_local_save_flags"
+		"mrs	%0, daif		// native_save_flags"
 		: "=r" (flags)
 		:
 		: "memory");
@@ -83,18 +87,27 @@ static inline unsigned long arch_local_save_flags(void)
 /*
  * restore saved IRQ state
  */
-static inline void arch_local_irq_restore(unsigned long flags)
+static inline void native_irq_restore(unsigned long flags)
 {
 	asm volatile(
-		"msr	daif, %0		// arch_local_irq_restore"
+		"msr	daif, %0		// native_irq_restore"
 	:
 	: "r" (flags)
 	: "memory");
 }
 
-static inline int arch_irqs_disabled_flags(unsigned long flags)
+static inline int native_irqs_disabled_flags(unsigned long flags)
 {
 	return flags & PSR_I_BIT;
 }
+
+static inline bool native_irqs_disabled(void)
+{
+	unsigned long flags = native_save_flags();
+	return native_irqs_disabled_flags(flags);
+}
+
+#include <asm/irq_pipeline.h>
+
 #endif
 #endif
