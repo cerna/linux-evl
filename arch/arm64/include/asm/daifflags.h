@@ -18,6 +18,12 @@
 
 #include <linux/irqflags.h>
 
+/*
+ * IRQ_PIPELINE: DAIF masking is only used in contexts where hard
+ * interrupt masking applies, so no need to virtualize for the root
+ * stage here.
+ */
+
 #define DAIF_PROCCTX		0
 #define DAIF_PROCCTX_NOIRQ	PSR_I_BIT
 
