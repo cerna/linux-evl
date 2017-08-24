@@ -294,7 +294,7 @@ void arm64_notify_die(const char *str, struct pt_regs *regs,
 }
 
 static LIST_HEAD(undef_hook);
-static DEFINE_RAW_SPINLOCK(undef_lock);
+static DEFINE_HARD_SPINLOCK(undef_lock);
 
 void register_undef_hook(struct undef_hook *hook)
 {
