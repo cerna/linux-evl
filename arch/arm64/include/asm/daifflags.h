@@ -18,6 +18,12 @@
 
 #include <linux/irqflags.h>
 
+/*
+ * IRQ_PIPELINE: DAIF masking is only used in contexts where hard
+ * interrupt masking applies, so no need to virtualize for the root
+ * stage here (the pipeline core does assume this).
+ */
+
 #define DAIF_PROCCTX		0
 #define DAIF_PROCCTX_NOIRQ	PSR_I_BIT
 
@@ -36,7 +42,7 @@ static inline unsigned long local_daif_save(void)
 {
 	unsigned long flags;
 
-	flags = arch_local_save_flags();
+	flags = native_save_flags();
 
 	local_daif_mask();
 
@@ -58,7 +64,7 @@ static inline void local_daif_restore(unsigned long flags)
 	if (!arch_irqs_disabled_flags(flags))
 		trace_hardirqs_on();
 
-	arch_local_irq_restore(flags);
+	native_irq_restore(flags);
 
 	if (arch_irqs_disabled_flags(flags))
 		trace_hardirqs_off();

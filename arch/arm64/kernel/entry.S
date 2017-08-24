@@ -386,7 +386,8 @@ alternative_insn eret, nop, ARM64_UNMAP_KERNEL_AT_EL0
 
 	/*
 	 * x19 should be preserved between irq_stack_entry and
-	 * irq_stack_exit.
+	 * irq_stack_exit. IRQ_PIPELINE: caution, we have to
+	 * preserve w0.
 	 */
 	.macro	irq_stack_exit
 	mov	sp, x19
@@ -399,7 +400,11 @@ tsk	.req	x28		// current thread_info
  * Interrupt handling.
  */
 	.macro	irq_handler
+#ifdef CONFIG_IRQ_PIPELINE
+	ldr	x1, =handle_arch_irq_pipelined
+#else
 	ldr_l	x1, handle_arch_irq
+#endif
 	mov	x0, sp
 	irq_stack_entry
 	blr	x1
@@ -608,14 +613,18 @@ el1_irq:
 
 	irq_handler
 
+#ifdef CONFIG_IRQ_PIPELINE
+	cbz     w0, 1f
+#endif
+
 #ifdef CONFIG_PREEMPT
 	ldr	x24, [tsk, #TSK_TI_PREEMPT]	// get preempt count
 	cbnz	x24, 1f				// preempt count != 0
 	bl	el1_preempt
-1:
 #endif
+1:
 #ifdef CONFIG_TRACE_IRQFLAGS
-	bl	trace_hardirqs_on
+	bl	trace_hardirqs_on_pipelined
 #endif
 	kernel_exit 1
 ENDPROC(el1_irq)
@@ -850,11 +859,14 @@ el0_irq_naked:
 1:
 #endif
 	irq_handler
-
 #ifdef CONFIG_TRACE_IRQFLAGS
-	bl	trace_hardirqs_on
+	bl	trace_hardirqs_on_pipelined
 #endif
-	b	ret_to_user
+#ifdef CONFIG_IRQ_PIPELINE
+	cbz	w0, work_done
+#endif
+	disable_daif
+	b	ret_to_user_noirq
 ENDPROC(el0_irq)
 
 el1_error:
@@ -887,6 +899,7 @@ work_pending:
 #ifdef CONFIG_TRACE_IRQFLAGS
 	bl	trace_hardirqs_on		// enabled while in userspace
 #endif
+work_done:
 	ldr	x1, [tsk, #TSK_TI_FLAGS]	// re-check for single-step
 	b	finish_ret_to_user
 /*
@@ -894,6 +907,12 @@ work_pending:
  */
 ret_to_user:
 	disable_daif
+#ifdef CONFIG_IRQ_PIPELINE
+	ldr	x0, [tsk, #TSK_TI_LOCAL_FLAGS]
+	tst	x0, #_TLF_OOB
+	b.ne	work_done
+#endif
+ret_to_user_noirq:
 	ldr	x1, [tsk, #TSK_TI_FLAGS]
 	and	x2, x1, #_TIF_WORK_MASK
 	cbnz	x2, work_pending
@@ -1066,6 +1085,7 @@ NOKPROBE(cpu_switch_to)
  * This is how we return from a fork.
  */
 ENTRY(ret_from_fork)
+	enable_irq_if_pipelined
 	bl	schedule_tail
 	cbz	x19, 1f				// not a kernel thread
 	mov	x0, x20

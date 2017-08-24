@@ -72,6 +72,12 @@
 	msr	daifclr, #2
 	.endm
 
+	.macro	enable_irq_if_pipelined
+#ifdef CONFIG_IRQ_PIPELINE
+	enable_irq
+#endif
+	.endm
+
 	.macro	save_and_disable_irq, flags
 	mrs	\flags, daif
 	msr	daifset, #2
