@@ -911,6 +911,10 @@ asmlinkage void do_notify_resume(struct pt_regs *regs,
 
 		if (thread_flags & _TIF_NEED_RESCHED) {
 			/* Unmask Debug and SError for the next task */
+			if (irqs_pipelined()) {
+				local_irq_disable();
+				hard_local_irq_enable();
+			}
 			local_daif_restore(DAIF_PROCCTX_NOIRQ);
 
 			schedule();
