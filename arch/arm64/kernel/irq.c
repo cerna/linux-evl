@@ -30,6 +30,7 @@
 #include <linux/seq_file.h>
 #include <linux/vmalloc.h>
 #include <asm/vmap_stack.h>
+#include <asm/exception.h>
 
 unsigned long irq_err_count;
 
@@ -51,6 +52,17 @@ void __init set_handle_irq(void (*handle_irq)(struct pt_regs *))
 
 	handle_arch_irq = handle_irq;
 }
+
+#ifdef CONFIG_IRQ_PIPELINE
+
+asmlinkage int __exception_irq_entry
+handle_arch_irq_pipelined(struct pt_regs *regs)
+{
+	handle_arch_irq(regs);
+	return on_root_stage() && !irqs_disabled();
+}
+
+#endif
 
 #ifdef CONFIG_VMAP_STACK
 static void init_irq_stacks(void)
