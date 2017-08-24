@@ -389,7 +389,8 @@ alternative_insn eret, nop, ARM64_UNMAP_KERNEL_AT_EL0
 
 	/*
 	 * x19 should be preserved between irq_stack_entry and
-	 * irq_stack_exit.
+	 * irq_stack_exit. IRQ_PIPELINE: caution, we have to
+	 * preserve w0.
 	 */
 	.macro	irq_stack_exit
 	mov	sp, x19
@@ -412,7 +413,11 @@ tsk	.req	x28		// current thread_info
  * Interrupt handling.
  */
 	.macro	irq_handler
+#ifdef CONFIG_IRQ_PIPELINE
+	ldr	x1, =handle_arch_irq_pipelined
+#else	
 	ldr_l	x1, handle_arch_irq
+#endif	
 	mov	x0, sp
 	irq_stack_entry
 	blr	x1
@@ -620,6 +625,10 @@ el1_irq:
 #endif
 
 	irq_handler
+#ifdef CONFIG_IRQ_PIPELINE
+	tst	w0, w0
+	b.eq	1f
+#endif
 
 #ifdef CONFIG_PREEMPT
 	ldr	w24, [tsk, #TSK_TI_PREEMPT]	// get preempt count
@@ -627,8 +636,8 @@ el1_irq:
 	ldr	x0, [tsk, #TSK_TI_FLAGS]	// get flags
 	tbz	x0, #TIF_NEED_RESCHED, 1f	// needs rescheduling?
 	bl	el1_preempt
-1:
 #endif
+1:
 #ifdef CONFIG_TRACE_IRQFLAGS
 	bl	trace_hardirqs_on
 #endif
@@ -724,6 +733,17 @@ el0_error_compat:
 	b	el0_error_naked
 #endif
 
+#ifdef CONFIG_IRQ_PIPELINE
+ret_from_exception:
+	disable_daif
+	ldr	x0, [tsk, #TSK_TI_LOCAL_FLAGS]
+	tst	x0, #_TLF_HEAD
+	b.ne	finish_ret_to_user
+	b	ret_to_user_noirq
+#else
+#define ret_from_exception	ret_to_user
+#endif
+
 el0_da:
 	/*
 	 * Data abort handling
@@ -735,7 +755,7 @@ el0_da:
 	mov	x1, x25
 	mov	x2, sp
 	bl	do_mem_abort
-	b	ret_to_user
+	b	ret_from_exception
 el0_ia:
 	/*
 	 * Instruction abort handling
@@ -750,7 +770,7 @@ el0_ia:
 	mov	x1, x25
 	mov	x2, sp
 	bl	do_el0_ia_bp_hardening
-	b	ret_to_user
+	b	ret_from_exception
 el0_fpsimd_acc:
 	/*
 	 * Floating Point or Advanced SIMD access
@@ -760,7 +780,7 @@ el0_fpsimd_acc:
 	mov	x0, x25
 	mov	x1, sp
 	bl	do_fpsimd_acc
-	b	ret_to_user
+	b	ret_from_exception
 el0_sve_acc:
 	/*
 	 * Scalable Vector Extension access
@@ -770,7 +790,7 @@ el0_sve_acc:
 	mov	x0, x25
 	mov	x1, sp
 	bl	do_sve_acc
-	b	ret_to_user
+	b	ret_from_exception
 el0_fpsimd_exc:
 	/*
 	 * Floating Point, Advanced SIMD or SVE exception
@@ -780,7 +800,7 @@ el0_fpsimd_exc:
 	mov	x0, x25
 	mov	x1, sp
 	bl	do_fpsimd_exc
-	b	ret_to_user
+	b	ret_from_exception
 el0_sp_pc:
 	/*
 	 * Stack or PC alignment exception handling
@@ -795,7 +815,7 @@ el0_sp_pc:
 	mov	x1, x25
 	mov	x2, sp
 	bl	do_sp_pc_abort
-	b	ret_to_user
+	b	ret_from_exception
 el0_undef:
 	/*
 	 * Undefined instruction
@@ -804,7 +824,7 @@ el0_undef:
 	ct_user_exit
 	mov	x0, sp
 	bl	do_undefinstr
-	b	ret_to_user
+	b	ret_from_exception
 el0_sys:
 	/*
 	 * System instructions, for trapped cache maintenance instructions
@@ -814,7 +834,7 @@ el0_sys:
 	mov	x0, x25
 	mov	x1, sp
 	bl	do_sysinstr
-	b	ret_to_user
+	b	ret_from_exception
 el0_dbg:
 	/*
 	 * Debug exception handling
@@ -826,7 +846,7 @@ el0_dbg:
 	bl	do_debug_exception
 	enable_daif
 	ct_user_exit
-	b	ret_to_user
+	b	ret_from_exception
 el0_inv:
 	enable_daif
 	ct_user_exit
@@ -834,7 +854,7 @@ el0_inv:
 	mov	x1, #BAD_SYNC
 	mov	x2, x25
 	bl	bad_el0_sync
-	b	ret_to_user
+	b	ret_from_exception
 ENDPROC(el0_sync)
 
 	.align	6
@@ -853,7 +873,10 @@ el0_irq_naked:
 1:
 #endif
 	irq_handler
-
+#ifdef CONFIG_IRQ_PIPELINE
+	tst	w0, w0
+	b.eq	finish_ret_to_user
+#endif
 #ifdef CONFIG_TRACE_IRQFLAGS
 	bl	trace_hardirqs_on
 #endif
@@ -878,7 +901,7 @@ el0_error_naked:
 	bl	do_serror
 	enable_daif
 	ct_user_exit
-	b	ret_to_user
+	b	ret_from_exception
 ENDPROC(el0_error)
 
 /*
@@ -897,6 +920,7 @@ work_pending:
  */
 ret_to_user:
 	disable_daif
+ret_to_user_noirq:
 	ldr	x1, [tsk, #TSK_TI_FLAGS]
 	and	x2, x1, #_TIF_WORK_MASK
 	cbnz	x2, work_pending
@@ -1068,6 +1092,7 @@ NOKPROBE(cpu_switch_to)
  * This is how we return from a fork.
  */
 ENTRY(ret_from_fork)
+	enable_irq_if_pipelined
 	bl	schedule_tail
 	cbz	x19, 1f				// not a kernel thread
 	mov	x0, x20
