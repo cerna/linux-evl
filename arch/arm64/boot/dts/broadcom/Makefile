@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0
-dtb-$(CONFIG_ARCH_BCM2835) += bcm2837-rpi-3-b.dtb
+dtb-$(CONFIG_ARCH_BCM2835) += bcm2837-rpi-3-b.dtb bcm2837-rpi-3-b-nobt.dtb
 
 dts-dirs	+= northstar2
 dts-dirs	+= stingray
