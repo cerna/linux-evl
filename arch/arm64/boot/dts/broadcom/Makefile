@@ -1,4 +1,4 @@
-dtb-$(CONFIG_ARCH_BCM2835) += bcm2837-rpi-3-b.dtb
+dtb-$(CONFIG_ARCH_BCM2835) += bcm2837-rpi-3-b.dtb bcm2837-rpi-3-b-nobt.dtb
 dtb-$(CONFIG_ARCH_BCM_IPROC) += ns2-svk.dtb ns2-xmc.dtb
 
 dts-dirs	:= stingray
