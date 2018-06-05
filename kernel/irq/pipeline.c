@@ -494,6 +494,11 @@ EXPORT_SYMBOL(head_irq_enable);
  *	is unstalled as a consequence of this operation, any interrupt
  *	pending for the head stage in the per-CPU log is played back
  *	prior to turning IRQs on.
+ *
+ *      NOTE: Stalling the head stage must always be paired with
+ *      disabling hard irqs and conversely when calling
+ *      head_irq_restore(), otherwise the latter would badly misbehave
+ *      in unbalanced conditions.
  */
 notrace void __head_irq_restore(unsigned long x) /* hw interrupt off */
 {
@@ -1211,36 +1216,70 @@ respin:
  *      @fn:    address of routine
  *      @arg:   routine argument
  *
- *      Make the specified function run atomically on the head stage,
- *      switching the current stage accordingly.
+ *      Make the specified function run on the head stage, switching
+ *      the current stage accordingly if needed. The escalated call is
+ *      allowed to perform a stage migration in the process.
  *
- *      This service accounts for the converse stage migration
- *      (i.e. head->root) that might occur during the call.
- *
- *      The root stage must be current on entry.
+ *      Another way to implement that feature would be to inject a
+ *      synthetic IRQ whose out-of-band handler would do the escalated
+ *      call. This one is more lighweight as it does not require to go
+ *      through the whole interrupt handling machinery though.
  */
-int __irq_stage_escalate(int (*fn)(void *arg), void *arg)
+int irq_stage_escalate(int (*fn)(void *arg), void *arg)
 {
-	struct irq_stage_data *p = irq_head_this_context();
-	int ret;
+	struct irq_stage_data *p = irq_head_this_context(), *old;
+	struct irq_stage *head = p->stage;
+	unsigned long flags;
+	int ret, s;
 
-	irq_set_head_context(p);
-	__set_bit(STAGE_STALL_BIT, &p->status);
+	flags = hard_local_irq_save();
+
+	/* Switch to the head stage if not current. */
+	old = irq_current_context;
+	if (old != p)
+		irq_set_head_context(p);
+
+	s = __test_and_set_bit(STAGE_STALL_BIT, &p->status);
+	barrier();
 	ret = fn(arg);
-	/*
-	 * Care for CPU migration by re-reading the stage data
-	 * pointer. In case of stage migration from head->root, we do
-	 * want the stall bit to be cleared for the head stage on the
-	 * current CPU.
-	 */
+	hard_local_irq_disable();
 	p = irq_head_this_context();
-	__clear_bit(STAGE_STALL_BIT, &p->status);
-	if (likely(irq_current_context == p)) /* Ditto. */
+	if (!s)
+		__clear_bit(STAGE_STALL_BIT, &p->status);
+
+	/*
+	 * The exit logic is as follows:
+	 *
+	 *    ON-ENTRY  AFTER-CALL  EPILOGUE
+	 *
+	 *    head      head        sync current stage if !stalled
+	 *    root      head        switch to root + sync all stages
+	 *    head      root        sync all stages
+	 *    root      root        sync all stages
+	 *
+	 * Each path which has stalled the head stage while running on
+	 * the root stage at some point during the escalation process
+	 * must synchronize all stages of the pipeline on
+	 * exit. Otherwise, we may restrict the synchronization scope
+	 * to the current stage when the whole process runs on the
+	 * head stage.
+	 */
+	if (likely(irq_current_context == p)) {
+		if (old->stage == head) {
+			if (!s && irq_staged_waiting(p))
+				irq_stage_sync_current();
+			goto out;
+		}
 		irq_set_root_context(irq_root_this_context());
+	}
+
+	irq_stage_sync(head);
+out:
+	hard_local_irq_restore(flags);
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(__irq_stage_escalate);
+EXPORT_SYMBOL_GPL(irq_stage_escalate);
 
 void irq_push_stage(struct irq_stage *stage, const char *name)
 {

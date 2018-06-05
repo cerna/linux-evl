@@ -77,23 +77,7 @@ bool irq_cpuidle_enter(struct cpuidle_device *dev,
 
 void irq_cpuidle_exit(void);
 
-int __irq_stage_escalate(int (*fn)(void *arg), void *arg);
-
-static inline
-int irq_stage_escalate(int (*fn)(void *arg), void *arg)
-{
-	unsigned long flags;
-	int ret;
-
-	if (on_head_stage()) {
-		flags = head_irq_save();
-		ret = fn(arg);
-		head_irq_restore(flags);
-	} else
-		ret = __irq_stage_escalate(fn, arg);
-
-	return ret;
-}
+int irq_stage_escalate(int (*fn)(void *arg), void *arg);
 
 extern bool irq_pipeline_active;
 	
