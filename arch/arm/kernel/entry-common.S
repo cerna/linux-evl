@@ -157,7 +157,7 @@ no_work_pending:
 ENDPROC(ret_to_user_from_irq)
 ENDPROC(ret_to_user)
 ENTRY(fast_ret_to_user)
-	disable_irq_notrace
+	disable_irq_notrace			@ disable interrupts
 	b	no_work_pending
 ENDPROC(fast_ret_to_user)
 
@@ -285,11 +285,9 @@ local_restart:
 fastcall_exit_check:
 	ldr	r10, [tsk, #TI_FLAGS]
 	tst	r10, #_TIF_MAYDAY
-	beq	fast_ret_to_user_from_syscall
+	beq	fast_ret_to_user
 	mov	r0, sp
 	bl	dovetail_call_mayday
-fast_ret_to_user_from_syscall:
-	disable_irq_notrace			@ disable interrupts
 	b	fast_ret_to_user
 slow_path:
 	tst	r10, #_TLF_DOVETAIL
@@ -304,7 +302,7 @@ pipeline_syscall:
 	oabi_restore_sysnr r10
 	ldr	r10, [tsk, #TI_LOCAL_FLAGS]
 	tst	r10, #_TLF_HEAD
-	bne	fast_ret_to_user_from_syscall
+	bne	fast_ret_to_user
 	cmp	r0, #0
 	bgt	ret_slow_syscall
 root_syscall:
