@@ -21,6 +21,8 @@
 #include <linux/irq.h>
 #include <linux/irq_pipeline.h>
 #include <linux/stop_machine.h>
+#include <linux/irq_work.h>
+#include <linux/completion.h>
 #include <linux/slab.h>
 #include "settings.h"
 
@@ -71,12 +73,14 @@ static struct proxy_tick_ops proxy_ops = {
 	.handle_event = torture_event_handler,
 };
 
-static void test_tick_takeover(void)
+static int start_tick_takeover_test(void)
 {
-	int ret;
+	return tick_install_proxy(&proxy_ops, cpu_online_mask);
+}
 
-	ret = tick_install_proxy(&proxy_ops, cpu_online_mask);
-	WARN_ON(ret);
+static void stop_tick_takeover_test(void)
+{
+	tick_uninstall_proxy(&proxy_ops, cpu_online_mask);
 }
 
 struct stop_machine_p_data {
@@ -102,15 +106,15 @@ static int stop_machine_handler(void *arg)
 	return 0;
 }
 
-static void test_stop_machine_pipelined(void)
+static int test_stop_machine_pipelined(void)
 {
 	struct stop_machine_p_data d;
 	cpumask_var_t tmp_mask;
-	int ret, cpu;
+	int ret = -EINVAL, cpu;
 
 	if (!zalloc_cpumask_var(&d.disable_mask, GFP_KERNEL)) {
 		WARN_ON(1);
-		return;
+		return -EINVAL;
 	}
 	
 	if (!alloc_cpumask_var(&tmp_mask, GFP_KERNEL)) {
@@ -126,10 +130,12 @@ static void test_stop_machine_pipelined(void)
 	ret = stop_machine_pipelined(stop_machine_handler,
 				     &d, cpu_online_mask);
 	WARN_ON(ret);
+	if (ret)
+		goto fail;
 
 	/*
 	 * Check whether all handlers did run with hard IRQs off. If
-	 * some of them did not, then we have a problem with the lock
+	 * some of them did not, then we have a problem with the stop
 	 * IRQ delivery.
 	 */
 	cpumask_xor(tmp_mask, cpu_online_mask, d.disable_mask);
@@ -143,20 +149,124 @@ static void test_stop_machine_pipelined(void)
 	free_cpumask_var(tmp_mask);
 fail:
 	free_cpumask_var(d.disable_mask);
+
+	return ret;
+}
+
+static struct irq_work_tester {
+	struct irq_work work;
+	struct completion done;
+} irq_work_tester;
+
+static void irq_work_handler(struct irq_work *work)
+{
+	if (!on_root_stage()) {
+		pr_alert("irq_pipeline" TORTURE_FLAG
+			 " CPU%d: irq_work handler not running on"
+			 " root stage?!\n", smp_processor_id());
+		return;
+	}
+	
+	if (work != &irq_work_tester.work)
+		pr_alert("irq_pipeline" TORTURE_FLAG
+			 " CPU%d: irq_work handler received broken"
+			 " arg?!\n", smp_processor_id());
+	else {
+		pr_alert("irq_pipeline" TORTURE_FLAG
+			 " CPU%d: irq_work handled\n", smp_processor_id());
+		complete(&irq_work_tester.done);
+	}
+}
+
+static int trigger_head_work(void *arg)
+{
+	if (!on_head_stage()) {
+		pr_alert("irq_pipeline" TORTURE_FLAG
+			 " CPU%d: escalated request not running on"
+			 " head stage?!\n", smp_processor_id());
+		return -EINVAL;
+	}
+	
+	if ((struct irq_work_tester *)arg != &irq_work_tester) {
+		pr_alert("irq_pipeline" TORTURE_FLAG
+			 " CPU%d: escalation handler received broken"
+			 " arg?!\n", raw_smp_processor_id());
+		return -EINVAL;
+	}
+
+	irq_work_queue(&irq_work_tester.work);
+	pr_alert("irq_pipeline" TORTURE_FLAG
+		 " CPU%d: stage escalation request works\n",
+		 raw_smp_processor_id());
+
+	return 0;
+}
+
+static int test_interstage_work_injection(void)
+{
+	struct irq_work_tester *p = &irq_work_tester;
+	unsigned long rem;
+	int ret;
+
+	init_completion(&p->done);
+	init_irq_work(&p->work, irq_work_handler);
+
+	/* Trigger over the root stage. */
+	irq_work_queue(&p->work);
+	rem = wait_for_completion_timeout(&p->done, HZ / 10);
+	if (!rem) {
+		pr_alert("irq_pipeline" TORTURE_FLAG
+			 " CPU%d: irq_work trigger from root stage not handled!\n",
+			 smp_processor_id());
+		return -EINVAL;
+	}
+
+	pr_alert("irq_pipeline" TORTURE_FLAG
+		 " CPU%d: root->root irq_work trigger works\n",
+		 smp_processor_id());
+
+	reinit_completion(&p->done);
+
+	/* Now try over the head stage. */
+	ret = irq_stage_escalate(trigger_head_work, p);
+	if (ret)
+		return ret;
+		
+	ret = wait_for_completion_timeout(&p->done, HZ / 10);
+	if (!rem) {
+		pr_alert("irq_pipeline" TORTURE_FLAG
+			 " CPU%d: irq_work trigger from head"
+			 " stage not handled!\n", smp_processor_id());
+		return -EINVAL;
+	}
+
+	pr_alert("irq_pipeline" TORTURE_FLAG
+		 " CPU%d: head->root irq_work trigger works\n",
+		 smp_processor_id());
+
+	return 0;
 }
 
 static int __init irqp_torture_init(void)
 {
+	int ret;
+
 	pr_info("Starting IRQ pipeline tests...");
 
 	irq_push_stage(&torture_stage, "torture");
-	test_stop_machine_pipelined();
-	test_tick_takeover();
-	msleep(1000);
-	tick_uninstall_proxy(&proxy_ops, cpu_online_mask);
+	ret = test_stop_machine_pipelined();
+	if (ret)
+		goto out;
+	ret = start_tick_takeover_test();
+	if (ret)
+		goto out;
+	ret = test_interstage_work_injection();
+	if (!ret)
+		msleep(1000);
+	stop_tick_takeover_test();
+out:
 	irq_pop_stage(&torture_stage);
-
-	pr_info("IRQ pipeline tests OK.");
+	pr_info("IRQ pipeline tests %s.", ret ? "FAILED" : "OK");
 
 	return 0;
 }
