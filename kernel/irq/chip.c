@@ -306,7 +306,7 @@ void irq_shutdown(struct irq_desc *desc)
 			desc->irq_data.chip->irq_shutdown(&desc->irq_data);
 			irq_state_set_disabled(desc);
 			irq_state_set_masked(desc);
-			irq_pipeline_clear(desc->irq_data.irq);
+			irq_pipeline_clear(desc);
 		} else {
 			__irq_disable(desc, true);
 		}
@@ -350,7 +350,7 @@ static void __irq_disable(struct irq_desc *desc, bool mask)
 			mask_irq(desc);
 		}
 	}
-	irq_pipeline_clear(desc->irq_data.irq);
+	irq_pipeline_clear(desc);
 }
 
 /**
@@ -395,7 +395,7 @@ void irq_percpu_disable(struct irq_desc *desc, unsigned int cpu)
 	else
 		desc->irq_data.chip->irq_mask(&desc->irq_data);
 	cpumask_clear_cpu(cpu, desc->percpu_enabled);
-	irq_pipeline_clear(desc->irq_data.irq);
+	irq_pipeline_clear(desc);
 }
 
 static inline void mask_ack_irq(struct irq_desc *desc)

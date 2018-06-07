@@ -248,12 +248,6 @@ struct irq_stage_data *irq_stage_context(struct irq_stage *stage, int cpu)
 	return &per_cpu(irq_pipeline.stages, cpu)[stage->index];
 }
 
-static inline
-struct irq_stage_data *__irq_stage_this_context(struct irq_stage *stage)
-{
-	return &this_cpu_ptr(irq_pipeline.stages)[stage->index];
-}
-
 /**
  * irq_stage_this_context - IRQ stage data on the current CPU
  *
@@ -262,7 +256,7 @@ struct irq_stage_data *__irq_stage_this_context(struct irq_stage *stage)
  */
 struct irq_stage_data *irq_stage_this_context(struct irq_stage *stage)
 {
-	return __irq_stage_this_context(stage);
+	return &this_cpu_ptr(irq_pipeline.stages)[stage->index];
 }
 
 void irq_stage_sync(struct irq_stage *top)
@@ -279,7 +273,7 @@ void irq_stage_sync(struct irq_stage *top)
 	stage = top;
 
 	for (;;) {
-		p = __irq_stage_this_context(stage);
+		p = irq_stage_this_context(stage);
 		if (test_bit(STAGE_STALL_BIT, &p->status))
 			break;
 
@@ -308,7 +302,7 @@ static void synchronize_pipeline(struct irq_stage *top) /* hardirqs off */
 	if (__current_irq_stage != top)
 		irq_stage_sync(top);
 	else if (!test_bit(STAGE_STALL_BIT,
-			   &__irq_stage_this_context(top)->status))
+			   &irq_stage_this_context(top)->status))
 		irq_stage_sync_current();
 }
 
@@ -627,7 +621,7 @@ EXPORT_SYMBOL_GPL(irq_stage_restore);
 /* Must be called hw IRQs off. */
 void irq_stage_post_event(struct irq_stage *stage, unsigned int irq)
 {
-	struct irq_stage_data *p = __irq_stage_this_context(stage);
+	struct irq_stage_data *p = irq_stage_this_context(stage);
 	int l0b, l1b;
 
 	if (WARN_ON_ONCE(irq_pipeline_debug() &&
@@ -643,9 +637,8 @@ void irq_stage_post_event(struct irq_stage *stage, unsigned int irq)
 }
 EXPORT_SYMBOL_GPL(irq_stage_post_event);
 
-static void __clear_pending_irq(struct irq_stage *stage, unsigned int irq)
+static void __clear_pending_irq(struct irq_stage_data *p, unsigned int irq)
 {
-	struct irq_stage_data *p = __irq_stage_this_context(stage);
 	int l0b, l1b;
 
 	l0b = irq / (BITS_PER_LONG * BITS_PER_LONG);
@@ -654,6 +647,12 @@ static void __clear_pending_irq(struct irq_stage *stage, unsigned int irq)
 	__clear_bit(irq, p->log.map->lomap);
 	__clear_bit(l1b, p->log.map->mdmap);
 	__clear_bit(l0b, &p->log.himap);
+}
+
+static void clear_pending_irq(struct irq_stage *stage, unsigned int irq)
+{
+	struct irq_stage_data *p = irq_stage_this_context(stage);
+	__clear_pending_irq(p, irq);
 }
 
 static inline int pull_next_irq(struct irq_stage_data *p)
@@ -691,9 +690,9 @@ static inline int pull_next_irq(struct irq_stage_data *p)
 
 #else /* __IRQ_STAGE_MAP_LEVELS == 2 */
 
-static void __clear_pending_irq(struct irq_stage *stage, unsigned int irq)
+static void clear_pending_irq(struct irq_stage *stage, unsigned int irq)
 {
-	struct irq_stage_data *p = __irq_stage_this_context(stage);
+	struct irq_stage_data *p = irq_stage_this_context(stage);
 	int l0b = irq / BITS_PER_LONG;
 
 	__clear_bit(irq, p->log.map->lomap);
@@ -703,7 +702,7 @@ static void __clear_pending_irq(struct irq_stage *stage, unsigned int irq)
 /* Must be called hw IRQs off. */
 void irq_stage_post_event(struct irq_stage *stage, unsigned int irq)
 {
-	struct irq_stage_data *p = __irq_stage_this_context(stage);
+	struct irq_stage_data *p = irq_stage_this_context(stage);
 	int l0b = irq / BITS_PER_LONG;
 
 	if (WARN_ON_ONCE(irq_pipeline_debug() &&
@@ -740,23 +739,44 @@ static inline int pull_next_irq(struct irq_stage_data *p)
 #endif  /* __IRQ_STAGE_MAP_LEVELS == 2 */
 
 /**
- *	irq_pipeline_clear - clear IRQ event from per-CPU log
- *	@irq:	 IRQ to clear
+ *	irq_pipeline_clear - clear IRQ event from all per-CPU logs
+ *	@desc: IRQ descriptor
  *
- *      Clear the given irq from the interrupt log for both the root
- *      and head stages on the current CPU.
+ *      Clear any event of the specified IRQ pending from the relevant
+ *      interrupt logs, for both the root and head stages.
+ *
+ *      All per-CPU logs are considered for device IRQs, per-CPU IRQ
+ *      events are only looked up into the log of the current CPU.
+ *
+ *      Genirq should be the exclusive user of that code. The only
+ *      safe context for running this code is when the corresponding
+ *      IRQ line is masked, and the matching IRQ descriptor locked.
+ *
+ *      Hard irqs must be off on entry (which has to be the case since
+ *      the IRQ descriptor lock is a mutable beast when pipelining).
  */
-void irq_pipeline_clear(unsigned int irq)
+void irq_pipeline_clear(struct irq_desc *desc)
 {
-	unsigned long flags;
-	
-	flags = hard_local_irq_save();
+	unsigned int irq = irq_desc_get_irq(desc);
+	struct irq_stage_data *p;
+	int cpu;
 
-	__clear_pending_irq(&root_irq_stage, irq);
-	if (head_stage_present())
-		__clear_pending_irq(head_irq_stage, irq);
+	check_hard_irqs_disabled();
 
-	hard_local_irq_restore(flags);
+	if (irq_settings_is_per_cpu_devid(desc)) {
+		clear_pending_irq(&root_irq_stage, irq);
+		if (head_stage_present())
+			clear_pending_irq(head_irq_stage, irq);
+	} else {
+		for_each_online_cpu(cpu) {
+			p = irq_stage_context(&root_irq_stage, cpu);
+			__clear_pending_irq(p, irq);
+			if (head_stage_present()) {
+				p = irq_stage_context(head_irq_stage, cpu);
+				__clear_pending_irq(p, irq);
+			}
+		}
+	}
 }
 
 /**

@@ -45,8 +45,6 @@ void irq_pipeline_unlock(unsigned long flags);
 
 int irq_pipeline_inject(unsigned int irq);
 
-void irq_pipeline_clear(unsigned int irq);
-
 void irq_push_stage(struct irq_stage *stage,
 		    const char *name);
 
@@ -60,6 +58,8 @@ int generic_pipeline_irq(unsigned int irq,
 bool handle_oob_irq(struct irq_desc *desc);
 
 void do_IRQ_pipelined(struct irq_desc *desc);
+
+void irq_pipeline_clear(struct irq_desc *desc);
 
 #ifdef CONFIG_SMP
 void irq_pipeline_send_remote(unsigned int ipi,
