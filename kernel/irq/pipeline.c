@@ -1537,8 +1537,8 @@ void irq_local_work_raise(void)
 
 	flags = hard_local_irq_save();
 	irq_stage_post_root(root_work_sirq);
-	if (on_root_stage() && !hard_irqs_disabled_flags(flags))
-		synchronize_pipeline(head_irq_stage);
+	if (on_root_stage() && !irqs_disabled())
+		irq_stage_sync_current();
 	hard_local_irq_restore(flags);
 }
 
