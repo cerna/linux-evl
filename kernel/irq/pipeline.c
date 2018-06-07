@@ -473,10 +473,11 @@ EXPORT_SYMBOL(root_irq_restore_nosync);
  */
 notrace void head_irq_enable(void)
 {
-	struct irq_stage_data *p = irq_head_this_context();
+	struct irq_stage_data *p;
 
 	hard_local_irq_disable();
 
+	p = irq_head_this_context();
 	__clear_bit(STAGE_STALL_BIT, &p->status);
 
 	if (unlikely(irq_staged_waiting(p)))
@@ -1227,14 +1228,16 @@ respin:
  */
 int irq_stage_escalate(int (*fn)(void *arg), void *arg)
 {
-	struct irq_stage_data *p = irq_head_this_context(), *old;
-	struct irq_stage *head = p->stage;
+	struct irq_stage_data *p, *old;
+	struct irq_stage *head;
 	unsigned long flags;
 	int ret, s;
 
 	flags = hard_local_irq_save();
-
+	
 	/* Switch to the head stage if not current. */
+	p = irq_head_this_context();
+	head = p->stage;
 	old = irq_current_context;
 	if (old != p)
 		irq_set_head_context(p);
