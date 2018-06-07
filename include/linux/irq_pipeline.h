@@ -114,7 +114,7 @@ void generic_pipeline_irq(unsigned int irq, struct pt_regs *regs) { }
 
 static inline bool handle_oob_irq(struct irq_desc *desc)
 {
-	returnb false;
+	return false;
 }
 
 static inline bool __irq_cpuidle_enter(void)
