@@ -368,6 +368,7 @@ config ARM64_ERRATUM_858921
 config ARM_GLOBAL_TIMER
 	bool "Support for the ARM global timer" if COMPILE_TEST
 	select TIMER_OF if OF
+	select CLKSRC_VDSO_MAPPED
 	depends on ARM
 	help
 	  This options enables support for the ARM global timer unit
