@@ -14,6 +14,7 @@
 #include <asm/irq_pipeline.h>
 
 struct task_struct;
+struct hypervisor_stall;
 
 struct irq_stage {
 	int index;
