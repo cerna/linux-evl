@@ -344,6 +344,21 @@ void __weak dovetail_clock_set(void)
 {
 }
 
+#ifdef CONFIG_DOVETAIL_TRACK_VM_GUEST
+void dovetail_hypervisor_stall(void)
+{
+	struct hypervisor_stall *nfy;
+	struct irq_pipeline_data *p;
+
+	check_hard_irqs_disabled();
+	p = raw_cpu_ptr(&irq_pipeline);
+	nfy = p->vm_notifier;
+	if (unlikely(nfy))
+		nfy->handler(nfy);
+}
+EXPORT_SYMBOL_GPL(dovetail_hypervisor_stall);
+#endif
+
 int dovetail_start(void)
 {
 	check_root_stage();
