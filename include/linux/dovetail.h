@@ -26,6 +26,10 @@ struct dovetail_migration_data {
 	int dest_cpu;
 };
 
+struct hypervisor_stall {
+	void (*handler)(struct hypervisor_stall *nfy);
+};
+
 int dovetail_start(void);
 
 void dovetail_stop(void);
@@ -43,6 +47,12 @@ void dovetail_handle_trap(unsigned int trapnr,
 void dovetail_handle_kevent(int event, void *data);
 
 void dovetail_clock_set(void);
+
+#ifdef CONFIG_DOVETAIL_TRACK_VM_GUEST
+void dovetail_hypervisor_stall(void);
+#else
+static inline void dovetail_hypervisor_stall(void) { }
+#endif
 
 static inline void dovetail_signal_task(struct task_struct *p)
 {
@@ -87,6 +97,21 @@ static inline void dovetail_mm_cleanup(struct mm_struct *mm)
 	 * in other kernel events.
 	 */
 	dovetail_handle_kevent(KEVENT_PROCESS_CLEANUP, mm);
+}
+
+/* Hypervisor-side calls, hw IRQs off. */
+static inline void dovetail_enter_vm_guest(struct hypervisor_stall *nfy)
+{
+	struct irq_pipeline_data *p = raw_cpu_ptr(&irq_pipeline);
+	p->vm_notifier = nfy;
+	barrier();
+}
+
+static inline void dovetail_exit_vm_guest(void)
+{
+	struct irq_pipeline_data *p = raw_cpu_ptr(&irq_pipeline);
+	p->vm_notifier = NULL;
+	barrier();
 }
 
 static inline void dovetail_prepare_switch(struct task_struct *next)
@@ -177,6 +202,10 @@ static inline void dovetail_task_exit(void) { }
 static inline void dovetail_mm_cleanup(struct mm_struct *mm) { }
 
 static inline void dovetail_stage_migration_tail(void) { }
+
+#define dovetail_enter_vm_guest(__nfy) do { } while (0)
+
+#define dovetail_exit_vm_guest(__nfy) do { } while (0)
 
 static inline void dovetail_prepare_switch(struct task_struct *next) { }
 
