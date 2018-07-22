@@ -237,6 +237,13 @@ static int __init vdso_init(void)
 }
 arch_initcall(vdso_init);
 
+static int install_vpriv(struct mm_struct *mm, unsigned long addr)
+{
+	return mmap_region(NULL, addr, PAGE_SIZE,
+			  VM_READ | VM_WRITE | VM_MAYREAD | VM_MAYWRITE,
+			   0, NULL) != addr ? -EINVAL : 0;
+}
+
 static int install_vvar(struct mm_struct *mm, unsigned long addr)
 {
 	struct vm_area_struct *vma;
@@ -244,8 +251,10 @@ static int install_vvar(struct mm_struct *mm, unsigned long addr)
 	vma = _install_special_mapping(mm, addr, PAGE_SIZE,
 				       VM_READ | VM_MAYREAD,
 				       &vdso_data_mapping);
+	if (IS_ERR(vma))
+		return PTR_ERR(vma);
 
-	return PTR_ERR_OR_ZERO(vma);
+	return vma->vm_start != addr ? -EINVAL : 0;
 }
 
 /* assumes mmap_sem is write-locked */
@@ -259,8 +268,17 @@ void arm_install_vdso(struct mm_struct *mm, unsigned long addr)
 	if (vdso_text_pagelist == NULL)
 		return;
 
-	if (install_vvar(mm, addr))
+	if (install_vpriv(mm, addr)) {
+		pr_err("cannot map VPRIV at expected address!\n");
 		return;
+	}
+
+	/* Account for the private storage. */
+	addr += PAGE_SIZE;
+	if (install_vvar(mm, addr)) {
+		pr_err("cannot map VVAR at expected address!\n");
+		return;
+	}
 
 	/* Account for vvar page. */
 	addr += PAGE_SIZE;
@@ -270,8 +288,10 @@ void arm_install_vdso(struct mm_struct *mm, unsigned long addr)
 		VM_READ | VM_EXEC | VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC,
 		&vdso_text_mapping);
 
-	if (!IS_ERR(vma))
+	if (!IS_ERR(vma) && vma->vm_start == addr)
 		mm->context.vdso = addr;
+	else
+		pr_err("cannot map VDSO at expected address!\n");
 }
 
 static void vdso_write_begin(struct vdso_data *vdata)
