@@ -327,6 +327,7 @@ static const struct irq_chip regmap_irq_chip = {
 	.irq_enable		= regmap_irq_enable,
 	.irq_set_type		= regmap_irq_set_type,
 	.irq_set_wake		= regmap_irq_set_wake,
+	.flags			= IRQCHIP_PIPELINE_SAFE,
 };
 
 static irqreturn_t regmap_irq_thread(int irq, void *d)
