@@ -195,7 +195,6 @@ void irq_stage_sync(struct irq_stage *top)
 			if (stage == &root_irq_stage)
 				irq_stage_sync_current();
 			else {
-				clear_stage_bit(STAGE_CALLOUT_BIT, p);
 				/* Switch to head before synchronizing. */
 				irq_set_head_context(p);
 				irq_stage_sync_current();

@@ -214,7 +214,7 @@ static inline int dovetail_context_switch_tail(void)
 	return 0;
 }
 
-#define dovetail_switch_mm_enter(flags)		\
+#define dovetail_switch_mm_enter(flags)	\
   do { (void)(flags); } while (0)
 
 #define dovetail_switch_mm_exit(flags)	\
