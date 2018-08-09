@@ -27,8 +27,6 @@ extern struct irq_stage *head_irq_stage;
 
 /* Interrupts (virtually) disabled. */
 #define STAGE_STALL_BIT		0
-/* Dovetail callout running */
-#define STAGE_CALLOUT_BIT	1
 
 struct irq_event_map;
 

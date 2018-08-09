@@ -99,11 +99,9 @@ int dovetail_pipeline_syscall(struct thread_info *ti, struct pt_regs *regs)
 next:
 	p = irq_stage_this_context(target_stage);
 	irq_set_current_context(p);
-	set_stage_bit(STAGE_CALLOUT_BIT, p);
 	hard_local_irq_restore(flags);
 	ret = dovetail_syscall_hook(caller_stage, regs);
 	flags = hard_local_irq_save();
-	clear_stage_bit(STAGE_CALLOUT_BIT, p);
 	/*
 	 * Be careful about any stage (root <-> head) _and_ CPU
 	 * migration that might have happened as a result of handing
@@ -214,28 +212,12 @@ void __weak dovetail_trap_hook(unsigned int trapnr, struct pt_regs *regs)
 
 void dovetail_handle_trap(unsigned int exception, struct pt_regs *regs)
 {
-	struct irq_stage_data *p;
-	unsigned long flags;
-
 	/*
 	 * We send a notification about all traps raised over a
 	 * registered head stage only.
 	 */
-	if (on_root_stage())
-		return;
-
-	flags = hard_local_irq_save();
-	p = irq_head_this_context();
-
-	if (likely(dovetail_enabled)) {
-		__set_bit(STAGE_CALLOUT_BIT, &p->status);
-		hard_local_irq_restore(flags);
+	if (on_head_stage() && dovetail_enabled)
 		dovetail_trap_hook(exception, regs);
-		flags = hard_local_irq_save();
-		__clear_bit(STAGE_CALLOUT_BIT, &p->status);
-	}
-
-	hard_local_irq_restore(flags);
 }
 
 void __weak dovetail_kevent_hook(int kevent, void *data)
@@ -244,23 +226,10 @@ void __weak dovetail_kevent_hook(int kevent, void *data)
 
 void dovetail_handle_kevent(int kevent, void *data)
 {
-	struct irq_stage_data *p;
-	unsigned long flags;
-
 	check_root_stage();
 
-	flags = hard_local_irq_save();
-
-	p = irq_root_this_context();
-	if (likely(dovetail_enabled)) {
-		__set_bit(STAGE_CALLOUT_BIT, &p->status);
-		hard_local_irq_restore(flags);
+	if (dovetail_enabled)
 		dovetail_kevent_hook(kevent, data);
-		flags = hard_local_irq_save();
-		__clear_bit(STAGE_CALLOUT_BIT, &p->status);
-	}
-
-	hard_local_irq_restore(flags);
 }
 
 void __weak dovetail_migration_hook(struct task_struct *p)
@@ -375,29 +344,11 @@ int dovetail_start(void)
 }
 EXPORT_SYMBOL_GPL(dovetail_start);
 
-static void sync_event_notifier(struct irq_stage *stage)
-{
-	struct irq_stage_data *p;
-	int cpu;
-
-	/*
-	 * Wait for any ongoing callout to finish, since our caller
-	 * might subsequently unmap the stage code.
-	 */
-	for_each_online_cpu(cpu) {
-		p = irq_stage_context(stage, cpu);
-		while (test_bit(STAGE_CALLOUT_BIT, &p->status))
-			schedule_timeout_interruptible(HZ / 50);
-	}
-}
-
 void dovetail_stop(void)
 {
 	check_root_stage();
 
 	dovetail_enabled = false;
 	smp_wmb();
-	sync_event_notifier(head_irq_stage);
-	sync_event_notifier(&root_irq_stage);
 }
 EXPORT_SYMBOL_GPL(dovetail_stop);
