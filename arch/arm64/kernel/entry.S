@@ -626,8 +626,7 @@ el1_irq:
 
 	irq_handler
 #ifdef CONFIG_IRQ_PIPELINE
-	tst	w0, w0
-	b.eq	1f
+	cbz     w0, 1f
 #endif
 
 #ifdef CONFIG_PREEMPT
@@ -874,8 +873,7 @@ el0_irq_naked:
 #endif
 	irq_handler
 #ifdef CONFIG_IRQ_PIPELINE
-	tst	w0, w0
-	b.eq	finish_ret_to_user
+	cbz	w0, work_done
 #endif
 #ifdef CONFIG_TRACE_IRQFLAGS
 	bl	trace_hardirqs_on
@@ -913,6 +911,7 @@ work_pending:
 #ifdef CONFIG_TRACE_IRQFLAGS
 	bl	trace_hardirqs_on		// enabled while in userspace
 #endif
+work_done:
 	ldr	x1, [tsk, #TSK_TI_FLAGS]	// re-check for single-step
 	b	finish_ret_to_user
 /*
