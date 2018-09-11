@@ -1351,7 +1351,6 @@ bool irq_cpuidle_enter(struct cpuidle_device *dev,
 {
 	struct irq_stage_data *p;
 
-	WARN_ON_ONCE(irq_pipeline_debug() && hard_irqs_disabled());
 	WARN_ON_ONCE(irq_pipeline_debug() && !irqs_disabled());
 	
 	hard_local_irq_disable();
