@@ -968,6 +968,9 @@ asmlinkage void do_notify_resume(struct pt_regs *regs,
 
 	if (irqs_pipelined() && stalled)
 		local_irq_disable();
+
+	if (IS_ENABLED(CONFIG_DEBUG_IRQ_PIPELINE))
+		WARN_ON_ONCE(user_mode(regs) && irqs_disabled());
 }
 
 unsigned long __ro_after_init signal_minsigstksz;
