@@ -207,7 +207,11 @@ static inline bool test_thread_local_flags(unsigned int mask)
 
 static inline bool tlf_head_stage(void)
 {
+#ifdef CONFIG_HAVE_IRQ_PIPELINE
 	return test_thread_local_flags(_TLF_HEAD);
+#else
+	return false;
+#endif
 }
 
 #else
