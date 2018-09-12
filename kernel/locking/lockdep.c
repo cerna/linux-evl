@@ -3861,7 +3861,13 @@ static void check_flags(unsigned long flags)
 {
 #if defined(CONFIG_PROVE_LOCKING) && defined(CONFIG_DEBUG_LOCKDEP) && \
     defined(CONFIG_TRACE_IRQFLAGS)
-	if (!debug_locks)
+	/*
+	 * irq_pipeline: we can't and don't want to check the
+	 * consistency of the irq tracer when running over the
+	 * pipeline entry or head stage contexts, since the root stall
+	 * bit does not reflect the current irq state there.
+	 */
+	if (on_pipeline_entry() || on_head_stage() || !debug_locks)
 		return;
 
 	if (irqs_disabled_flags(flags)) {
