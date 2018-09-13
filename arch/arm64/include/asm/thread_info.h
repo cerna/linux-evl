@@ -16,6 +16,7 @@
 
 struct task_struct;
 
+#include <dovetail/thread_info.h>
 #include <asm/memory.h>
 #include <asm/stack_pointer.h>
 #include <asm/types.h>
@@ -44,6 +45,7 @@ struct thread_info {
 #endif
 		} preempt;
 	};
+	struct oob_thread_state	oob_state;	/* co-kernel thread state */
 };
 
 #define thread_saved_pc(tsk)	\
@@ -72,6 +74,7 @@ void arch_release_task_struct(struct task_struct *tsk);
  *  TIF_SIGPENDING	- signal pending
  *  TIF_NEED_RESCHED	- rescheduling necessary
  *  TIF_NOTIFY_RESUME	- callback before returning to user
+ *  TIF_MAYDAY		- emergency request to leave the oob stage
  */
 #define TIF_SIGPENDING		0
 #define TIF_NEED_RESCHED	1
@@ -93,6 +96,7 @@ void arch_release_task_struct(struct task_struct *tsk);
 #define TIF_SVE			23	/* Scalable Vector Extension in use */
 #define TIF_SVE_VL_INHERIT	24	/* Inherit sve_vl_onexec across exec */
 #define TIF_SSBD		25	/* Wants SSB mitigation */
+#define TIF_MAYDAY		26	/* emergency trap pending */
 
 #define _TIF_SIGPENDING		(1 << TIF_SIGPENDING)
 #define _TIF_NEED_RESCHED	(1 << TIF_NEED_RESCHED)
@@ -108,6 +112,7 @@ void arch_release_task_struct(struct task_struct *tsk);
 #define _TIF_FSCHECK		(1 << TIF_FSCHECK)
 #define _TIF_32BIT		(1 << TIF_32BIT)
 #define _TIF_SVE		(1 << TIF_SVE)
+#define _TIF_MAYDAY		(1 << TIF_MAYDAY)
 
 #define _TIF_WORK_MASK		(_TIF_NEED_RESCHED | _TIF_SIGPENDING | \
 				 _TIF_NOTIFY_RESUME | _TIF_FOREIGN_FPSTATE | \
@@ -128,6 +133,8 @@ void arch_release_task_struct(struct task_struct *tsk);
  * Local (synchronous) thread flags.
  */
 #define _TLF_OOB		0x0001
+#define _TLF_DOVETAIL		0x0002
+#define _TLF_OFFSTAGE		0x0004
 
 #endif /* __KERNEL__ */
 #endif /* __ASM_THREAD_INFO_H */
