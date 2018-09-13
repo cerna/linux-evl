@@ -639,7 +639,7 @@ el1_irq:
 #endif
 1:
 #ifdef CONFIG_TRACE_IRQFLAGS
-	bl	trace_hardirqs_on
+	bl	trace_hardirqs_on_pipelined
 #endif
 	kernel_exit 1
 ENDPROC(el1_irq)
@@ -862,11 +862,11 @@ el0_irq_naked:
 1:
 #endif
 	irq_handler
+#ifdef CONFIG_TRACE_IRQFLAGS
+	bl	trace_hardirqs_on_pipelined
+#endif
 #ifdef CONFIG_IRQ_PIPELINE
 	cbz	w0, work_done
-#endif
-#ifdef CONFIG_TRACE_IRQFLAGS
-	bl	trace_hardirqs_on
 #endif
 	disable_daif
 	b	ret_to_user_noirq
