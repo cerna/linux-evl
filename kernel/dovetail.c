@@ -9,7 +9,6 @@
 #include <linux/sched/signal.h>
 #include <linux/irq_pipeline.h>
 #include <linux/dovetail.h>
-#include <asm/asm-offsets.h>
 #include <asm/unistd.h>
 #include <asm/syscall.h>
 
