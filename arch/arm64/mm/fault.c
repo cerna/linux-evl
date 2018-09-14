@@ -75,12 +75,13 @@ static inline const struct fault_info *esr_to_fault_info(unsigned int esr)
  * helpers. From the main kernel's point of view, there is no change.
  */
 static inline
-unsigned long fault_entry(struct pt_regs *regs)
+unsigned long fault_entry(unsigned int exception, struct pt_regs *regs)
 {
 	unsigned long flags;
 	int nosync = 1;
 
 	flags = hard_local_irq_save();
+	dovetail_handle_trap(exception, regs);
 	if (hard_irqs_disabled_flags(flags))
 		nosync = test_and_set_stage_bit(STAGE_STALL_BIT,
 					irq_root_this_context());
@@ -120,7 +121,8 @@ static inline void fault_exit(unsigned long combo)
 
 #else	/* !CONFIG_IRQ_PIPELINE */
 
-static inline unsigned long fault_entry(struct pt_regs *regs)
+static inline
+unsigned long fault_entry(unsigned int exception, struct pt_regs *regs)
 {
 	return 0;
 }
@@ -433,7 +435,7 @@ static void do_bad_area(unsigned long addr, unsigned int esr, struct pt_regs *re
 		unsigned long irqflags;
 		struct siginfo si;
 
-		irqflags = fault_entry(regs);
+		irqflags = fault_entry(ARM64_TRAP_ACCESS, regs);
 		clear_siginfo(&si);
 		si.si_signo	= inf->sig;
 		si.si_code	= inf->code;
@@ -506,7 +508,7 @@ static int __kprobes do_page_fault(unsigned long addr, unsigned int esr,
 	unsigned long vm_flags = VM_READ | VM_WRITE, irqflags;
 	unsigned int mm_flags = FAULT_FLAG_ALLOW_RETRY | FAULT_FLAG_KILLABLE;
 
-	irqflags = fault_entry(regs);
+	irqflags = fault_entry(ARM64_TRAP_ACCESS, regs);
 
 	if (notify_page_fault(regs, esr))
 		goto out;
@@ -711,7 +713,7 @@ static int do_sea(unsigned long addr, unsigned int esr, struct pt_regs *regs)
 	const struct fault_info *inf;
 	unsigned long irqflags;
 
-	irqflags = fault_entry(regs);
+	irqflags = fault_entry(ARM64_TRAP_SEA, regs);
 
 	inf = esr_to_fault_info(esr);
 
@@ -827,7 +829,7 @@ asmlinkage void __exception do_mem_abort(unsigned long addr, unsigned int esr,
 	if (!inf->fn(addr, esr, regs))
 		return;
 
-	irqflags = fault_entry(regs);
+	irqflags = fault_entry(ARM64_TRAP_ABRT, regs);
 
 	if (!user_mode(regs)) {
 		pr_alert("Unhandled fault at 0x%016lx\n", addr);
@@ -885,7 +887,7 @@ asmlinkage void __exception do_sp_pc_abort(unsigned long addr,
 		hard_local_irq_enable();
 	}
 
-	irqflags = fault_entry(regs);
+	irqflags = fault_entry(ARM64_TRAP_ABRT, regs);
 	clear_siginfo(&info);
 	info.si_signo = SIGBUS;
 	info.si_errno = 0;
@@ -944,21 +946,23 @@ asmlinkage int __exception do_debug_exception(unsigned long addr,
 	if (user_mode(regs) && instruction_pointer(regs) > TASK_SIZE)
 		arm64_apply_bp_hardening();
 
+	irqflags = fault_entry(ARM64_TRAP_DEBUG, regs);
+
 	if (!inf->fn(addr, esr, regs)) {
 		rv = 1;
 	} else {
 		struct siginfo info;
 
-		irqflags = fault_entry(regs);
 		clear_siginfo(&info);
 		info.si_signo = inf->sig;
 		info.si_errno = 0;
 		info.si_code  = inf->code;
 		info.si_addr  = (void __user *)addr;
 		arm64_notify_die(inf->name, regs, &info, esr);
-		fault_exit(irqflags);
 		rv = 0;
 	}
+
+	fault_exit(irqflags);
 
 	if (interrupts_enabled(regs))
 		trace_hardirqs_on();

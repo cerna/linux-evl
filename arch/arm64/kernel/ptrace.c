@@ -184,6 +184,8 @@ static void ptrace_hbptriggered(struct perf_event *bp,
 	struct arch_hw_breakpoint *bkpt = counter_arch_bp(bp);
 	siginfo_t info;
 
+	dovetail_handle_trap(ARM64_TRAP_DEBUG, regs);
+
 	clear_siginfo(&info);
 	info.si_signo	= SIGTRAP;
 	info.si_errno	= 0;

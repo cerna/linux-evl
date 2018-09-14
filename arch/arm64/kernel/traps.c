@@ -399,6 +399,8 @@ void arm64_notify_segfault(unsigned long addr)
 
 asmlinkage void __exception do_undefinstr(struct pt_regs *regs)
 {
+	dovetail_handle_trap(ARM64_TRAP_UNDI, regs);
+
 	/* check for AArch32 breakpoint instructions */
 	if (!aarch32_break_handler(regs))
 		return;
@@ -618,6 +620,8 @@ asmlinkage void bad_el0_sync(struct pt_regs *regs, int reason, unsigned int esr)
 {
 	siginfo_t info;
 	void __user *pc = (void __user *)instruction_pointer(regs);
+
+	dovetail_handle_trap(ARM64_TRAP_UNDSE, regs);
 
 	clear_siginfo(&info);
 	info.si_signo = SIGILL;
