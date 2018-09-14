@@ -53,7 +53,7 @@ void dovetail_handle_kevent(int event, void *data);
 
 void dovetail_clock_set(void);
 
-#ifdef CONFIG_DOVETAIL_TRACK_VM_GUEST
+#ifdef CONFIG_KVM
 void dovetail_hypervisor_stall(void);
 #else
 static inline void dovetail_hypervisor_stall(void) { }

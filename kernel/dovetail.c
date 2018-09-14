@@ -317,7 +317,7 @@ void __weak dovetail_clock_set(void)
 {
 }
 
-#ifdef CONFIG_DOVETAIL_TRACK_VM_GUEST
+#ifdef CONFIG_KVM
 void dovetail_hypervisor_stall(void)
 {
 	struct hypervisor_stall *nfy;
