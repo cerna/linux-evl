@@ -188,7 +188,7 @@ static int __die(const char *str, int err, struct pt_regs *regs)
 	return ret;
 }
 
-static DEFINE_RAW_SPINLOCK(die_lock);
+static DEFINE_HARD_SPINLOCK(die_lock);
 
 /*
  * This function is protected against re-entrancy.
