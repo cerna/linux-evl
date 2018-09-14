@@ -16,6 +16,5 @@
 #define ARM_TRAP_VFP		6	/* VFP floating point exception */
 #define ARM_TRAP_UNDEFINSTR	7	/* Undefined instruction */
 #define ARM_TRAP_ALIGNMENT	8	/* Unaligned access exception */
-#define ARM_TRAP_MAYDAY		9	/* Internal recovery trap */
 
 #endif /* _ASM_ARM_DOVETAIL_H */
