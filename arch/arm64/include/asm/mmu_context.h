@@ -244,7 +244,7 @@ static inline void __switch_mm(struct mm_struct *next)
 }
 
 static inline void
-switch_mm(struct mm_struct *prev, struct mm_struct *next,
+do_switch_mm(struct mm_struct *prev, struct mm_struct *next,
 	  struct task_struct *tsk)
 {
 	if (prev != next)
@@ -259,9 +259,34 @@ switch_mm(struct mm_struct *prev, struct mm_struct *next,
 	update_saved_ttbr0(tsk, next);
 }
 
-#define deactivate_mm(tsk,mm)	do { } while (0)
-#define activate_mm(prev,next)	switch_mm(prev, next, current)
+static inline void
+switch_mm(struct mm_struct *prev, struct mm_struct *next,
+	  struct task_struct *tsk)
+{
+	unsigned long flags;
 
+	dovetail_switch_mm_enter(flags);
+	do_switch_mm(prev, next, tsk);
+	dovetail_switch_mm_exit(flags);
+}
+
+#define deactivate_mm(tsk,mm)	do { } while (0)
+#define activate_mm(prev,next)	do_switch_mm(prev, next, current)
+
+#ifdef CONFIG_DOVETAIL
+/*
+ * The mm switching service a co-kernel may invoke from the head stage
+ * exclusively, as part of its private context switch procedure
+ * (hard_irqs_disabled).
+ */
+static inline void
+dovetail_switch_mm(struct mm_struct *prev, struct mm_struct *next,
+		   struct task_struct *tsk)
+{
+	do_switch_mm(prev, next, tsk);
+}
+#endif
+	  
 void verify_cpu_asid_bits(void);
 void post_ttbr_update_workaround(void);
 
