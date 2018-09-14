@@ -575,9 +575,7 @@ do_translation_fault(unsigned long addr, unsigned int fsr,
 	return 0;
 
 bad_area:
-	irqflags = fault_entry(ARM_TRAP_ACCESS, regs);
 	do_bad_area(addr, fsr, regs);
-	fault_exit(irqflags);
 	return 0;
 }
 #else					/* CONFIG_MMU */
