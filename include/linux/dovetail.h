@@ -156,6 +156,9 @@ struct dovetail_state *dovetail_task_state(struct task_struct *p)
 	return &task_thread_info(p)->dovetail_state;
 }
 
+void dovetail_call_mayday(struct thread_info *ti,
+			  struct pt_regs *regs);
+
 static inline void dovetail_send_mayday(struct task_struct *castaway)
 {
 	struct thread_info *ti = task_thread_info(castaway);
