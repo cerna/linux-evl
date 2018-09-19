@@ -759,8 +759,6 @@ void __weak irq_enter_head(void) { }
 
 void __weak irq_exit_head(void) { }
 
-void dovetail_mayday_hook(struct pt_regs *regs);
-
 static inline void check_pending_mayday(struct pt_regs *regs)
 {
 #ifdef CONFIG_DOVETAIL
@@ -768,10 +766,8 @@ static inline void check_pending_mayday(struct pt_regs *regs)
 	 * Sending MAYDAY is in essence a rare case, so prefer test
 	 * then maybe clear over test_and_clear.
 	 */
-	if (user_mode(regs) && test_thread_flag(TIF_MAYDAY)) {
-		clear_thread_flag(TIF_MAYDAY);
-		dovetail_mayday_hook(regs);
-	}
+	if (user_mode(regs) && test_thread_flag(TIF_MAYDAY))
+		dovetail_call_mayday(current_thread_info(), regs);
 #endif
 }
 

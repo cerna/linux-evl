@@ -186,7 +186,7 @@ int dovetail_handle_syscall(struct thread_info *ti,
 		local_flags = READ_ONCE(ti_local_flags(ti));
 		if (local_flags & _TLF_HEAD) {
 			if (test_ti_thread_flag(ti, TIF_MAYDAY))
-				call_mayday(ti, regs);
+				dovetail_call_mayday(ti, regs);
 			return 1; /* don't pass down, no tail work. */
 		} else {
 			dovetail_root_sync();
