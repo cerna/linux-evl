@@ -31,6 +31,12 @@
 
 #ifdef CONFIG_MMU
 
+#ifdef CONFIG_DOVETAIL
+#define fault_entry(__exception, __regs)	__fault_entry(__exception, __regs)
+#else
+#define fault_entry(__exception, __regs)	__fault_entry(-1, __regs)
+#endif
+
 #ifdef CONFIG_IRQ_PIPELINE
 /*
  * We need to synchronize the virtual interrupt state with the hard
@@ -44,8 +50,7 @@
  * helpers. From the main kernel's point of view, there is no change.
  */
 static inline
-unsigned long fault_entry(unsigned int exception,
-			  struct pt_regs *regs)
+unsigned long __fault_entry(unsigned int exception, struct pt_regs *regs)
 {
 	unsigned long flags;
 	int nosync = 1;
@@ -92,13 +97,12 @@ static inline void fault_exit(unsigned long combo)
 #else	/* !CONFIG_IRQ_PIPELINE */
 
 static inline
-unsigned long fault_entry(unsigned int exception,
-			  struct pt_regs *regs)
+unsigned long __fault_entry(unsigned int exception, struct pt_regs *regs)
 {
 	return 0;
 }
 
-static inline void fault_exit(unsigned long x) { }
+static inline void fault_exit(unsigned long combo) { }
 
 #endif	/* !CONFIG_IRQ_PIPELINE */
 
