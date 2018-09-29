@@ -62,6 +62,13 @@ static inline const struct fault_info *esr_to_fault_info(unsigned int esr)
 	return fault_info + (esr & 63);
 }
 
+#ifdef CONFIG_DOVETAIL
+#define fault_entry(__exception, __regs)	__fault_entry(__exception, __regs)
+#else
+/* Do not depend on trap id. definitions from asm/dovetail.h */
+#define fault_entry(__exception, __regs)	__fault_entry(-1, __regs)
+#endif
+
 #ifdef CONFIG_IRQ_PIPELINE
 /*
  * We need to synchronize the virtual interrupt state with the hard
@@ -74,8 +81,9 @@ static inline const struct fault_info *esr_to_fault_info(unsigned int esr)
  * reflect changes to that state via calls to trace_hardirqs_*
  * helpers. From the main kernel's point of view, there is no change.
  */
+
 static inline
-unsigned long fault_entry(unsigned int exception, struct pt_regs *regs)
+unsigned long __fault_entry(unsigned int exception, struct pt_regs *regs)
 {
 	unsigned long flags;
 	int nosync = 1;
@@ -122,7 +130,7 @@ static inline void fault_exit(unsigned long combo)
 #else	/* !CONFIG_IRQ_PIPELINE */
 
 static inline
-unsigned long fault_entry(unsigned int exception, struct pt_regs *regs)
+unsigned long __fault_entry(unsigned int exception, struct pt_regs *regs)
 {
 	return 0;
 }
