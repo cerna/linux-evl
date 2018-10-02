@@ -300,14 +300,29 @@ static void register_proxy_device(void *arg) /* irqs_disabled() */
 	 *         - real device is installed, set to shutdown state
 	 * ...
 	 *
-	 * - proxy is unregistered on CPUx
-	 *   - real device is not considered, !detached state (clockevent_replace)
-	 *     - dummy device is picked
-	 * ... (CPU gets no tick anymore) ...
+	 * 1. now that we have the real device switched to a shutdown
+	 *    state, the clockchip handler may have turned off the
+	 *    hardware.
+	 *
+	 * 2. if/when the proxy is unregistered from CPUx, the real
+	 *    device is not considered as it is not in detached state
+	 *    (clockevent_replace), so the dummy device is picked
+	 *    instead.
+	 *
+	 * In both cases, the CPU gets no tick anymore. What we need
+	 * to do to fix the situation is two-fold:
+	 *
+	 * - switch the real device back to detached state.
+	 *
+	 * - trigger a tick immediately on the proxy device, which
+	 *   causes the real device's set_next_event() handler to be
+	 *   called, turning it on again before scheduling the event.
 	 */
 	if (raw_cpu_ptr(&tick_cpu_device)->evtdev == proxy_ced) {
 		real_ced->event_handler = proxy_event_handler;
 		clockevents_switch_state(real_ced, CLOCK_EVT_STATE_DETACHED);
+		if (clockevent_state_oneshot(proxy_ced))
+			clockevents_program_event(proxy_ced, ktime_get(), true);
 	}
 }
 
