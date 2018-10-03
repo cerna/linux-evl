@@ -1295,6 +1295,7 @@ EXPORT_SYMBOL_GPL(irq_stage_pop);
 void irq_pipeline_oops(void)
 {
 	irq_pipeline_oopsing = true;
+	set_stage_bit(STAGE_STALL_BIT, irq_root_this_context());
 }
 
 /*
