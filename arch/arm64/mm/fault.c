@@ -88,8 +88,15 @@ unsigned long __fault_entry(unsigned int exception, struct pt_regs *regs)
 	unsigned long flags;
 	int nosync = 1;
 
-	flags = hard_local_irq_save();
+	/*
+	 * CAUTION: The co-kernel might demote the current context to
+	 * the root stage as a result of handling this trap, returning
+	 * with hard irqs on.
+	 */
 	dovetail_handle_trap(exception, regs);
+
+	flags = hard_local_irq_save();
+
 	if (hard_irqs_disabled_flags(flags))
 		nosync = test_and_set_stage_bit(STAGE_STALL_BIT,
 					irq_root_this_context());
