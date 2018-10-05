@@ -7099,13 +7099,6 @@ int dovetail_leave_inband(void)
 	if (likely(__schedule(false)))
 		return 0;
 
-	/*
-	 * We should not get there unless a signal was pending for
-	 * current on entry to __schedule(), in which case the
-	 * migration process to the head stage is aborted.
-	 */
-	BUG_ON(!signal_pending(p));
-
 	clear_thread_local_flags(_TLF_OFFSTAGE);
 	pd->task_inflight = NULL;
 out:
