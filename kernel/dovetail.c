@@ -1,9 +1,7 @@
-/* -*- linux-c -*-
- * kernel/dovetail.c
+/*
+ * SPDX-License-Identifier: GPL-2.0
  *
- * Copyright (C) 2002-2018 Philippe Gerum.
- *
- * Dual kernel interface.
+ * Copyright (C) 2016 Philippe Gerum  <rpm@xenomai.org>.
  */
 #include <linux/timekeeper_internal.h>
 #include <linux/sched/signal.h>
