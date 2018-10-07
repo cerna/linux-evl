@@ -1,12 +1,7 @@
-/* -*- linux-c -*-
- * arch/arm64/kernel/irq_pipeline.c
+/*
+ * SPDX-License-Identifier: GPL-2.0
  *
- * Copyright (C) 2002-2017 Philippe Gerum <rpm@xenomai.org>.
- * Copyright (C) 2004 Wolfgang Grandegger (Adeos/arm port over 2.4).
- * Copyright (C) 2005 Heikki Lindholm (PowerPC 970 fixes).
- * Copyright (C) 2005 Stelian Pop.
- * Copyright (C) 2006-2008 Gilles Chanteperdrix.
- * Copyright (C) 2010 Philippe Gerum (SMP port).
+ * Copyright (C) 2018 Philippe Gerum  <rpm@xenomai.org>.
  */
 #include <linux/kernel.h>
 #include <linux/smp.h>
