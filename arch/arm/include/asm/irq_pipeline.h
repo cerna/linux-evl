@@ -1,10 +1,7 @@
 /*
- * arch/arm/include/asm/irq_pipeline.h
+ * SPDX-License-Identifier: GPL-2.0
  *
- * Copyright (C) 2002-2018 Philippe Gerum.
- * Copyright (C) 2005 Stelian Pop.
- * Copyright (C) 2006-2008 Gilles Chanteperdrix.
- * Copyright (C) 2010 Philippe Gerum (SMP port).
+ * Copyright (C) 2016 Philippe Gerum  <rpm@xenomai.org>.
  */
 #ifndef _ASM_ARM_IRQ_PIPELINE_H
 #define _ASM_ARM_IRQ_PIPELINE_H
