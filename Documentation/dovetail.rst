@@ -187,15 +187,15 @@ regular task into a real-time thread with extended capabilities,
 binding it to the core.
 
 The real-time core should inform the kernel about its intent to share
-control over a task, by calling :c:func::`dovetail_enable` on behalf
-of that task, i.e. when such task is current.
+control over a task, by calling :c:func::`dovetail_start_altsched` on
+behalf of that task, i.e. when such task is current.
 
 For this reason, the binding operation is usually carried out by a
 dedicated system call exposed by the real-time core, which a regular
 task would invoke.
 
-Once :c:func::`dovetail_enable` has returned, Dovetail notifications
-are enabled for the current task (see below).
+Once :c:func::`dovetail_start_altsched` has returned, Dovetail
+notifications are enabled for the current task (see below).
 
 .. NOTE:: Whether there should be distinct procedures for binding
 	  processes *and* threads to the real-time core, or only a

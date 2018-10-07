@@ -30,6 +30,11 @@ struct hypervisor_stall {
 	void (*handler)(struct hypervisor_stall *nfy);
 };
 
+struct dovetail_altsched_context {
+	struct task_struct *task;
+	struct mm_struct *active_mm;
+};
+
 int dovetail_start(void);
 
 void dovetail_stop(void);
@@ -78,7 +83,7 @@ static inline void dovetail_task_exit(void)
 }
 
 static inline
-void dovetail_context_switch(struct task_struct *next)
+void dovetail_inband_switch(struct task_struct *next)
 {
 	struct task_struct *prev = current;
 
@@ -116,7 +121,7 @@ static inline void dovetail_exit_vm_guest(void)
 
 static inline void dovetail_prepare_switch(struct task_struct *next)
 {
-	dovetail_context_switch(next);
+	dovetail_inband_switch(next);
 	hard_local_irq_disable();
 }
 
@@ -125,18 +130,32 @@ static inline void dovetail_leave_oob(void)
 	clear_thread_local_flags(_TLF_HEAD|_TLF_OFFSTAGE);
 }
 
-static inline void dovetail_resume_oob(void)
+static inline
+void dovetail_resume_oob(struct dovetail_altsched_context *outgoing)
 {
+	struct task_struct *tsk = current;
+	/* 
+	 * We are about to leave the current inband context for
+	 * switching to an out-of-band task, save the preempted
+	 * context information.
+	 */
+	outgoing->task = tsk;
+	outgoing->active_mm = tsk->active_mm;
 	dovetail_hypervisor_stall();
 }
 
-int dovetail_context_switch_tail(void);
-
-void dovetail_enable(int flags);
-
-void dovetail_disable(void);
+int dovetail_inband_switch_tail(void);
 
 void dovetail_stage_migration_tail(void);
+
+void dovetail_init_altsched(struct dovetail_altsched_context *p);
+
+void dovetail_start_altsched(void);
+
+void dovetail_stop_altsched(void);
+
+void dovetail_context_switch(struct dovetail_altsched_context *out,
+			     struct dovetail_altsched_context *in);
 
 __must_check int dovetail_leave_inband(void);
 
@@ -212,7 +231,7 @@ static inline void dovetail_stage_migration_tail(void) { }
 
 static inline void dovetail_prepare_switch(struct task_struct *next) { }
 
-static inline int dovetail_context_switch_tail(void)
+static inline int dovetail_inband_switch_tail(void)
 {
 	return 0;
 }

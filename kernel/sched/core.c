@@ -2841,7 +2841,7 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	 * context switch epilogue just yet. We will do that at some
 	 * point later, when the task switches back to the root stage.
 	 */
-	if (unlikely(dovetail_context_switch_tail()))
+	if (unlikely(dovetail_inband_switch_tail()))
 		return NULL;
 
 	return finish_task_switch(prev);
@@ -7133,6 +7133,38 @@ void dovetail_resume_inband(void)
 	dovetail_stage_migration_tail();
 }
 EXPORT_SYMBOL_GPL(dovetail_resume_inband);
+
+void dovetail_context_switch(struct dovetail_altsched_context *out,
+			     struct dovetail_altsched_context *in)
+{
+	struct task_struct *next, *prev, *last;
+	struct mm_struct *prev_mm, *next_mm;
+
+	next = in->task;
+	prev = out->task;
+	prev_mm = out->active_mm;
+	next_mm = in->active_mm;
+
+	if (next_mm == NULL) {
+		in->active_mm = prev_mm;
+		enter_lazy_tlb(prev_mm, next);
+	} else {
+		dovetail_switch_mm(prev_mm, next_mm, next);
+		/*
+		 * We might be switching back to the inband kernel,
+		 * which we preempted earlier, shortly after "current"
+		 * dropped its mm context in the do_exit() path
+		 * (next->mm == NULL). In that particular case, the
+		 * kernel expects a lazy TLB state for leaving the mm.
+		 */
+		if (next->mm == NULL)
+			enter_lazy_tlb(prev_mm, next);
+	}
+
+	switch_to(prev, next, last);
+	arch_dovetail_context_resume();
+}
+EXPORT_SYMBOL_GPL(dovetail_context_switch);
 
 #endif /* CONFIG_DOVETAIL */
 

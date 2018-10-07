@@ -26,24 +26,29 @@ void dovetail_init_task(struct task_struct *p)
 	arch_dovetail_init_task(p);
 }
 
-void __weak arch_dovetail_enable(int flags)
+void dovetail_init_altsched(struct dovetail_altsched_context *p)
 {
-}
+	struct task_struct *tsk = current;
 
-void dovetail_enable(int flags)	/* flags unused yet. */
+	check_root_stage();
+	p->task = tsk;
+	p->active_mm = tsk->mm;
+}
+EXPORT_SYMBOL_GPL(dovetail_init_altsched);
+
+void dovetail_start_altsched(void)
 {
 	check_root_stage();
-	arch_dovetail_enable(flags);
 	set_thread_local_flags(_TLF_DOVETAIL);
 }
-EXPORT_SYMBOL_GPL(dovetail_enable);
+EXPORT_SYMBOL_GPL(dovetail_start_altsched);
 
-void dovetail_disable(void)
+void dovetail_stop_altsched(void)
 {
 	clear_thread_local_flags(_TLF_DOVETAIL);
 	clear_thread_flag(TIF_MAYDAY);
 }
-EXPORT_SYMBOL_GPL(dovetail_disable);
+EXPORT_SYMBOL_GPL(dovetail_stop_altsched);
 
 void __weak dovetail_fastcall_hook(struct pt_regs *regs)
 {
@@ -281,7 +286,7 @@ void dovetail_stage_migration_tail(void)
 }
 EXPORT_SYMBOL_GPL(dovetail_stage_migration_tail);
 
-int dovetail_context_switch_tail(void)
+int dovetail_inband_switch_tail(void)
 {
 	bool on_root;
 
