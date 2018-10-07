@@ -1,16 +1,7 @@
-/* -*- linux-c -*-
- * kernel/time/tick-proxy.c
+/*
+ * SPDX-License-Identifier: GPL-2.0
  *
- * Copyright (C) 2017 Philippe Gerum <rpm@xenomai.org>.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * The proxy tick device is a synthetic clock event device for handing
- * over control of the real tick device to a co-kernel. The co-kernel
- * then handles timing requests from the host kernel in addition to
- * its own timing duties.
+ * Copyright (C) 2017 Philippe Gerum  <rpm@xenomai.org>.
  */
 #include <linux/kernel.h>
 #include <linux/module.h>
