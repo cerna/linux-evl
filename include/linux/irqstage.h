@@ -1,7 +1,7 @@
 /*
- *   include/linux/irqstage.h
+ * SPDX-License-Identifier: GPL-2.0
  *
- *   Copyright (C) 2007-2016 Philippe Gerum.
+ * Copyright (C) 2016 Philippe Gerum  <rpm@xenomai.org>.
  */
 #ifndef _LINUX_IRQSTAGE_H
 #define _LINUX_IRQSTAGE_H

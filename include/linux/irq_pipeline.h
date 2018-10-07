@@ -1,8 +1,8 @@
 /*
- * include/linux/irq_pipeline.h
+ * SPDX-License-Identifier: GPL-2.0
  *
- * Copyright (C) 2002-2018 Philippe Gerum
- *               2006-2012 Gilles Chanteperdrix
+ * Copyright (C) 2002 Philippe Gerum  <rpm@xenomai.org>.
+ *               2006 Gilles Chanteperdrix.
  *               2007 Jan Kiszka.
  */
 #ifndef _LINUX_IRQ_PIPELINE_H

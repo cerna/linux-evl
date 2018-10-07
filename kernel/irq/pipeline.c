@@ -1,13 +1,7 @@
-/* -*- linux-c -*-
- * kernel/irq/pipeline.c
+/*
+ * SPDX-License-Identifier: GPL-2.0
  *
- * Copyright (C) 2002-2017 Philippe Gerum.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * IRQ pipeline.
+ * Copyright (C) 2016 Philippe Gerum  <rpm@xenomai.org>.
  */
 #include <linux/version.h>
 #include <linux/module.h>

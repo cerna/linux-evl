@@ -1,7 +1,7 @@
 /*
- * include/asm-generic/irq_pipeline.h
+ * SPDX-License-Identifier: GPL-2.0
  *
- * Copyright (C) 2002-2016 Philippe Gerum.
+ * Copyright (C) 2016 Philippe Gerum  <rpm@xenomai.org>.
  */
 #ifndef __ASM_GENERIC_IRQ_PIPELINE_H
 #define __ASM_GENERIC_IRQ_PIPELINE_H
