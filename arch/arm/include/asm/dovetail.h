@@ -17,4 +17,7 @@
 #define ARM_TRAP_UNDEFINSTR	7	/* Undefined instruction */
 #define ARM_TRAP_ALIGNMENT	8	/* Unaligned access exception */
 
+static inline void arch_dovetail_context_resume(void)
+{ }
+
 #endif /* _ASM_ARM_DOVETAIL_H */
