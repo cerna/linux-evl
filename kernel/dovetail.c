@@ -337,6 +337,21 @@ void dovetail_hypervisor_stall(void)
 EXPORT_SYMBOL_GPL(dovetail_hypervisor_stall);
 #endif
 
+void __weak dovetail_install_fd(unsigned int fd, struct file *file,
+				struct files_struct *files)
+{
+}
+
+void __weak dovetail_uninstall_fd(unsigned int fd, struct file *file,
+				  struct files_struct *files)
+{
+}
+
+void __weak dovetail_replace_fd(unsigned int fd, struct file *file,
+				struct files_struct *files)
+{
+}
+
 int dovetail_start(void)
 {
 	check_root_stage();

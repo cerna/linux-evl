@@ -14,6 +14,8 @@
 
 struct pt_regs;
 struct task_struct;
+struct file;
+struct files_struct;
 
 #define KEVENT_TASK_SCHEDULE	0
 #define KEVENT_TASK_SIGWAKE	1
@@ -198,7 +200,18 @@ static inline void dovetail_send_mayday(struct task_struct *castaway)
     	hard_cond_local_irq_restore(flags);	\
   } while (0)					\
 
+void dovetail_install_fd(unsigned int fd, struct file *file,
+			 struct files_struct *files);
+
+void dovetail_uninstall_fd(unsigned int fd, struct file *file,
+			   struct files_struct *files);
+
+void dovetail_replace_fd(unsigned int fd, struct file *file,
+			 struct files_struct *files);
+
 #else	/* !CONFIG_DOVETAIL */
+
+struct files_struct;
 
 static inline
 void dovetail_init_task(struct task_struct *p) { }
@@ -243,6 +256,18 @@ static inline int dovetail_inband_switch_tail(void)
   do { (void)(flags); } while (0)
 
 static inline void dovetail_clock_set(void) { }
+
+static inline
+void dovetail_install_fd(unsigned int fd, struct file *file,
+			 struct files_struct *files) { }
+
+static inline
+void dovetail_uninstall_fd(unsigned int fd, struct file *file,
+			   struct files_struct *files) { }
+
+static inline
+void dovetail_replace_fd(unsigned int fd, struct file *file,
+			 struct files_struct *files) { }
 
 #endif	/* !CONFIG_DOVETAIL */
 
