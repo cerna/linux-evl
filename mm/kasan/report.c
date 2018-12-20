@@ -159,7 +159,7 @@ static inline bool init_task_stack_addr(const void *addr)
 			sizeof(init_thread_union.stack));
 }
 
-static DEFINE_SPINLOCK(report_lock);
+static DEFINE_HARD_SPINLOCK(report_lock);
 
 static void kasan_start_report(unsigned long *flags)
 {
@@ -167,7 +167,7 @@ static void kasan_start_report(unsigned long *flags)
 	 * Make sure we don't end up in loop.
 	 */
 	kasan_disable_current();
-	spin_lock_irqsave(&report_lock, *flags);
+	raw_spin_lock_irqsave(&report_lock, *flags);
 	pr_err("==================================================================\n");
 }
 
@@ -175,7 +175,7 @@ static void kasan_end_report(unsigned long *flags)
 {
 	pr_err("==================================================================\n");
 	add_taint(TAINT_BAD_PAGE, LOCKDEP_NOW_UNRELIABLE);
-	spin_unlock_irqrestore(&report_lock, *flags);
+	raw_spin_unlock_irqrestore(&report_lock, *flags);
 	if (panic_on_warn)
 		panic("panic_on_warn set ...\n");
 	kasan_enable_current();
