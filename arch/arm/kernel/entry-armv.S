@@ -494,13 +494,6 @@ ENDPROC(__irq_usr)
 __und_usr:
 	usr_entry uaccess=0
 
-#ifdef CONFIG_DOVETAIL
-	mov	r0, #ARM_TRAP_UNDEFINSTR
-	mov	r1, sp				@ r1 = &regs
-	bl	dovetail_handle_trap
-	uaccess_enable ip
-#endif
-
 	mov	r2, r4
 	mov	r3, r5
 
