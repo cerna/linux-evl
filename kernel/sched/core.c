@@ -7141,7 +7141,7 @@ void dovetail_context_switch(struct dovetail_altsched_context *out,
 	next = in->task;
 	prev = out->task;
 	prev_mm = out->active_mm;
-	next_mm = in->active_mm;
+	next_mm = next->mm;
 
 	if (next_mm == NULL) {
 		in->active_mm = prev_mm;
