@@ -461,8 +461,8 @@ int trace_print_lat_fmt(struct trace_seq *s, struct trace_entry *entry)
 		(entry->flags & TRACE_FLAG_HEAD_STAGE);
 
 	irqs_off =
-		(entry->flags & (TRACE_FLAG_IRQS_HARDOFF|TRACE_FLAG_IRQS_HARDOFF)) ==
-		(TRACE_FLAG_IRQS_HARDOFF|TRACE_FLAG_IRQS_HARDOFF) ? '*' :
+		(entry->flags & (TRACE_FLAG_IRQS_OFF|TRACE_FLAG_IRQS_HARDOFF)) ==
+		(TRACE_FLAG_IRQS_OFF|TRACE_FLAG_IRQS_HARDOFF) ? '*' :
 		(entry->flags & TRACE_FLAG_IRQS_HARDOFF) ? 'D' :
 		(entry->flags & TRACE_FLAG_IRQS_OFF) ? 'd' :
 		!irqs_pipelined() && (entry->flags & TRACE_FLAG_IRQS_NOSUPPORT) ? 'X' :
