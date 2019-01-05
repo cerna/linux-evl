@@ -7141,24 +7141,30 @@ void dovetail_context_switch(struct dovetail_altsched_context *out,
 	next = in->task;
 	prev = out->task;
 	prev_mm = out->active_mm;
-	next_mm = next->mm;
+	next_mm = in->active_mm;
 
 	if (next_mm == NULL) {
 		in->active_mm = prev_mm;
+		in->borrowed_mm = true;
 		enter_lazy_tlb(prev_mm, next);
 	} else {
 		dovetail_switch_mm(prev_mm, next_mm, next);
 		/*
-		 * We might be switching back to the inband kernel,
+		 * We might be switching back to the inband context
 		 * which we preempted earlier, shortly after "current"
 		 * dropped its mm context in the do_exit() path
-		 * (next->mm == NULL). In that particular case, the
-		 * kernel expects a lazy TLB state for leaving the mm.
+		 * (next->mm == NULL). In such a case, a lazy TLB
+		 * state is expected when leaving the mm.
 		 */
 		if (next->mm == NULL)
 			enter_lazy_tlb(prev_mm, next);
 	}
 
+	if (out->borrowed_mm) {
+		out->borrowed_mm = false;
+		out->active_mm = NULL;
+	}
+	
 	switch_to(prev, next, last);
 	arch_dovetail_context_resume();
 }

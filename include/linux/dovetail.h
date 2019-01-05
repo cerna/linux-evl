@@ -31,6 +31,7 @@ struct dovetail_migration_data {
 struct dovetail_altsched_context {
 	struct task_struct *task;
 	struct mm_struct *active_mm;
+	bool borrowed_mm;
 };
 
 struct hypervisor_stall {
