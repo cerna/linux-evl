@@ -31,6 +31,7 @@ void dovetail_init_altsched(struct dovetail_altsched_context *p)
 	check_root_stage();
 	p->task = tsk;
 	p->active_mm = tsk->mm;
+	p->borrowed_mm = false;
 }
 EXPORT_SYMBOL_GPL(dovetail_init_altsched);
 
