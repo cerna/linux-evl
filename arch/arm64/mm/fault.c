@@ -46,6 +46,7 @@
 #include <asm/pgtable.h>
 #include <asm/tlbflush.h>
 #include <asm/traps.h>
+#include <asm/dovetail.h>
 
 #include <acpi/ghes.h>
 
