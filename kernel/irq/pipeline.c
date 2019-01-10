@@ -3,21 +3,13 @@
  *
  * Copyright (C) 2016 Philippe Gerum  <rpm@xenomai.org>.
  */
-#include <linux/version.h>
-#include <linux/module.h>
 #include <linux/kernel.h>
-#include <linux/kconfig.h>
 #include <linux/sched.h>
-#include <linux/printk.h>
-#include <linux/seq_buf.h>
-#include <linux/kallsyms.h>
-#include <linux/bitops.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
-#include <linux/clockchips.h>
-#include <linux/uaccess.h>
 #include <linux/irqdomain.h>
 #include <linux/irq_work.h>
+#include <linux/irq_pipeline.h>
 #include <linux/dovetail.h>
 #include <trace/events/irq.h>
 #include "internals.h"
@@ -1277,6 +1269,8 @@ int irq_stage_push(struct irq_stage *stage, const char *name)
 	if (ret)
 		return ret;
 
+	smp_wmb();
+
 	head_irq_stage = stage;
 
 	pr_info("IRQ pipeline: high-priority %s stage added.\n", name);
@@ -1290,7 +1284,7 @@ void irq_stage_pop(struct irq_stage *stage)
 	WARN_ON(!on_root_stage() || stage != head_irq_stage);
 
 	head_irq_stage = &root_irq_stage;
-	smp_mb();
+	smp_wmb();
 
 	pr_info("IRQ pipeline: %s stage removed.\n", stage->name);
 }
