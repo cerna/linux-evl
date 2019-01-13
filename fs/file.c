@@ -385,6 +385,7 @@ static struct fdtable *close_files(struct files_struct * files)
 			if (set & 1) {
 				struct file * file = xchg(&fdt->fd[i], NULL);
 				if (file) {
+					uninstall_inband_fd(i, file, files);
 					filp_close(file, files);
 					cond_resched();
 				}
@@ -610,6 +611,7 @@ void __fd_install(struct files_struct *files, unsigned int fd,
 void fd_install(unsigned int fd, struct file *file)
 {
 	__fd_install(current->files, fd, file);
+	install_inband_fd(fd, file, current->files);
 }
 
 EXPORT_SYMBOL(fd_install);
@@ -632,6 +634,7 @@ int __close_fd(struct files_struct *files, unsigned fd)
 	rcu_assign_pointer(fdt->fd[fd], NULL);
 	__put_unused_fd(files, fd);
 	spin_unlock(&files->file_lock);
+	uninstall_inband_fd(fd, file, files);
 	return filp_close(file, files);
 
 out_unlock:
@@ -696,6 +699,7 @@ void do_close_on_exec(struct files_struct *files)
 			rcu_assign_pointer(fdt->fd[fd], NULL);
 			__put_unused_fd(files, fd);
 			spin_unlock(&files->file_lock);
+			uninstall_inband_fd(fd, file, files);
 			filp_close(file, files);
 			cond_resched();
 			spin_lock(&files->file_lock);
@@ -867,6 +871,7 @@ __releases(&files->file_lock)
 	else
 		__clear_close_on_exec(fd, fdt);
 	spin_unlock(&files->file_lock);
+	replace_inband_fd(fd, file, files);
 
 	if (tofree)
 		filp_close(tofree, files);
