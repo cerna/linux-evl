@@ -1001,6 +1001,7 @@ int generic_pipeline_irq(unsigned int irq, struct pt_regs *regs)
 	}
 
 	copy_timer_regs(desc, regs);
+	trace_irq_pipeline_entry(irq);
 	enter_oob_irq();
 	preempt_count_add(PIPELINE_OFFSET);
 	generic_handle_irq_desc(desc);
@@ -1024,6 +1025,7 @@ int generic_pipeline_irq(unsigned int irq, struct pt_regs *regs)
 	exit_oob_irq();
 	synchronize_pipeline_on_irq();
 	check_pending_mayday(regs);
+	trace_irq_pipeline_exit(irq);
 out:
 	set_irq_regs(old_regs);
 
