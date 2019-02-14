@@ -16,10 +16,8 @@ this infrastructure still benefit from the ancillary kernel services
 such as virtual memory management, and can also leverage the rich GPOS
 feature set Linux provides such as networking, data storage or GUIs.
 
-Although the real-time infrastructure has to present specific driver
-stack and API implementations to applications, there are nonetheless
-significant upsides to keeping the real-time core separate from the
-GPOS infrastructure:
+There are significant upsides to keeping the real-time core separate
+from the GPOS infrastructure:
 
 - because the two kernels are independent, real-time activities are
   not serialized with GPOS operations internally, removing potential
@@ -27,13 +25,13 @@ GPOS infrastructure:
   work. Likewise, there is no requirement for keeping the GPOS
   operations fine-grained and highly preemptible at any time, which
   would otherwise induce noticeable overhead on low-end hardware, due
-  to the requirement for pervasive task priority inheritance and IRQ
+  to the need for pervasive task priority inheritance and IRQ
   threading.
 
-- the functional isolation of the real-time infrastructure from the
-  rest of the kernel code restricts common bug hunting to the scope of
-  the smaller kernel, excluding most interactions with the very large
-  GPOS kernel base.
+- when debugging a real-time issue, the functional isolation of the
+  real-time infrastructure from the rest of the kernel code restricts
+  bug hunting to the scope of the small co-kernel, excluding most
+  interactions with the very large GPOS kernel base.
 
 - with a dedicated infrastructure providing a specific, well-defined
   set of real-time services, applications can unambiguously figure out
