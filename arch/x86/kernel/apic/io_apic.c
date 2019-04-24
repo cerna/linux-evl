@@ -77,7 +77,7 @@
 #define for_each_irq_pin(entry, head) \
 	list_for_each_entry(entry, &head, list)
 
-static DEFINE_RAW_SPINLOCK(ioapic_lock);
+static DEFINE_HARD_SPINLOCK(ioapic_lock);
 static DEFINE_MUTEX(ioapic_mutex);
 static unsigned int ioapic_dynirq_base;
 static int ioapic_initialized;
@@ -1827,7 +1827,7 @@ static void ioapic_ack_level(struct irq_data *irq_data)
 	 * We must acknowledge the irq before we move it or the acknowledge will
 	 * not propagate properly.
 	 */
-	ack_APIC_irq();
+	__ack_APIC_irq();
 
 	/*
 	 * Tail end of clearing remote IRR bit (either by delivering the EOI
@@ -1902,7 +1902,7 @@ static struct irq_chip ioapic_chip __read_mostly = {
 	.irq_eoi		= ioapic_ack_level,
 	.irq_set_affinity	= ioapic_set_affinity,
 	.irq_retrigger		= irq_chip_retrigger_hierarchy,
-	.flags			= IRQCHIP_SKIP_SET_WAKE,
+	.flags			= IRQCHIP_SKIP_SET_WAKE | IRQCHIP_PIPELINE_SAFE,
 };
 
 static struct irq_chip ioapic_ir_chip __read_mostly = {
@@ -1914,7 +1914,7 @@ static struct irq_chip ioapic_ir_chip __read_mostly = {
 	.irq_eoi		= ioapic_ir_ack_level,
 	.irq_set_affinity	= ioapic_set_affinity,
 	.irq_retrigger		= irq_chip_retrigger_hierarchy,
-	.flags			= IRQCHIP_SKIP_SET_WAKE,
+	.flags			= IRQCHIP_SKIP_SET_WAKE | IRQCHIP_PIPELINE_SAFE,
 };
 
 static inline void init_IO_APIC_traps(void)
@@ -1961,7 +1961,7 @@ static void unmask_lapic_irq(struct irq_data *data)
 
 static void ack_lapic_irq(struct irq_data *data)
 {
-	ack_APIC_irq();
+	__ack_APIC_irq();
 }
 
 static struct irq_chip lapic_chip __read_mostly = {
@@ -1969,6 +1969,7 @@ static struct irq_chip lapic_chip __read_mostly = {
 	.irq_mask	= mask_lapic_irq,
 	.irq_unmask	= unmask_lapic_irq,
 	.irq_ack	= ack_lapic_irq,
+	.flags		= IRQCHIP_PIPELINE_SAFE,
 };
 
 static void lapic_register_intr(int irq)
