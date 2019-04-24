@@ -7,6 +7,7 @@
 #include <linux/uaccess.h>
 #include <linux/utsname.h>
 #include <linux/hardirq.h>
+#include <linux/irq_pipeline.h>
 #include <linux/kdebug.h>
 #include <linux/module.h>
 #include <linux/ptrace.h>
@@ -367,18 +368,21 @@ NOKPROBE_SYMBOL(oops_end);
 
 int __die(const char *str, struct pt_regs *regs, long err)
 {
+	irq_pipeline_oops();
+
 	/* Save the regs of the first oops for the executive summary later. */
 	if (!die_counter)
 		exec_summary_regs = *regs;
 
 	printk(KERN_DEFAULT
-	       "%s: %04lx [#%d]%s%s%s%s%s\n", str, err & 0xffff, ++die_counter,
+	       "%s: %04lx [#%d]%s%s%s%s%s%s\n", str, err & 0xffff, ++die_counter,
 	       IS_ENABLED(CONFIG_PREEMPT) ? " PREEMPT"         : "",
 	       IS_ENABLED(CONFIG_SMP)     ? " SMP"             : "",
 	       debug_pagealloc_enabled()  ? " DEBUG_PAGEALLOC" : "",
 	       IS_ENABLED(CONFIG_KASAN)   ? " KASAN"           : "",
 	       IS_ENABLED(CONFIG_PAGE_TABLE_ISOLATION) ?
-	       (boot_cpu_has(X86_FEATURE_PTI) ? " PTI" : " NOPTI") : "");
+	       (boot_cpu_has(X86_FEATURE_PTI) ? " PTI" : " NOPTI") : "",
+	       irqs_pipelined()           ? " IRQ_PIPELINE"    : "");
 
 	show_regs(regs);
 	print_modules();
