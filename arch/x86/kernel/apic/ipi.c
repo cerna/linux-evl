@@ -27,8 +27,10 @@ void __default_send_IPI_shortcut(unsigned int shortcut, int vector, unsigned int
 	 * cli/sti.  Otherwise we use an even cheaper single atomic write
 	 * to the APIC.
 	 */
+	unsigned long flags;
 	unsigned int cfg;
 
+	flags = hard_cond_local_irq_save();
 	/*
 	 * Wait for idle.
 	 */
@@ -43,6 +45,8 @@ void __default_send_IPI_shortcut(unsigned int shortcut, int vector, unsigned int
 	 * Send the IPI. The write to APIC_ICR fires this off.
 	 */
 	native_apic_mem_write(APIC_ICR, cfg);
+
+	hard_cond_local_irq_restore(flags);
 }
 
 /*
@@ -51,8 +55,10 @@ void __default_send_IPI_shortcut(unsigned int shortcut, int vector, unsigned int
  */
 void __default_send_IPI_dest_field(unsigned int mask, int vector, unsigned int dest)
 {
+	unsigned long flags;
 	unsigned long cfg;
 
+	flags = hard_cond_local_irq_save();
 	/*
 	 * Wait for idle.
 	 */
@@ -76,16 +82,18 @@ void __default_send_IPI_dest_field(unsigned int mask, int vector, unsigned int d
 	 * Send the IPI. The write to APIC_ICR fires this off.
 	 */
 	native_apic_mem_write(APIC_ICR, cfg);
+
+	hard_cond_local_irq_restore(flags);
 }
 
 void default_send_IPI_single_phys(int cpu, int vector)
 {
 	unsigned long flags;
 
-	local_irq_save(flags);
+	flags = hard_local_irq_save();
 	__default_send_IPI_dest_field(per_cpu(x86_cpu_to_apicid, cpu),
 				      vector, APIC_DEST_PHYSICAL);
-	local_irq_restore(flags);
+	hard_local_irq_restore(flags);
 }
 
 void default_send_IPI_mask_sequence_phys(const struct cpumask *mask, int vector)
@@ -98,12 +106,12 @@ void default_send_IPI_mask_sequence_phys(const struct cpumask *mask, int vector)
 	 * to an arbitrary mask, so I do a unicast to each CPU instead.
 	 * - mbligh
 	 */
-	local_irq_save(flags);
+	flags = hard_local_irq_save();
 	for_each_cpu(query_cpu, mask) {
 		__default_send_IPI_dest_field(per_cpu(x86_cpu_to_apicid,
 				query_cpu), vector, APIC_DEST_PHYSICAL);
 	}
-	local_irq_restore(flags);
+	hard_local_irq_restore(flags);
 }
 
 void default_send_IPI_mask_allbutself_phys(const struct cpumask *mask,
@@ -115,14 +123,14 @@ void default_send_IPI_mask_allbutself_phys(const struct cpumask *mask,
 
 	/* See Hack comment above */
 
-	local_irq_save(flags);
+	flags = hard_local_irq_save();
 	for_each_cpu(query_cpu, mask) {
 		if (query_cpu == this_cpu)
 			continue;
 		__default_send_IPI_dest_field(per_cpu(x86_cpu_to_apicid,
 				 query_cpu), vector, APIC_DEST_PHYSICAL);
 	}
-	local_irq_restore(flags);
+	hard_local_irq_restore(flags);
 }
 
 /*
@@ -147,12 +155,12 @@ void default_send_IPI_mask_sequence_logical(const struct cpumask *mask,
 	 * should be modified to do 1 message per cluster ID - mbligh
 	 */
 
-	local_irq_save(flags);
+	flags = hard_local_irq_save();
 	for_each_cpu(query_cpu, mask)
 		__default_send_IPI_dest_field(
 			early_per_cpu(x86_cpu_to_logical_apicid, query_cpu),
 			vector, apic->dest_logical);
-	local_irq_restore(flags);
+	hard_local_irq_restore(flags);
 }
 
 void default_send_IPI_mask_allbutself_logical(const struct cpumask *mask,
@@ -164,7 +172,7 @@ void default_send_IPI_mask_allbutself_logical(const struct cpumask *mask,
 
 	/* See Hack comment above */
 
-	local_irq_save(flags);
+	flags = hard_local_irq_save();
 	for_each_cpu(query_cpu, mask) {
 		if (query_cpu == this_cpu)
 			continue;
@@ -172,7 +180,7 @@ void default_send_IPI_mask_allbutself_logical(const struct cpumask *mask,
 			early_per_cpu(x86_cpu_to_logical_apicid, query_cpu),
 			vector, apic->dest_logical);
 		}
-	local_irq_restore(flags);
+	hard_local_irq_restore(flags);
 }
 
 /*
@@ -186,10 +194,10 @@ void default_send_IPI_mask_logical(const struct cpumask *cpumask, int vector)
 	if (!mask)
 		return;
 
-	local_irq_save(flags);
+	flags = hard_local_irq_save();
 	WARN_ON(mask & ~cpumask_bits(cpu_online_mask)[0]);
 	__default_send_IPI_dest_field(mask, vector, apic->dest_logical);
-	local_irq_restore(flags);
+	hard_local_irq_restore(flags);
 }
 
 void default_send_IPI_allbutself(int vector)
