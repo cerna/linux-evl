@@ -39,6 +39,7 @@ static void __used common(void)
 
 	BLANK();
 	OFFSET(TASK_TI_flags, task_struct, thread_info.flags);
+	OFFSET(TASK_TI_status, task_struct, thread_info.status);
 	OFFSET(TASK_addr_limit, task_struct, thread.addr_limit);
 
 	BLANK();
