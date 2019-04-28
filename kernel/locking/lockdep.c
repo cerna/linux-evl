@@ -724,8 +724,6 @@ static inline void lockdep_stage_restore(unsigned long flags)
 	restore_stage(flags);
 }
 
-#define lockdep_stage_save_flags(__flags)	stage_save_flags(__flags)
-
 #else
 
 #define lockdep_stage_test_and_disable(__irqsoff)		\
@@ -744,7 +742,6 @@ static inline void lockdep_stage_restore(unsigned long flags)
 	})
 
 #define lockdep_stage_restore(__flags)		raw_local_irq_restore(__flags)
-#define lockdep_stage_save_flags(__flags)	raw_local_save_flags(__flags)
 
 #endif /* !CONFIG_IRQ_PIPELINE */
 
