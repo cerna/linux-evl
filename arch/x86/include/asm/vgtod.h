@@ -80,6 +80,7 @@ static inline int gtod_read_retry(const struct vsyscall_gtod_data *s,
 
 static inline void gtod_write_begin(struct vsyscall_gtod_data *s)
 {
+	hard_cond_local_irq_disable();
 	++s->seq;
 	smp_wmb();
 }
@@ -88,6 +89,7 @@ static inline void gtod_write_end(struct vsyscall_gtod_data *s)
 {
 	smp_wmb();
 	++s->seq;
+	hard_cond_local_irq_enable();
 }
 
 #endif /* _ASM_X86_VGTOD_H */
