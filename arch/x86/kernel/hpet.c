@@ -418,7 +418,8 @@ static int hpet_legacy_next_event(unsigned long delta,
 static struct clock_event_device hpet_clockevent = {
 	.name			= "hpet",
 	.features		= CLOCK_EVT_FEAT_PERIODIC |
-				  CLOCK_EVT_FEAT_ONESHOT,
+				  CLOCK_EVT_FEAT_ONESHOT |
+				  CLOCK_EVT_FEAT_PIPELINE,
 	.set_state_periodic	= hpet_legacy_set_periodic,
 	.set_state_oneshot	= hpet_legacy_set_oneshot,
 	.set_state_shutdown	= hpet_legacy_shutdown,
@@ -524,7 +525,7 @@ static irqreturn_t hpet_interrupt_handler(int irq, void *data)
 		return IRQ_HANDLED;
 	}
 
-	hevt->event_handler(hevt);
+	clockevents_handle_event(hevt);
 	return IRQ_HANDLED;
 }
 
