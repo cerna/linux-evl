@@ -214,8 +214,8 @@ static int multi_cpu_stop(void *data)
 			curstate = msdata->state;
 			switch (curstate) {
 			case MULTI_STOP_DISABLE_IRQ:
-				local_irq_disable();
 				hard_irq_disable();
+				local_irq_disable();
 				break;
 			case MULTI_STOP_RUN:
 				if (is_active)
