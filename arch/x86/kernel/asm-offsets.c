@@ -41,6 +41,7 @@ static void __used common(void)
 	OFFSET(TASK_TI_flags, task_struct, thread_info.flags);
 	OFFSET(TASK_TI_status, task_struct, thread_info.status);
 	OFFSET(TASK_addr_limit, task_struct, thread.addr_limit);
+	DEFINE(TASK_oob_mask, STAGE_MASK);
 
 	BLANK();
 	OFFSET(crypto_tfm_ctx_offset, crypto_tfm, __crt_ctx);
