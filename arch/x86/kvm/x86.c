@@ -8272,7 +8272,9 @@ static int complete_emulated_mmio(struct kvm_vcpu *vcpu)
 /* Swap (qemu) user FPU context for the guest FPU context. */
 static void kvm_load_guest_fpu(struct kvm_vcpu *vcpu)
 {
-	fpregs_lock();
+	unsigned long flags;
+
+	flags = fpregs_lock();
 
 	copy_fpregs_to_fpstate(vcpu->arch.user_fpu);
 	/* PKRU is separately restored in kvm_x86_ops->run.  */
@@ -8280,7 +8282,7 @@ static void kvm_load_guest_fpu(struct kvm_vcpu *vcpu)
 				~XFEATURE_MASK_PKRU);
 
 	fpregs_mark_activate();
-	fpregs_unlock();
+	fpregs_unlock(flags);
 
 	trace_kvm_fpu(1);
 }
@@ -8288,13 +8290,15 @@ static void kvm_load_guest_fpu(struct kvm_vcpu *vcpu)
 /* When vcpu_run ends, restore user space FPU context. */
 static void kvm_put_guest_fpu(struct kvm_vcpu *vcpu)
 {
-	fpregs_lock();
+	unsigned long flags;
+
+	flags = fpregs_lock();
 
 	copy_fpregs_to_fpstate(vcpu->arch.guest_fpu);
 	copy_kernel_to_fpregs(&vcpu->arch.user_fpu->state);
 
 	fpregs_mark_activate();
-	fpregs_unlock();
+	fpregs_unlock(flags);
 
 	++vcpu->stat.fpu_reload;
 	trace_kvm_fpu(0);
