@@ -8,8 +8,22 @@
 
 #ifndef __ASSEMBLY__
 
-static inline void arch_dovetail_context_resume(void)
-{ }
+void fpu__suspend_inband(void);
+void fpu__resume_inband(void);
+
+static inline
+void arch_dovetail_switch_prepare(bool leave_inband)
+{
+	if (leave_inband)
+		fpu__suspend_inband();
+}
+
+static inline
+void arch_dovetail_switch_finish(bool enter_inband)
+{
+	if (enter_inband)
+		fpu__resume_inband();
+}
 
 #endif
 

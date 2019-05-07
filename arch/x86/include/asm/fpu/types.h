@@ -300,7 +300,17 @@ struct fpu {
 	 * is not running then we can restore from this context, if the task
 	 * is running then we should save into this context.
 	 */
-	unsigned char			initialized;
+	unsigned char			initialized : 1;
+
+	/*
+	 * @preempted:
+	 *
+	 * When Dovetail is enabled, this flag is set for the inband
+	 * task context saved when entering a kernel_fpu_begin/end()
+	 * section before the latter got preempted by an out-of-band
+	 * task.
+	 */
+	unsigned char			preempted : 1;
 
 	/*
 	 * @avx512_timestamp:
