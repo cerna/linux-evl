@@ -388,6 +388,8 @@ static inline void invalidate_user_asid(u16 asid)
  */
 static inline void __native_flush_tlb(void)
 {
+	unsigned long flags;
+
 	/*
 	 * Preemption or interrupts must be disabled to protect the access
 	 * to the per CPU variable and to prevent being preempted between
@@ -395,10 +397,14 @@ static inline void __native_flush_tlb(void)
 	 */
 	WARN_ON_ONCE(preemptible());
 
+	flags = hard_cond_local_irq_save();
+
 	invalidate_user_asid(this_cpu_read(cpu_tlbstate.loaded_mm_asid));
 
 	/* If current->mm == NULL then the read_cr3() "borrows" an mm */
 	native_write_cr3(__native_read_cr3());
+
+	hard_cond_local_irq_restore(flags);
 }
 
 /*
