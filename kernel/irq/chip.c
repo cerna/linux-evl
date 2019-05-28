@@ -520,7 +520,8 @@ static bool irq_may_run(struct irq_desc *desc)
 	 *
 	 * - from the in-band context, run the PM wakeup check.
 	 */
-	if (on_pipeline_entry()) {
+	if (irqs_pipelined()) {
+		WARN_ON_ONCE(irq_pipeline_debug() && !in_pipeline());
 		if (irqd_is_wakeup_armed(&desc->irq_data))
 			return true;
 	} else if (irq_pm_check_wakeup(desc))
@@ -547,7 +548,7 @@ void handle_simple_irq(struct irq_desc *desc)
 {
 	raw_spin_lock(&desc->lock);
 
-	if (!irq_may_run(desc))
+	if (start_irq_flow() && !irq_may_run(desc))
 		goto out_unlock;
 
 	if (on_pipeline_entry()) {
@@ -589,7 +590,7 @@ void handle_untracked_irq(struct irq_desc *desc)
 
 	raw_spin_lock(&desc->lock);
 
-	if (!irq_may_run(desc))
+	if (start_irq_flow() && !irq_may_run(desc))
 		goto out_unlock;
 
 	if (on_pipeline_entry()) {
@@ -662,10 +663,13 @@ static void cond_unmask_irq(struct irq_desc *desc)
 void handle_level_irq(struct irq_desc *desc)
 {
 	raw_spin_lock(&desc->lock);
-	mask_ack_irq(desc);
 
-	if (!irq_may_run(desc))
-		goto out_unlock;
+	if (start_irq_flow()) {
+		mask_ack_irq(desc);
+
+		if (!irq_may_run(desc))
+			goto out_unlock;
+	}
 
 	if (on_pipeline_entry()) {
 		if (handle_oob_irq(desc))
@@ -745,7 +749,7 @@ void handle_fasteoi_irq(struct irq_desc *desc)
 
 	raw_spin_lock(&desc->lock);
 
-	if (!irq_may_run(desc))
+	if (start_irq_flow() && !irq_may_run(desc))
 		goto out;
 
 	if (on_pipeline_entry()) {
@@ -838,22 +842,24 @@ void handle_edge_irq(struct irq_desc *desc)
 
 	raw_spin_lock(&desc->lock);
 
-	desc->istate &= ~(IRQS_REPLAY | IRQS_WAITING);
+	if (start_irq_flow()) {
+		desc->istate &= ~(IRQS_REPLAY | IRQS_WAITING);
 
-	if (!irq_may_run(desc)) {
-		desc->istate |= IRQS_PENDING;
-		mask_ack_irq(desc);
-		goto out_unlock;
-	}
+		if (!irq_may_run(desc)) {
+			desc->istate |= IRQS_PENDING;
+			mask_ack_irq(desc);
+			goto out_unlock;
+		}
 
-	/*
-	 * If its disabled or no action available then mask it and get
-	 * out of here.
-	 */
-	if (irqd_irq_disabled(&desc->irq_data) || !desc->action) {
-		desc->istate |= IRQS_PENDING;
-		mask_ack_irq(desc);
-		goto out_unlock;
+		/*
+		 * If its disabled or no action available then mask it
+		 * and get out of here.
+		 */
+		if (irqd_irq_disabled(&desc->irq_data) || !desc->action) {
+			desc->istate |= IRQS_PENDING;
+			mask_ack_irq(desc);
+			goto out_unlock;
+		}
 	}
 
 	if (on_pipeline_entry()) {
@@ -909,11 +915,13 @@ void handle_edge_eoi_irq(struct irq_desc *desc)
 
 	raw_spin_lock(&desc->lock);
 
-	desc->istate &= ~(IRQS_REPLAY | IRQS_WAITING);
+	if (start_irq_flow()) {
+		desc->istate &= ~(IRQS_REPLAY | IRQS_WAITING);
 
-	if (!irq_may_run(desc)) {
-		desc->istate |= IRQS_PENDING;
-		goto out_eoi;
+		if (!irq_may_run(desc)) {
+			desc->istate |= IRQS_PENDING;
+			goto out_eoi;
+		}
 	}
 
 	if (on_pipeline_entry()) {
@@ -1304,7 +1312,7 @@ void handle_fasteoi_ack_irq(struct irq_desc *desc)
 
 	raw_spin_lock(&desc->lock);
 
-	if (!irq_may_run(desc))
+	if (start_irq_flow() && !irq_may_run(desc))
 		goto out;
 
 	if (on_pipeline_entry()) {
@@ -1367,10 +1375,13 @@ void handle_fasteoi_mask_irq(struct irq_desc *desc)
 	struct irq_chip *chip = desc->irq_data.chip;
 
 	raw_spin_lock(&desc->lock);
-	mask_ack_irq(desc);
 
-	if (!irq_may_run(desc))
-		goto out;
+	if (start_irq_flow()) {
+		mask_ack_irq(desc);
+
+		if (!irq_may_run(desc))
+			goto out;
+	}
 
 	if (on_pipeline_entry()) {
 		if (handle_oob_irq(desc))
