@@ -1636,7 +1636,7 @@ static int __init timer_irq_works(void)
 		return 1;
 
 	local_save_flags(flags);
-	local_irq_enable();
+	local_irq_enable_full();
 
 	if (boot_cpu_has(X86_FEATURE_TSC))
 		delay_with_tsc();
@@ -1644,6 +1644,8 @@ static int __init timer_irq_works(void)
 		delay_without_tsc();
 
 	local_irq_restore(flags);
+	if (raw_irqs_disabled_flags(flags))
+		hard_local_irq_disable();
 
 	/*
 	 * Expect a few ticks at least, to be sure some possible
@@ -2084,7 +2086,7 @@ static inline void __init check_timer(void)
 	unsigned long flags;
 	int no_pin1 = 0;
 
-	local_irq_save(flags);
+	flags = hard_local_irq_save();
 
 	/*
 	 * get/set the timer IRQ vector:
@@ -2152,7 +2154,7 @@ static inline void __init check_timer(void)
 			goto out;
 		}
 		panic_if_irq_remap("timer doesn't work through Interrupt-remapped IO-APIC");
-		local_irq_disable();
+		hard_local_irq_disable();
 		clear_IO_APIC_pin(apic1, pin1);
 		if (!no_pin1)
 			apic_printk(APIC_QUIET, KERN_ERR "..MP-BIOS bug: "
@@ -2176,7 +2178,7 @@ static inline void __init check_timer(void)
 		/*
 		 * Cleanup, just in case ...
 		 */
-		local_irq_disable();
+		hard_local_irq_disable();
 		legacy_pic->mask(0);
 		clear_IO_APIC_pin(apic2, pin2);
 		apic_printk(APIC_QUIET, KERN_INFO "....... failed.\n");
@@ -2193,7 +2195,7 @@ static inline void __init check_timer(void)
 		apic_printk(APIC_QUIET, KERN_INFO "..... works.\n");
 		goto out;
 	}
-	local_irq_disable();
+	hard_local_irq_disable();
 	legacy_pic->mask(0);
 	apic_write(APIC_LVT0, APIC_LVT_MASKED | APIC_DM_FIXED | cfg->vector);
 	apic_printk(APIC_QUIET, KERN_INFO "..... failed.\n");
@@ -2211,7 +2213,7 @@ static inline void __init check_timer(void)
 		apic_printk(APIC_QUIET, KERN_INFO "..... works.\n");
 		goto out;
 	}
-	local_irq_disable();
+	hard_local_irq_disable();
 	apic_printk(APIC_QUIET, KERN_INFO "..... failed :(.\n");
 	if (apic_is_x2apic_enabled())
 		apic_printk(APIC_QUIET, KERN_INFO
@@ -2220,7 +2222,7 @@ static inline void __init check_timer(void)
 	panic("IO-APIC + timer doesn't work!  Boot with apic=debug and send a "
 		"report.  Then try booting with the 'noapic' option.\n");
 out:
-	local_irq_restore(flags);
+	hard_local_irq_restore(flags);
 }
 
 /*
