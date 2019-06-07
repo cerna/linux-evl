@@ -5,7 +5,7 @@
 
 config XEN
 	bool "Xen guest support"
-	depends on PARAVIRT
+	depends on PARAVIRT && !IRQ_PIPELINE
 	select PARAVIRT_CLOCK
 	depends on X86_64 || (X86_32 && X86_PAE)
 	depends on X86_LOCAL_APIC && X86_TSC
