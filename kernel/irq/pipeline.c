@@ -624,13 +624,18 @@ static inline int pull_next_irq(struct irq_stage_data *p)
 
 #else /* __IRQ_STAGE_MAP_LEVELS == 2 */
 
-static void clear_pending_irq(struct irq_stage *stage, unsigned int irq)
+static void __clear_pending_irq(struct irq_stage_data *p, unsigned int irq)
 {
-	struct irq_stage_data *p = this_staged(stage);
 	int l0b = irq / BITS_PER_LONG;
 
 	__clear_bit(irq, p->log.map->lomap);
 	__clear_bit(l0b, &p->log.himap);
+}
+
+static void clear_pending_irq(struct irq_stage *stage, unsigned int irq)
+{
+	struct irq_stage_data *p = this_staged(stage);
+	__clear_pending_irq(p, irq);
 }
 
 /* Must be called hw IRQs off. */
