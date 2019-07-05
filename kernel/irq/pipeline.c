@@ -828,12 +828,6 @@ static void handle_unexpected_irq(struct irq_desc *desc, irqreturn_t ret)
 
 	desc->last_unhandled = jiffies;
 
-	/*
-	 * If more than 1000 unhandled events were received
-	 * consecutively, we have to stop this IRQ from poking us at
-	 * the oob of the pipeline by disabling out-of-band mode for
-	 * the interrupt.
-	 */
 	if (unlikely(desc->irqs_unhandled > 1000)) {
 		printk(KERN_ERR "out-of-band irq %d: stuck or unexpected\n", irq);
 		irq_settings_clr_oob(desc);
