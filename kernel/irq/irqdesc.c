@@ -440,6 +440,7 @@ static void free_desc(unsigned int irq)
 	 * irq_sysfs_init() as well.
 	 */
 	kobject_del(&desc->kobj);
+	uncache_irq_desc(irq);
 	delete_irq_desc(irq);
 
 	/*
