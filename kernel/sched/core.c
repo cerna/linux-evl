@@ -2811,8 +2811,21 @@ context_switch(struct rq *rq, struct task_struct *prev,
 		next->active_mm = oldmm;
 		mmgrab(oldmm);
 		enter_lazy_tlb(oldmm, next);
-	} else
+	} else {
 		switch_mm_irqs_off(oldmm, mm, next);
+		/*
+		 * If dovetail is enabled, insert a short window of
+		 * opportunity for preemption by out-of-band IRQs
+		 * before finalizing the context switch.
+		 * dovetail_context_switch() can deal with preempting
+		 * partially switched in-band contexts.
+		 */
+		if (dovetailing()) {
+			prev->active_mm = mm;
+			hard_local_irq_sync();
+			prev->active_mm = oldmm;
+		}
+	}
 
 	if (!prev->mm) {
 		prev->active_mm = NULL;
