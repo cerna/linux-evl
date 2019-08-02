@@ -66,7 +66,7 @@ static inline bool __chk_range_not_ok(unsigned long addr, unsigned long size, un
 })
 
 #ifdef CONFIG_DEBUG_ATOMIC_SLEEP
-# define WARN_ON_IN_IRQ()	WARN_ON_ONCE(!in_task())
+# define WARN_ON_IN_IRQ()	WARN_ON_ONCE(running_inband() && !in_task())
 #else
 # define WARN_ON_IN_IRQ()
 #endif
