@@ -1623,6 +1623,7 @@ static int unmask_events(struct net_device *ndev, unsigned int events)
 	int n, queue_id;
 
 	writel(events, fep->hwp + FEC_IMASK);
+	dma_wmb();
 
 	if ((events & FEC_ENET_RXF) == 0)
 		return 0;
