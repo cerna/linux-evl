@@ -181,8 +181,10 @@ static void __init patch_vdso(void *ehdr)
 	/* If the virtual counter is absent or non-functional we don't
 	 * want programs to incur the slight additional overhead of
 	 * dispatching through the VDSO only to fall back to syscalls.
+	 * However, if clocksources supporting generic MMIO access can
+	 * be reached via the vDSO, keep this fast path enabled.
 	 */
-	if (!cntvct_ok) {
+	if (!cntvct_ok && !IS_ENABLED(CONFIG_GENERIC_CLOCKSOURCE_VDSO)) {
 		vdso_nullpatch_one(&einfo, "__vdso_gettimeofday");
 		vdso_nullpatch_one(&einfo, "__vdso_clock_gettime");
 	}
@@ -225,6 +227,9 @@ static int __init vdso_init(void)
 	cntvct_ok = cntvct_functional();
 
 	patch_vdso(vdso_start);
+#ifdef CONFIG_GENERIC_CLOCKSOURCE_VDSO
+	vdso_data->cs_type_seq = CLOCKSOURCE_VDSO_NONE << 16 | 1;
+#endif
 
 	return 0;
 }
@@ -246,6 +251,9 @@ static int install_vvar(struct mm_struct *mm, unsigned long addr)
 				       &vdso_data_mapping);
 	if (IS_ERR(vma))
 		return PTR_ERR(vma);
+
+	if (cache_is_vivt())
+		vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
 
 	return vma->vm_start != addr ? -EINVAL : 0;
 }
