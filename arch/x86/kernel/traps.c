@@ -156,9 +156,16 @@ void ist_enter(struct pt_regs *regs)
 }
 NOKPROBE_SYMBOL(ist_enter);
 
-void ist_exit(struct pt_regs *regs)
+void ist_exit(struct pt_regs *regs, bool oob_entry)
 {
-	preempt_enable_no_resched();
+	/*
+	 * If dovetailing, we might have switched from out-of-band to
+	 * in-band context in the middle of the IST section, in which
+	 * case the preemption count was reset during the
+	 * transition. Skip the update if so.
+	 */
+	if (!oob_entry || running_oob())
+		preempt_enable_no_resched();
 
 	if (!user_mode(regs))
 		rcu_nmi_exit();
@@ -636,6 +643,7 @@ NOKPROBE_SYMBOL(do_general_protection);
 
 dotraplinkage void notrace do_int3(struct pt_regs *regs, long error_code)
 {
+	bool oob_entry = running_oob();
 	unsigned long flags;
 
 #ifdef CONFIG_DYNAMIC_FTRACE
@@ -683,7 +691,7 @@ exit_fault:
 	pipelined_fault_exit(flags);
 
 exit:
-	ist_exit(regs);
+	ist_exit(regs, oob_entry);
 }
 NOKPROBE_SYMBOL(do_int3);
 
@@ -783,6 +791,7 @@ static bool is_sysenter_singlestep(struct pt_regs *regs)
 dotraplinkage void do_debug(struct pt_regs *regs, long error_code)
 {
 	struct task_struct *tsk = current;
+	bool oob_entry = running_oob();
 	unsigned long dr6, flags;
 	int user_icebp = 0;
 	int si_code;
@@ -884,7 +893,7 @@ dotraplinkage void do_debug(struct pt_regs *regs, long error_code)
 exit:
 	pipelined_fault_exit(flags);
 out:
-	ist_exit(regs);
+	ist_exit(regs, oob_entry);
 }
 NOKPROBE_SYMBOL(do_debug);
 
