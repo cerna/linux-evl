@@ -1023,10 +1023,38 @@ void evl_switch_inband(int cause)
 	curr->info &= ~EVL_THREAD_INFO_MASK;
 	curr->state |= T_INBAND;
 	curr->local_info &= ~T_SYSRST;
-	evl_set_resched(rq);
-	dovetail_leave_oob();
-	evl_spin_unlock(&rq->lock);
+	notify = curr->state & T_USER && cause > SIGDEBUG_NONE;
+
+	/*
+	 * If we are initiating the ptsync sequence on breakpoint or
+	 * SIGSTOP/SIGINT is pending, do not send SIGDEBUG since
+	 * switching in-band is ok.
+	 */
+	if (cause == SIGDEBUG_TRAP) {
+		curr->info |= T_PTSTOP;
+		curr->info &= ~T_PTJOIN;
+		start_ptsync_locked(curr, this_rq);
+	} else if (curr->info & T_PTSIG) {
+		curr->info &= ~T_PTSIG;
+		notify = false;
+	}
+
+	curr->info &= ~EVL_THREAD_INFO_MASK;
+
+	evl_set_resched(this_rq);
+
+	evl_spin_unlock(&this_rq->lock);
 	evl_spin_unlock(&curr->lock);
+
+	/*
+	 * CAVEAT: dovetail_leave_oob() must run _before_ the in-band
+	 * kernel is allowed to take interrupts again, so that
+	 * try_to_wake_up() does not block the wake up request for the
+	 * switching thread as a result of testing
+	 * task_is_off_stage().
+	 */
+	dovetail_leave_oob();
+
 	__evl_schedule();
 	/*
 	 * this_rq()->lock was released when the root thread resumed
